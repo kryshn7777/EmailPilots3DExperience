@@ -1,0 +1,70 @@
+name: Deploy to GitHub Pages
+
+# This repository holds one site and publishes it at the Pages root, so unlike
+# the shared setup it came from there is nothing to collide with — a push to
+# main deploys.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --legacy-peer-deps is required, not cosmetic. vite-plugin-glsl declares
+      # a peerOptional on @rollup/pluginutils@^5, while @swup/parallel-plugin
+      # pulls v3 in through microbundle. Plain `npm ci` fails to resolve it, so
+      # the lock file is generated the same way and CI has to install it the
+      # same way.
+      - run: npm ci --legacy-peer-deps
+
+      # The HDRI is committed, but this script is the supported way to refresh
+      # it and is cheap. The engine falls back to RoomEnvironment if the file
+      # is missing, so a failure here degrades lighting rather than the build.
+      - run: npm run setup:assets
+        continue-on-error: true
+
+      - run: npm run build
+        env:
+          # A project site is served from /<repo>/, never the domain root.
+          # Derived from the repository name so a rename cannot silently break
+          # every asset path. src/webgl/asset.ts and src/lib/href.ts both read
+          # this back out of import.meta.env.BASE_URL at runtime.
+          PAGES_BASE: /${{ github.event.repository.name }}/
+          PAGES_SITE: https://${{ github.repository_owner }}.github.io
+
+      # Pages runs Jekyll over the artifact unless told otherwise, and Jekyll
+      # drops every directory whose name starts with an underscore — which is
+      # exactly where Astro puts its bundles (_astro/).
+      - run: touch dist/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

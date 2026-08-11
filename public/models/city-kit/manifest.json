@@ -1,0 +1,115 @@
+{
+  "modules": [
+    {
+      "id": "building-a",
+      "file": "src/building-a.glb",
+      "footprint": [
+        0.884,
+        0.94
+      ],
+      "height": 1.293,
+      "tris0": 1252,
+      "lod0": "building-a.lod0.glb"
+    },
+    {
+      "id": "building-c",
+      "file": "src/building-c.glb",
+      "footprint": [
+        0.884,
+        1.09
+      ],
+      "height": 0.893,
+      "tris0": 1195,
+      "lod0": "building-c.lod0.glb"
+    },
+    {
+      "id": "building-e",
+      "file": "src/building-e.glb",
+      "footprint": [
+        1.64,
+        1.008
+      ],
+      "height": 0.893,
+      "tris0": 1509,
+      "lod0": "building-e.lod0.glb"
+    },
+    {
+      "id": "building-g",
+      "file": "src/building-g.glb",
+      "footprint": [
+        0.97,
+        0.922
+      ],
+      "height": 1.693,
+      "tris0": 2006,
+      "lod0": "building-g.lod0.glb"
+    },
+    {
+      "id": "building-i",
+      "file": "src/building-i.glb",
+      "footprint": [
+        1.24,
+        1.302
+      ],
+      "height": 1.68,
+      "tris0": 2544,
+      "lod0": "building-i.lod0.glb"
+    },
+    {
+      "id": "building-k",
+      "file": "src/building-k.glb",
+      "footprint": [
+        2.084,
+        0.942
+      ],
+      "height": 1.47,
+      "tris0": 2960,
+      "lod0": "building-k.lod0.glb"
+    },
+    {
+      "id": "building-skyscraper-a",
+      "file": "src/building-skyscraper-a.glb",
+      "footprint": [
+        1.36,
+        1.36
+      ],
+      "height": 2.88,
+      "tris0": 1292,
+      "lod0": "building-skyscraper-a.lod0.glb"
+    },
+    {
+      "id": "building-skyscraper-b",
+      "file": "src/building-skyscraper-b.glb",
+      "footprint": [
+        1.36,
+        1.36
+      ],
+      "height": 4.48,
+      "tris0": 1592,
+      "lod0": "building-skyscraper-b.lod0.glb"
+    },
+    {
+      "id": "building-skyscraper-c",
+      "file": "src/building-skyscraper-c.glb",
+      "footprint": [
+        1.28,
+        1.388
+      ],
+      "height": 4.08,
+      "tris0": 1704,
+      "lod0": "building-skyscraper-c.lod0.glb"
+    },
+    {
+      "id": "building-skyscraper-d",
+      "file": "src/building-skyscraper-d.glb",
+      "footprint": [
+        1.28,
+        1.388
+      ],
+      "height": 5.47,
+      "tris0": 1892,
+      "lod0": "building-skyscraper-d.lod0.glb"
+    }
+  ],
+  "colormap": "colormap.png"
+}

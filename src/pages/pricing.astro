@@ -1,0 +1,37 @@
+---
+import Base from '../layouts/Base.astro';
+import { FAQ, PRICING } from '../story/copy';
+---
+
+<Base
+  title="Pricing — Email Pilots"
+  description="One simple plan: $2.9/week with a 7-day free trial, no credit card to start, cancel anytime. No per-seat or per-contact fees."
+>
+  <div class="page">
+    <p class="page__kicker">{PRICING.kicker}</p>
+    <h1>{PRICING.title}</h1>
+
+    <div class="pricing-card" data-reveal>
+      <div class="pricing-card__price">
+        {PRICING.price}<small>{PRICING.period}</small>
+      </div>
+      <ul>
+        {PRICING.bullets.map((b) => <li>{b}</li>)}
+      </ul>
+      <a class="btn btn--primary" data-magnetic href={PRICING.cta.href}>{PRICING.cta.label}</a>
+      <p class="pricing-card__note" style="margin-top:1.25rem">{PRICING.note}</p>
+    </div>
+
+    <section class="faq" data-reveal>
+      <h2 style="font-family:var(--font-display);font-weight:400">Questions, answered.</h2>
+      {
+        FAQ.map((f) => (
+          <details>
+            <summary>{f.q}</summary>
+            <p>{f.a}</p>
+          </details>
+        ))
+      }
+    </section>
+  </div>
+</Base>

@@ -1,0 +1,62 @@
+---
+import Base from '../layouts/Base.astro';
+import { HOME_CHAPTERS } from '../story/copy';
+import { href } from '../lib/href';
+---
+
+<Base
+  title="Email Pilots — personal outreach, delivered"
+  description="A Windows desktop app for personal outreach and follow-up. Your own mailbox, human pacing, replies read back — 100% on your PC."
+>
+  {
+    HOME_CHAPTERS.map((c, i) => (
+      <section
+        class="chapter"
+        id={c.id}
+        data-chapter={i}
+        data-side={i > 0 && i % 2 === 1 ? 'right' : 'left'}
+      >
+        <span class="chapter__index">{String(i + 1).padStart(2, '0')}</span>
+        <div class="chapter__copy" data-reveal>
+          <p class="chapter__kicker">{c.kicker}</p>
+          {i === 0 ? <h1>{c.title}</h1> : <h2>{c.title}</h2>}
+          <p class="chapter__body">{c.body}</p>
+          <ul class="chips">
+            {c.chips.map((chip) => (
+              <li>{chip}</li>
+            ))}
+          </ul>
+          {i === 1 && (
+            <div class="app-mock" aria-hidden="true">
+              <div class="app-mock__bar"><i></i><i></i><i></i></div>
+              <div class="app-mock__body">
+                <div class="app-mock__side">
+                  <b>DASHBOARD</b><span>CONTACTS</span><span>SEQUENCES</span><span>REPLIES</span><span>SENT</span><span>SETTINGS</span>
+                </div>
+                <div class="app-mock__main">
+                  <div class="app-mock__verdict"><span>PRE-FLIGHT CHECK</span><span>READY FOR TAKEOFF ✓</span></div>
+                  <div class="app-mock__meter">
+                    <label><span>TODAY'S USAGE</span><span>18 / 50</span></label>
+                    <i style="--fill: 36%"></i>
+                    <label><span>WARM-UP RAMP</span><span>DAY 6</span></label>
+                    <i style="--fill: 62%"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {i === HOME_CHAPTERS.length - 1 && (
+            <div class="btn-row">
+              <a class="btn btn--primary" data-magnetic href={href("/download")}>
+                Download for Windows — 7-day free trial
+              </a>
+              <a class="btn btn--ghost" href={href("/pricing")}>
+                See pricing
+              </a>
+            </div>
+          )}
+        </div>
+      </section>
+    ))
+  }
+</Base>

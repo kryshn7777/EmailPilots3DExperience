@@ -1,0 +1,32 @@
+---
+import Base from '../layouts/Base.astro';
+import { DOWNLOAD } from '../story/copy';
+import { href } from '../lib/href';
+---
+
+<Base
+  title="Download — Email Pilots for Windows"
+  description="Download Email Pilots for Windows. Runs entirely on your PC — your mailbox, your data, no cloud account. Explore with sample data before connecting anything."
+>
+  <div class="page">
+    <p class="page__kicker">{DOWNLOAD.kicker}</p>
+    <h1>{DOWNLOAD.title}</h1>
+    <p class="page__lede">{DOWNLOAD.body}</p>
+
+    <div class="btn-row" data-reveal>
+      <a
+        class="btn btn--primary"
+        data-magnetic
+        href={DOWNLOAD.cta.href}
+        aria-disabled={DOWNLOAD.cta.pending ? 'true' : undefined}
+        title={DOWNLOAD.cta.pending ? 'Release link coming with launch' : undefined}
+      >
+        {DOWNLOAD.cta.label}
+      </a>
+      <a class="btn btn--ghost" href={href("/pricing")}>See pricing</a>
+    </div>
+    <p class="pricing-card__note" style="margin-top:0.9rem">{DOWNLOAD.requirements}</p>
+
+    <p class="download-note">{DOWNLOAD.smartScreenNote}</p>
+  </div>
+</Base>

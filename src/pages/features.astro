@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import { MANUAL } from '../story/copy';
+---
+
+<Base
+  title="Flight manual — Email Pilots features"
+  description="Every system aboard Email Pilots: connect any mailbox, human-paced sending, sequences that stop on reply, deliverability checks, a private on-device AI, and what it deliberately doesn't do."
+>
+  <div class="page">
+    <p class="page__kicker">The Flight Manual</p>
+    <h1>Every system aboard.</h1>
+    <p class="page__lede">
+      Everything below ships in the current build — no roadmap promises. And a
+      final section on what Email Pilots deliberately doesn't do.
+    </p>
+
+    {
+      MANUAL.map((section) => (
+        <section class="manual-section" id={section.id} data-reveal>
+          <p class="manual-section__system">{section.system}</p>
+          <h2>{section.title}</h2>
+          {section.items.map((item) => (
+            <div class="manual-item">
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </div>
+          ))}
+        </section>
+      ))
+    }
+  </div>
+</Base>

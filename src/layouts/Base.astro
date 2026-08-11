@@ -1,0 +1,100 @@
+---
+import '@fontsource-variable/bricolage-grotesque';
+import '@fontsource-variable/inter';
+import '../styles/global.css';
+import Nav from '../components/islands/Nav.tsx';
+import { href } from '../lib/href';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={href("/favicon.svg")} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <!-- Persistent WebGL canvas: lives OUTSIDE #swup so page transitions never recreate it. -->
+    <canvas id="webgl" aria-hidden="true"></canvas>
+
+    <!-- branded preloader: covers boot + first engine frame -->
+    <div id="preloader" aria-hidden="true">
+      <div class="preloader__mark">
+        <svg viewBox="0 0 48 48" width="46" height="46" fill="none" aria-hidden="true">
+          <path d="M4 26 L44 10 L24 40 L21 29 Z" fill="var(--paper)" opacity="0.95"></path>
+          <path d="M21 29 L44 10 L26 33 Z" fill="var(--horizon)" opacity="0.8"></path>
+        </svg>
+        <span>Email Pilots</span>
+      </div>
+      <div class="preloader__hint">Boarding…</div>
+    </div>
+
+    <header class="site-header">
+      <a class="brand" href={href("/")} aria-label="Email Pilots home">
+        <svg viewBox="0 0 48 48" width="22" height="22" fill="none" aria-hidden="true">
+          <path d="M4 26 L44 10 L24 40 L21 29 Z" fill="currentColor" opacity="0.95"></path>
+        </svg>
+        <span>Email&nbsp;Pilots</span>
+      </a>
+      <Nav client:load />
+    </header>
+
+    <!-- flight-data HUD, home only (page.ts hides it elsewhere) -->
+    <div id="hud" aria-hidden="true">
+      <span id="hud-chapter">CH 01 / 10 · THE DESK</span>
+      <span id="hud-alt">ALT 0000</span>
+    </div>
+    <div id="scroll-progress" aria-hidden="true"><i></i></div>
+
+    <div id="cursor" aria-hidden="true"></div>
+
+    <main id="swup">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <a class="brand" href={href("/")} aria-label="Email Pilots home">
+          <svg viewBox="0 0 48 48" width="20" height="20" fill="none" aria-hidden="true">
+            <path d="M4 26 L44 10 L24 40 L21 29 Z" fill="currentColor" opacity="0.95"></path>
+          </svg>
+          <span>Email&nbsp;Pilots</span>
+        </a>
+        <p class="site-footer__tag">
+          Personal outreach and follow-up from your own mailbox — human-paced,
+          reply-aware, and 100% on your PC.
+        </p>
+      </div>
+      <nav aria-label="Site">
+        <a href={href("/features")}>Flight manual</a>
+        <a href={href("/pricing")}>Pricing</a>
+        <a href={href("/download")}>Download</a>
+      </nav>
+      <nav aria-label="Journey">
+        <a href={href("/#desk")}>The Desk</a>
+        <a href={href("/#storm")}>The Storm</a>
+        <a href={href("/#landing")}>The Landing</a>
+      </nav>
+      <div class="site-footer__fine">
+        <span>© 2026 EMAIL PILOTS · WINDOWS DESKTOP</span>
+        <span>BUILT FOR FOUNDERS · RECRUITERS · JOB-SEEKERS · FREELANCERS</span>
+      </div>
+    </footer>
+
+    <script>
+      import { boot } from '../webgl/index';
+      import { bindPage } from '../page';
+      boot();
+      bindPage();
+    </script>
+  </body>
+</html>
