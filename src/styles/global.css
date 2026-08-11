@@ -807,7 +807,9 @@ body.has-cursor #cursor.is-active { scale: 1.6; border-color: var(--beacon-beam)
   opacity: 1;
 }
 
-/* ?clean — art-review mode: canvas only, no wordings */
+/* Canvas only, no wordings — the default; `?copy=1` opts back in.
+   visibility, NOT display: the document must keep its full height because
+   scroll height is what drives the flight. */
 body.is-clean .site-header,
 body.is-clean #hud,
 body.is-clean #scroll-progress,

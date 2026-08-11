@@ -13,9 +13,17 @@ const CHAPTER_T = [0, 0.09, 0.17, 0.26, 0.36, 0.48, 0.58, 0.66, 0.78, 0.88, 1];
 
 export function bindPage(): void {
   document.body.dataset.route = location.pathname.replace(/\/+$/, '') || '/';
-  // art-review mode: ?clean hides every DOM overlay (copy, HUD, nav) so the
-  // canvas can be judged unobstructed
-  if (new URLSearchParams(location.search).has('clean')) {
+  /**
+   * Canvas-only by default: every DOM overlay — copy, HUD, nav, footer,
+   * progress bar — is hidden so the flight is seen unobstructed. `?copy=1`
+   * brings the words back.
+   *
+   * This was the ?clean art-review switch; it is simply the default now. The
+   * markup still renders and still occupies its full height, because the
+   * document's scroll height is what drives the flight — the CSS hides it with
+   * `visibility`, never `display`, and that distinction is load-bearing.
+   */
+  if (!new URLSearchParams(location.search).has('copy')) {
     document.body.classList.add('is-clean');
   }
   bindReveals();
