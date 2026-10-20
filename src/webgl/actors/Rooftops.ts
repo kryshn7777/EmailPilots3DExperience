@@ -60,8 +60,8 @@ export class Rooftops {
     for (const [y, repeat, opacity, scale] of [
       // thin on purpose: these hang between the plane and the roofs, and at the
       // tower district's 0.5 they milked every house to a pale shape
-      [ROOFTOP_DECK_Y - 3.5, 20, 0.26, 1],
-      [ROOFTOP_DECK_Y, 13, 0.2, 0.82],
+      [ROOFTOP_DECK_Y - 3.5, 20, 0.15, 1],
+      [ROOFTOP_DECK_Y, 13, 0.1, 0.82],
     ] as const) {
       const material = new MeshBasicMaterial({
         map: deckMap,

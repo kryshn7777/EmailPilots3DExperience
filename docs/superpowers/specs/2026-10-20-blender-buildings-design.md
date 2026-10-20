@@ -49,13 +49,14 @@ rings use. Triangles are spent where a close-up can see them:
 
 | | lean (mid ring) | hero (near ring) |
 | --- | --- | --- |
-| trees | 36-92 tris, blob crown on a card cluster | 5-6.5k: branching trunk and boughs, ~900 leaf cards per crown, pine whorls |
+| trees | 36-92 tris, blob crown on a card cluster | hero 8.7-10k (branching trunk, 1.4-2k leaf cards in lobes, pine whorls) within 13 units of the path; detail 2-3.4k out to 28 |
 | houses | 10-106 tris, detail in the normal map | 2-5k: boards, shingle courses, louvres, door panels, gutters, steps, balusters |
 
 Hero houses reuse the lean bake's slot pixels and the palette strip, so a house keeps
-its colours and lit windows whichever tier is on screen. Per-lot budget on HIGH: about
-11 lots of radius at the near ring, which is 40 lots, roughly 115k tree triangles and
-80k house triangles.
+its colours and lit windows whichever tier is on screen. Budget on HIGH (rooftops):
+47 near lots (hero), 129 detail trees, roughly 0.25M hero-tree, 0.3M detail-tree and
+0.07M hero-house triangles. The rings are static per lot, so no tier ever swaps while
+flying.
 
 Manifest v2 describes this: `dir`, `atlas` (main sheet), `sheets{name: {atlas}}`, and
 per module `sheet`, `lean` (hero -> the module it replaces), `kind`, `footprint`,

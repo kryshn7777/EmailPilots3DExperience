@@ -49,7 +49,8 @@ The shipped low-poly shells are the mid and far tiers. Lots nearest the camera s
 
 | sheet | what | tris each |
 | --- | --- | --- |
-| `hero-trees` | recursive branching trunk and boughs (bark strips, constant texel density), thousands of leaf cards (front/back pairs with radial normals, so the crown shades like a volume), pine whorls and skirt | 5 to 6.5k |
+| `hero-trees` (`lod: hero`) | recursive branching trunk and boughs (bark strips, constant texel density), 1.4-2k leaf cards in overlapping lobes (front/back pairs with radial normals, so each lobe shades like a volume), pine whorls and skirt; 512 px cards, 512x1024 bark | 8.7 to 10k |
+| `hero-trees` (`lod: detail`) | the same trees with the twig level dropped and a few hundred larger cards: for trees the camera sees clearly but not up close | 2 to 3.4k |
 | `hero-houses` | the high-poly twin itself: lap-siding boards, shingle courses, louvred shutters, raised door panels, gutters, downspouts, porch steps, balusters, chimney caps and pots | 2 to 5k |
 
 Hero houses sample the **same baked slot pixels** as the lean shell wherever a face
@@ -62,7 +63,9 @@ ends open (they sit in the neighbouring wall's plane).
 
 Each hero entry in `manifest.json` carries `lean: <module id>` (what it replaces) and
 `sheet: <sheet name>`; the sheets' atlases live under `sheets{}`. `bake-city-rings.mjs`
-decides per lot which tier it gets from its distance to the camera path.
+decides per lot which tier it gets from its distance to the camera path: houses get
+hero inside `near`; trees get hero inside `treeNear`, detail out to `treeDetail`
+(`rings.detail`, a subset of `mid`), lean beyond. Phones always get the lean module.
 
 ## Layout of the code
 
