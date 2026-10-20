@@ -1,4 +1,5 @@
 import { BoxGeometry, CircleGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { ROOFTOP_BASE_Y } from '../bake/cityGen.mjs';
 import { panelTexture } from '../bake/CanvasTextures';
 import { CHAPTERS } from '../../story/chapters';
 
@@ -28,12 +29,15 @@ export class Panel {
     this.group.add(board);
     this.disposables.push(board.geometry, face);
 
-    // rooftop billboard legs — the board stands over the taxi route
+    // billboard legs, standing on the neighbourhood's lawn: they used to be a fixed
+    // 3 units long, which was right for the old rooftop and left the board hanging
+    // in mid-air once the district below became houses at ROOFTOP_BASE_Y
     const legMaterial = new MeshStandardMaterial({ color: '#232a3a', roughness: 0.6, metalness: 0.4 });
-    const legGeometry = new BoxGeometry(0.14, 3, 0.14);
+    const legLength = this.group.position.y - 2.2 - ROOFTOP_BASE_Y;
+    const legGeometry = new BoxGeometry(0.14, legLength, 0.14);
     for (const lx of [-1.7, 1.7]) {
       const leg = new Mesh(legGeometry, legMaterial);
-      leg.position.set(lx, -3.6, 0);
+      leg.position.set(lx, -2.2 - legLength / 2, 0);
       this.group.add(leg);
     }
     this.disposables.push(legGeometry, legMaterial);
