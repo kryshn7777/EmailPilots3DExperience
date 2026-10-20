@@ -1,6 +1,7 @@
 import {
   AdditiveBlending,
   BufferGeometry,
+  CatmullRomCurve3,
   DoubleSide,
   Float32BufferAttribute,
   Group,
@@ -18,9 +19,16 @@ import {
   TextureLoader,
   Vector3,
 } from 'three';
-import { HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, ROOFTOP_DECK_Y, homeLots } from '../bake/cityGen.mjs';
+import {
+  HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, ROOFTOP_DECK_Y, fenceRuns, homeLots,
+} from '../bake/cityGen.mjs';
+import { PATH_POINTS } from '../rig/pathPoints.mjs';
 import { cloudDeckTexture, glowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
+import { Fences } from './Fences';
+import { StreetCars } from './StreetCars';
+import { mulberry32 } from '../util';
+import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
 import type { Quality } from '../quality';
 
@@ -43,6 +51,9 @@ const LAMPS: [number, number][] = [3.5, 17.5].flatMap((x) =>
 export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
+  private fences: Fences | null = null;
+  private cars: StreetCars | null = null;
+  private path: Vector3[] | null = null;
   private deck: Mesh[] = [];
   private disposables: { dispose(): void }[] = [];
 
@@ -84,6 +95,7 @@ export class Rooftops {
     }
 
     this.buildLamps();
+    this.buildFences(quality);
     void this.init(quality);
   }
 
@@ -152,6 +164,34 @@ export class Rooftops {
     this.disposables.push(g, lamps.material as PointsMaterial);
   }
 
+  /**
+   * Fences along the lot lines. Cut-out cards everywhere; on HIGH, the runs the
+   * flight passes within a few units of become real posts, rails and boards.
+   */
+  /** the flight path sampled densely: what "near the flight" means for fences and parked cars */
+  private pathSamples(): Vector3[] {
+    this.path ??= new CatmullRomCurve3(PATH_POINTS.map((p) => new Vector3(...p)), false, 'centripetal')
+      .getSpacedPoints(400);
+    return this.path;
+  }
+
+  private buildFences(quality: Quality): void {
+    const runs = fenceRuns();
+    let isNear = (_run: FenceRun): boolean => false;
+    if (quality.tier === 'high') {
+      const path = this.pathSamples();
+      const mid = new Vector3();
+      isNear = (run) => {
+        mid.set((run.x0 + run.x1) / 2, ROOFTOP_BASE_Y + 0.2, (run.z0 + run.z1) / 2);
+        for (const c of path) if (c.distanceToSquared(mid) < 13 * 13) return true;
+        return false;
+      };
+    }
+    this.fences = new Fences(runs, isNear);
+    this.fences.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.fences.group);
+  }
+
   /** Soft contact shadows under every house and tree: grounds them on the lawn. */
   private buildShadows(lots: KitLot[], kinds: Map<string, string>): void {
     const map = softShadowTexture();
@@ -184,6 +224,7 @@ export class Rooftops {
       const map = (this.deck[i]!.material as MeshBasicMaterial).map;
       if (map) map.offset.x = time * (i === 0 ? 0.0016 : 0.0029);
     }
+    this.cars?.update(time);
   }
 
   private async init(quality: Quality): Promise<void> {
@@ -207,11 +248,46 @@ export class Rooftops {
     // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.kitCity.group);
-    this.buildShadows(lots as KitLot[], new Map(manifest.modules.map((m) => [m.id, m.kind])));
+    const kinds = new Map(manifest.modules.map((m) => [m.id, m.kind]));
+    this.buildShadows(lots as KitLot[], kinds);
+    this.buildCars(lots as KitLot[], kinds, quality);
+  }
+
+  /**
+   * Traffic on every street, plus a car in the front yard of about half the houses
+   * the flight passes over (the ones far from it would be invisible, and cost).
+   */
+  private buildCars(lots: KitLot[], kinds: Map<string, string>, quality: Quality): void {
+    const rand = mulberry32(5521);
+    const path = this.pathSamples();
+    const reach = quality.tier === 'high' ? 70 : 40;
+    const spots: { x: number; z: number; yaw: number }[] = [];
+    const at = new Vector3();
+    for (const lot of lots) {
+      if (kinds.get(lot.moduleId) !== 'house' || rand() > 0.55) continue;
+      at.set(lot.x, ROOFTOP_BASE_Y, lot.z);
+      let near = false;
+      for (const c of path) if (c.distanceToSquared(at) < reach * reach) { near = true; break; }
+      if (!near) continue;
+      const toStreet = Math.cos(lot.yaw) > 0 ? 1 : -1;
+      const side = rand() < 0.5 ? -1 : 1;
+      // nose to the street or to the house, half and half; yaw turns +x onto the z axis
+      const nose = rand() < 0.5 ? toStreet : -toStreet;
+      spots.push({
+        x: lot.x + side * (lot.w / 2 + 0.55),
+        z: lot.z + toStreet * (lot.d / 2 + 0.85),
+        yaw: nose > 0 ? -Math.PI / 2 : Math.PI / 2,
+      });
+    }
+    this.cars = new StreetCars(quality, spots);
+    this.cars.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.cars.group);
   }
 
   dispose(): void {
     this.kitCity?.dispose();
+    this.fences?.dispose();
+    this.cars?.dispose();
     for (const d of this.disposables) d.dispose();
   }
 }

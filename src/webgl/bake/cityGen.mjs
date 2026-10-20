@@ -259,3 +259,52 @@ export function homeLots(modules) {
   }
   return { lots };
 }
+
+/**
+ * Fence lines of the neighbourhood, one entry per straight run between two
+ * points (site units, same frame as homeLots). Side lines run from the rear to
+ * just past the front of the house, rear lines close the back, and low pickets
+ * sometimes edge the front lawn with a gap for the walkway. Side lines are shared
+ * by two neighbours, so each is generated once per boundary, not once per lot.
+ * Independent of homeLots' random stream, so adding a style here never moves a
+ * house.
+ */
+export const FENCE_STYLES = ['picket', 'privacy', 'rail'];
+
+export function fenceRuns() {
+  const rand = mulberry32(CITY_SEED + 211);
+  const { w, d, lotW, lots: perRow, lotD, street } = HOME_CELL;
+  const runs = [];
+  const style = () => FENCE_STYLES[Math.floor(rand() * FENCE_STYLES.length)];
+  const add = (x0, z0, x1, z1, st, kind) => runs.push({ x0, z0, x1, z1, style: st, kind });
+
+  for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+    for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+      for (const row of [0, 1]) {
+        const zRow = iz * d + (row === 0 ? 0 : lotD + street);
+        const front = row === 0 ? zRow + lotD : zRow;
+        const toStreet = row === 0 ? 1 : -1;
+        const rear = front - toStreet * lotD;
+        // side lines stop short of the street, at roughly the front of the house
+        const sideEnd = front - toStreet * 3.4;
+        for (let k = 0; k <= perRow; k++) {
+          const x = ix * w + k * lotW;
+          const edge = k === 0 || k === perRow;
+          if (rand() < (edge ? 0.45 : 0.78)) add(x, rear, x, sideEnd, style(), 'side');
+        }
+        for (let k = 0; k < perRow; k++) {
+          const x0 = ix * w + k * lotW;
+          if (rand() < 0.72) add(x0, rear, x0 + lotW, rear, style(), 'rear');
+          if (rand() < 0.38) {
+            // a low picket along the front lawn, open at the walkway
+            const zf = front - toStreet * 0.45;
+            const cx = x0 + lotW / 2;
+            add(x0 + 0.1, zf, cx - 0.6, zf, 'picket', 'front');
+            add(cx + 0.6, zf, x0 + lotW - 0.1, zf, 'picket', 'front');
+          }
+        }
+      }
+    }
+  }
+  return runs;
+}

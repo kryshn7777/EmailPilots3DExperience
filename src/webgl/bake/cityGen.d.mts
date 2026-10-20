@@ -41,3 +41,11 @@ export interface CityLot {
 export function cityLayout(canyonZ?: number): Building[];
 export function cityRecipes(modules: KitModuleRef[], canyonZ?: number): { lots: CityLot[] };
 export function homeLots(modules: KitModuleRef[]): { lots: CityLot[] };
+
+export type FenceStyle = 'picket' | 'privacy' | 'rail';
+export interface FenceRun {
+  x0: number; z0: number; x1: number; z1: number;
+  style: FenceStyle; kind: 'side' | 'rear' | 'front';
+}
+export const FENCE_STYLES: FenceStyle[];
+export function fenceRuns(): FenceRun[];

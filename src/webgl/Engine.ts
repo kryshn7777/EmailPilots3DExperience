@@ -53,6 +53,7 @@ import { PaperBurst } from './actors/PaperBurst';
 import { PaperPlane } from './actors/PaperPlane';
 import { KitCity } from './actors/KitCity';
 import { Rooftops } from './actors/Rooftops';
+import { Mountains } from './actors/Mountains';
 import { Storm } from './actors/Storm';
 import { Traffic } from './actors/Traffic';
 import { Trail } from './actors/Trail';
@@ -114,6 +115,7 @@ export class Engine {
   private panel: Panel;
   private windowFrame: WindowFrame;
   private rooftops!: Rooftops;
+  private mountains!: Mountains;
   private clouds: Clouds;
   private envelopes: Envelopes;
   private storm: Storm;
@@ -221,6 +223,7 @@ export class Engine {
     this.panel = new Panel(this.path.chapterAnchor(1));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
+    this.mountains = new Mountains(this.sky);
     this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer);
     this.envelopes = new Envelopes(this.raycast, this.tooltip);
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
@@ -245,6 +248,7 @@ export class Engine {
       this.flock.group,
       this.launchString.line,
       this.sky.mesh,
+      this.mountains.mesh,
       this.sun,
       this.sun.target,
       this.hemi,
@@ -480,6 +484,7 @@ export class Engine {
       .normalize();
     this.sky.sunDir.copy(this.sunDirWorld);
     this.sky.sunIntensity = sunLevel;
+    this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2;
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
@@ -699,6 +704,7 @@ export class Engine {
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.33 && deckClose < 0.99;
     this.rooftops.update(time);
+    this.mountains.update(t, this.camera.position, this.fog.color, deckClose);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
     this.panel.update(t);
@@ -804,6 +810,7 @@ export class Engine {
     this.panel.dispose();
     this.windowFrame.dispose();
     this.rooftops.dispose();
+    this.mountains.dispose();
     this.clouds.dispose();
     this.envelopes.dispose();
     this.storm.dispose();
