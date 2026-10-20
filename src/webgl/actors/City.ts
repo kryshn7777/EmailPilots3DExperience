@@ -25,13 +25,12 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import {
   CITY_EXTENT,
   CROSS_STREET_X,
-  cityLayout,
   cityRecipes,
   type Building,
 } from '../bake/cityGen.mjs';
 import { neonSignTexture, roadTexture } from '../bake/CanvasTextures';
 import { glowTexture } from '../bake/CanvasTextures';
-import { KitCity, type KitLot, type KitRingSet } from './KitCity';
+import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -94,19 +93,21 @@ export class City {
 
   /**
    * Buildings are kit-instanced with ring-baked LODs (see KitCity). Dressing
-   * follows the rings: windows spawn on NEAR+MID lots, clutter/parapets/
-   * billboards on NEAR only — FAR carries its windows in the impostor texture.
+   * follows the rings: windows spawn on NEAR+MID lots, billboards on NEAR
+   * only. Rooftop plant is baked into the modules themselves.
    */
   private async init(path: FlightPath, quality: Quality): Promise<void> {
     // no-cache: lots and rings MUST come from the same bake — a stale cached
     // rings file indexes past the end of a freshly generated lot list
     const [manifest, allRings] = await Promise.all([
-      fetch(asset('/models/city-kit/manifest.json'), { cache: 'no-cache' }).then((r) => r.json()),
+      fetch(asset('/models/city-kit/manifest.json'), { cache: 'no-cache' }).then(
+        (r) => r.json() as Promise<KitManifest>,
+      ),
       fetch(asset('/models/city-rings.json'), { cache: 'no-cache' }).then((r) => r.json()),
     ]);
     const rings = allRings.city[quality.tier] as KitRingSet;
     const { lots } = cityRecipes(manifest.modules);
-    this.kitCity = new KitCity(lots as KitLot[], rings, manifest.modules, quality.tier);
+    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, { tier: quality.tier, glow: 0.9 });
     this.group.add(this.kitCity.group);
 
     // effective wall half-extents per lot: kit modules are uniform-fit
@@ -114,7 +115,7 @@ export class City {
     // hover in air beside the real walls (yaw 90/270 swaps the axes)
     const extents = new Map<number, { hx: number; hz: number }>();
     (lots as KitLot[]).forEach((lot, i) => {
-      const mod = manifest.modules.find((m: { id: string }) => m.id === lot.moduleId);
+      const mod = manifest.modules.find((m) => m.id === lot.moduleId);
       if (!mod) return;
       const sxz = Math.min(lot.w / mod.footprint[0], lot.d / mod.footprint[1]);
       const hx = (sxz * mod.footprint[0]) / 2;
@@ -123,7 +124,12 @@ export class City {
       extents.set(i, quarter ? { hx: hz, hz: hx } : { hx, hz });
     });
 
-    const buildings = cityLayout(0);
+    // dressing is placed from the LOTS, not from cityLayout: cityRecipes drops a
+    // lot that would intrude on the canyon, which slid every later pairing by one
+    // building, and the layout's heights are not the modules' heights anyway
+    const buildings: Building[] = (lots as KitLot[]).map((l) => ({
+      x: l.x, z: l.z, w: l.w, d: l.d, h: l.h,
+    }));
     const nearSet = new Set(rings.near);
     const nearMid = new Set([...rings.near, ...rings.mid]);
     const keep = (set: Set<number>): [Building, { hx: number; hz: number }][] =>
@@ -132,7 +138,6 @@ export class City {
         .filter((row): row is [Building, { hx: number; hz: number }, true] => !!row[1] && row[2])
         .map(([b, e]) => [b, e]);
     this.buildWindows(keep(nearMid));
-    this.buildRoofClutter(keep(nearSet));
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet));
     this.buildDeliveries(buildings, path);
@@ -243,68 +248,6 @@ export class City {
     blinkers.frustumCulled = false;
     this.group.add(blinkers);
     this.disposables.push(blinkGeometry, this.blinkMaterial);
-  }
-
-  /**
-   * AC units + water tanks on the roofs. The city entry looks DOWN at the
-   * massing — bare flat roofs read as gray slabs no matter how lit the walls
-   * are. Two instanced draws total.
-   */
-  private buildRoofClutter(rows: [Building, { hx: number; hz: number }][]): void {
-    const rand = mulberry32(60309);
-    /**
-     * Both carry a lift of emissive. This chapter's key light is 0.3 and the
-     * hemisphere under it is nearly black, so an unlit #2a3145 box crushed to
-     * pure black — 151 of them read as holes punched in the roofline rather
-     * than as clutter standing on it. The roof dressing over in KitCity has
-     * always had this and never showed the problem.
-     */
-    const clutterMaterial = new MeshStandardMaterial({
-      color: '#2a3145', roughness: 0.8, emissive: '#131a2a', emissiveIntensity: 0.55,
-    });
-    const tankMaterial = new MeshStandardMaterial({
-      color: '#1f2634', roughness: 0.6, metalness: 0.3, emissive: '#121826', emissiveIntensity: 0.5,
-    });
-    this.disposables.push(clutterMaterial, tankMaterial);
-
-    const boxes: Matrix4[] = [];
-    const tanks: Matrix4[] = [];
-    const q = new Quaternion();
-    const p = new Vector3();
-    const s = new Vector3();
-    const yaw = new Quaternion();
-    const Y = new Vector3(0, 1, 0);
-    for (const [b, e] of rows) {
-      // clutter only on flat low/mid roofs — kit skyscrapers step back near
-      // the top, and boxes placed at the old box height hover in air there
-      if (b.h < 3.5 || b.h > 6.5) continue;
-      // stay well inside the ACTUAL kit roof (effective extents)
-      const rx = Math.max(e.hx * 2 - 0.7, 0.3);
-      const rz = Math.max(e.hz * 2 - 0.7, 0.3);
-      const units = 1 + Math.floor(rand() * 2);
-      for (let i = 0; i < units; i++) {
-        const w = 0.5 + rand() * 0.9;
-        const h = 0.25 + rand() * 0.45;
-        p.set(b.x + (rand() - 0.5) * rx, b.h + h / 2, b.z + (rand() - 0.5) * rz);
-        s.set(Math.min(w, rx), h, Math.min(0.4 + rand() * 0.8, rz));
-        yaw.setFromAxisAngle(Y, rand() * Math.PI);
-        const m = new Matrix4().compose(p, yaw, s);
-        boxes.push(m);
-      }
-      if (b.h > 5 && rand() < 0.45 && Math.min(rx, rz) > 1.2) {
-        p.set(b.x + (rand() - 0.5) * (rx - 1), b.h + 0.55, b.z + (rand() - 0.5) * (rz - 1));
-        s.set(1, 1.1, 1);
-        tanks.push(new Matrix4().compose(p, q, s));
-      }
-    }
-    const unitGeometry = new BoxGeometry(1, 1, 1);
-    const units = new InstancedMesh(unitGeometry, clutterMaterial, boxes.length);
-    boxes.forEach((m, i) => units.setMatrixAt(i, m));
-    const tankGeometry = new CylinderGeometry(0.55, 0.55, 1, 10);
-    const tankMesh = new InstancedMesh(tankGeometry, tankMaterial, tanks.length);
-    tanks.forEach((m, i) => tankMesh.setMatrixAt(i, m));
-    this.group.add(units, tankMesh);
-    this.disposables.push(unitGeometry, units, tankGeometry, tankMesh);
   }
 
   /**

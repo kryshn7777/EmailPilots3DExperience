@@ -5,6 +5,10 @@ export const CROSS_STREET_X: number[];
 export const CITY_EXTENT: { x: [number, number]; z: [number, number] };
 export const ROOFTOP_BASE_Y: number;
 export const ROOFTOP_DECK_Y: number;
+export const HOME_CELL: {
+  w: number; d: number; lotW: number; lots: number; lotD: number; street: number; cross: number;
+};
+export const HOME_CELLS: { x: [number, number]; z: [number, number] };
 
 export interface Building {
   x: number;
@@ -16,7 +20,9 @@ export interface Building {
 
 export interface KitModuleRef {
   id: string;
-  [key: string]: unknown;
+  kind?: string;
+  footprint: [number, number];
+  height: number;
 }
 
 export interface CityLot {
@@ -32,4 +38,4 @@ export interface CityLot {
 
 export function cityLayout(canyonZ?: number): Building[];
 export function cityRecipes(modules: KitModuleRef[], canyonZ?: number): { lots: CityLot[] };
-export function rooftopLots(modules: KitModuleRef[]): { lots: CityLot[] };
+export function homeLots(modules: KitModuleRef[]): { lots: CityLot[] };

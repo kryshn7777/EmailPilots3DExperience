@@ -51,6 +51,7 @@ import { LaunchString } from './actors/LaunchString';
 import { Panel } from './actors/Panel';
 import { PaperBurst } from './actors/PaperBurst';
 import { PaperPlane } from './actors/PaperPlane';
+import { KitCity } from './actors/KitCity';
 import { Rooftops } from './actors/Rooftops';
 import { Storm } from './actors/Storm';
 import { Traffic } from './actors/Traffic';
@@ -185,16 +186,34 @@ export class Engine {
     const roomEnv = pmrem.fromScene(new RoomEnvironment());
     this.scene.environment = roomEnv.texture;
     this.scene.environmentIntensity = 0.3;
+    // two probes load, so the generator is released when BOTH have settled
+    let probesLeft = 2;
+    const probeSettled = (): void => {
+      if (--probesLeft === 0) pmrem.dispose();
+    };
     new HDRLoader().load(
       asset('/hdri/sky_1k.hdr'),
       (hdr) => {
         this.scene.environment = pmrem.fromEquirectangular(hdr).texture;
         hdr.dispose();
         roomEnv.dispose();
-        pmrem.dispose();
+        probeSettled();
       },
       undefined,
-      () => pmrem.dispose(), // offline: keep the RoomEnvironment look
+      probeSettled, // offline: keep the RoomEnvironment look
+    );
+    // the buildings' own sky: a path-traced cloud sea and cumulus baked in
+    // Blender (blender/make_cloud_env.py). Light and reflections for the city
+    // only; the night probe above still serves everything else.
+    new HDRLoader().load(
+      asset('/hdri/cloud_env_1k.hdr'),
+      (hdr) => {
+        KitCity.setEnvironment(pmrem.fromEquirectangular(hdr).texture);
+        hdr.dispose();
+        probeSettled();
+      },
+      undefined,
+      probeSettled, // missing file: buildings fall back to the scene probe
     );
 
     const rand = mulberry32(919);
@@ -465,6 +484,8 @@ export class Engine {
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
+    // materials with their own envMap ignore the line above
+    KitCity.setEnvIntensity(this.scene.environmentIntensity);
   }
 
   /**

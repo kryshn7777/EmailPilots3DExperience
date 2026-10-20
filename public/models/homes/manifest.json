@@ -1,0 +1,208 @@
+{
+  "dir": "homes",
+  "atlas": {
+    "color": "atlas-color.webp",
+    "normal": "atlas-normal.webp",
+    "orm": "atlas-orm.webp",
+    "emissive": "atlas-emissive.webp",
+    "low": {
+      "color": "atlas-color-low.webp",
+      "orm": "atlas-orm-low.webp",
+      "emissive": "atlas-emissive-low.webp"
+    }
+  },
+  "modules": [
+    {
+      "id": "home-cottage",
+      "kind": "house",
+      "lod0": "home-cottage.lod0.glb",
+      "footprint": [
+        3.036,
+        2.772
+      ],
+      "height": 1.997,
+      "tris0": 62,
+      "density": 13.88
+    },
+    {
+      "id": "home-colonial",
+      "kind": "house",
+      "lod0": "home-colonial.lod0.glb",
+      "footprint": [
+        4.224,
+        3.679
+      ],
+      "height": 2.879,
+      "tris0": 72,
+      "density": 7.53
+    },
+    {
+      "id": "home-ranch",
+      "kind": "house",
+      "lod0": "home-ranch.lod0.glb",
+      "footprint": [
+        5.841,
+        3.036
+      ],
+      "height": 1.894,
+      "tris0": 38,
+      "density": 10.25
+    },
+    {
+      "id": "home-farmhouse",
+      "kind": "house",
+      "lod0": "home-farmhouse.lod0.glb",
+      "footprint": [
+        3.465,
+        4.95
+      ],
+      "height": 3.16,
+      "tris0": 106,
+      "density": 8.95
+    },
+    {
+      "id": "home-craftsman",
+      "kind": "house",
+      "lod0": "home-craftsman.lod0.glb",
+      "footprint": [
+        4.472,
+        3.96
+      ],
+      "height": 2.095,
+      "tris0": 83,
+      "density": 11.29
+    },
+    {
+      "id": "home-victorian",
+      "kind": "house",
+      "lod0": "home-victorian.lod0.glb",
+      "footprint": [
+        4.669,
+        3.349
+      ],
+      "height": 3.642,
+      "tris0": 86,
+      "density": 8.59
+    },
+    {
+      "id": "home-terrace",
+      "kind": "house",
+      "lod0": "home-terrace.lod0.glb",
+      "footprint": [
+        6.6,
+        2.97
+      ],
+      "height": 2.871,
+      "tris0": 10,
+      "density": 8.0
+    },
+    {
+      "id": "home-modern",
+      "kind": "house",
+      "lod0": "home-modern.lod0.glb",
+      "footprint": [
+        4.62,
+        3.465
+      ],
+      "height": 2.046,
+      "tris0": 20,
+      "density": 8.89
+    },
+    {
+      "id": "home-bungalow",
+      "kind": "house",
+      "lod0": "home-bungalow.lod0.glb",
+      "footprint": [
+        3.3,
+        3.267
+      ],
+      "height": 2.062,
+      "tris0": 82,
+      "density": 12.71
+    },
+    {
+      "id": "home-suburban",
+      "kind": "house",
+      "lod0": "home-suburban.lod0.glb",
+      "footprint": [
+        5.676,
+        3.465
+      ],
+      "height": 2.739,
+      "tris0": 76,
+      "density": 8.92
+    },
+    {
+      "id": "home-tudor",
+      "kind": "house",
+      "lod0": "home-tudor.lod0.glb",
+      "footprint": [
+        3.762,
+        3.003
+      ],
+      "height": 3.762,
+      "tris0": 24,
+      "density": 9.44
+    },
+    {
+      "id": "home-duplex",
+      "kind": "house",
+      "lod0": "home-duplex.lod0.glb",
+      "footprint": [
+        4.29,
+        3.135
+      ],
+      "height": 2.739,
+      "tris0": 34,
+      "density": 10.31
+    },
+    {
+      "id": "tree-oak",
+      "kind": "tree",
+      "lod0": "tree-oak.lod0.glb",
+      "footprint": [
+        3.069,
+        2.753
+      ],
+      "height": 3.519,
+      "tris0": 92,
+      "density": 7.32
+    },
+    {
+      "id": "tree-maple",
+      "kind": "tree",
+      "lod0": "tree-maple.lod0.glb",
+      "footprint": [
+        2.433,
+        2.532
+      ],
+      "height": 3.432,
+      "tris0": 92,
+      "density": 9.07
+    },
+    {
+      "id": "tree-pine",
+      "kind": "tree",
+      "lod0": "tree-pine.lod0.glb",
+      "footprint": [
+        1.782,
+        1.782
+      ],
+      "height": 3.498,
+      "tris0": 36,
+      "density": 12.29
+    },
+    {
+      "id": "tree-poplar",
+      "kind": "tree",
+      "lod0": "tree-poplar.lod0.glb",
+      "footprint": [
+        1.354,
+        1.358
+      ],
+      "height": 4.584,
+      "tris0": 92,
+      "density": 11.36
+    }
+  ]
+}
