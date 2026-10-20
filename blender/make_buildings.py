@@ -48,12 +48,17 @@ SETS = {
     }),
 }
 
-# hero module id -> (species, the lean module it replaces up close)
+# module id -> (species, the lean module it replaces, tier). 'hero' is for lots the
+# camera passes close to, 'detail' for the ring of trees it still sees clearly.
 HERO_TREES = {
-    'tree-oak-hero': ('oak', 'tree-oak'),
-    'tree-maple-hero': ('maple', 'tree-maple'),
-    'tree-pine-hero': ('pine', 'tree-pine'),
-    'tree-poplar-hero': ('poplar', 'tree-poplar'),
+    'tree-oak-hero': ('oak', 'tree-oak', 'hero'),
+    'tree-maple-hero': ('maple', 'tree-maple', 'hero'),
+    'tree-pine-hero': ('pine', 'tree-pine', 'hero'),
+    'tree-poplar-hero': ('poplar', 'tree-poplar', 'hero'),
+    'tree-oak-detail': ('oak', 'tree-oak', 'detail'),
+    'tree-maple-detail': ('maple', 'tree-maple', 'detail'),
+    'tree-pine-detail': ('pine', 'tree-pine', 'detail'),
+    'tree-poplar-detail': ('poplar', 'tree-poplar', 'detail'),
 }
 
 
@@ -176,16 +181,16 @@ def build_trees(setname, sheet, cfg, args, out):
         orm[y:y + h, x:x + w] = o
 
     entries = []
-    for mid, (species, lean) in HERO_TREES.items():
+    for mid, (species, lean, lod) in HERO_TREES.items():
         if args.only and mid not in args.only:
             continue
         t = time.time()
-        tree = hero_trees.HeroTree(mid, species, lean, scale=homes.SCALE).build(layout)
+        tree = hero_trees.HeroTree(mid, species, lean, scale=homes.SCALE, lod=lod).build(layout)
         dx, dy, dz = tree.dims()
         obj = tree.final_object()
         export_glb(obj, os.path.join(out, f'{mid}.lod0.glb'))
         entries.append(dict(
-            id=mid, kind='tree', sheet=sheet, lean=lean, lod0=f'{mid}.lod0.glb',
+            id=mid, kind='tree', sheet=sheet, lean=lean, lod=lod, lod0=f'{mid}.lod0.glb',
             footprint=[round(dx * homes.SCALE, 3), round(dy * homes.SCALE, 3)],
             height=round(dz * homes.SCALE, 3), tris0=tree.tris(),
         ))
@@ -206,6 +211,8 @@ def build_hero_baked(setname, sheet, cfg, args, out):
                 continue
             model.tile_index = index
             models.append(model)
+    for model in models:
+        model.finish()   # adds the flat roofs (and their materials) before the palette is sized
     # every material of the twin can end up as a flat-colour face, not just the solids
     names = sorted({n for model in models for n in model.hp.mats} |
                    {m['mat'] for model in models for m in model.lp.meta if m['kind'] == 'solid'})
@@ -216,7 +223,6 @@ def build_hero_baked(setname, sheet, cfg, args, out):
     entries = []
     for model in models:
         t = time.time()
-        model.finish()
         model.assign_uv(layout, layout.tile_rect(model.kind, model.tile_index), cells)
         dx, dy, dz = model.dims()
         k = model.scale
@@ -226,7 +232,7 @@ def build_hero_baked(setname, sheet, cfg, args, out):
         hero = model.hero_object(k)
         export_glb(hero, os.path.join(out, f'{model.id}-hero.lod0.glb'))
         entries.append(dict(
-            id=f'{model.id}-hero', kind=model.kind, sheet=sheet, lean=model.id,
+            id=f'{model.id}-hero', kind=model.kind, sheet=sheet, lean=model.id, lod='hero',
             lod0=f'{model.id}-hero.lod0.glb',
             footprint=[round(dx * k, 3), round(dy * k, 3)], height=round(dz * k, 3),
             tris0=model.hero_tris(), density=round(model.density, 2),

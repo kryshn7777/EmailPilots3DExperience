@@ -21,6 +21,8 @@ export interface Building {
 export interface KitModuleRef {
   id: string;
   kind?: string;
+  /** set on a hero/detail replacement: the lean module it stands in for (never a lot's own module) */
+  lean?: string;
   footprint: [number, number];
   height: number;
 }

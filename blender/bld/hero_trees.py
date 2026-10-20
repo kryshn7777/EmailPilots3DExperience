@@ -21,7 +21,7 @@ from .bark import bark
 
 SPECIES = ['oak', 'maple', 'poplar', 'pine']
 CARD_V = (0.20, 0.82)        # the band of a card image the cluster occupies
-TEXEL = 100.0                # bark pixels per metre
+TEXEL = 200.0                # bark pixels per metre
 
 
 # species: trunk/branch growth, canopy volume, card count and size.
@@ -29,30 +29,40 @@ TEXEL = 100.0                # bark pixels per metre
 PARAMS = {
     'oak': dict(
         trunk_r=(0.50, 0.20), lens=[4.6, 3.4, 2.3, 1.5], kids=[6, 4, 3], kid_t=(0.5, 1.0),
-        angle=(38, 72), wobble=0.26, up=0.10, taper=0.62, sides=(8, 6, 5, 4),
-        centre=(0, 0, 7.8), radii=(4.7, 4.7, 3.8), cards=900, size=(0.95, 1.55),
+        angle=(38, 72), wobble=0.26, up=0.10, taper=0.62, sides=(12, 8, 6, 4),
+        centre=(0, 0, 7.8), radii=(4.7, 4.7, 3.8), cards=2000, size=(0.62, 1.0),
         bark=dict(tint='#5b4a3a', moss=0.55, furrow=1.0)),
     'maple': dict(
         trunk_r=(0.42, 0.18), lens=[4.0, 2.8, 1.9, 1.2], kids=[5, 4, 3], kid_t=(0.5, 1.0),
-        angle=(34, 64), wobble=0.24, up=0.12, taper=0.62, sides=(8, 6, 5, 4),
-        centre=(0, 0, 6.8), radii=(3.9, 3.9, 3.9), cards=760, size=(0.85, 1.4),
+        angle=(34, 64), wobble=0.24, up=0.12, taper=0.62, sides=(12, 8, 6, 4),
+        centre=(0, 0, 6.8), radii=(3.9, 3.9, 3.9), cards=1700, size=(0.55, 0.92),
         bark=dict(tint='#6a5646', moss=0.3, furrow=0.8)),
     'poplar': dict(
         trunk_r=(0.34, 0.07), lens=[10.0, 1.9, 1.2, 0.8], kids=[11, 3, 2], kid_t=(0.22, 0.98),
-        angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(8, 6, 5, 4),
-        centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=620, size=(0.75, 1.2),
+        angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(10, 6, 5, 4),
+        centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=1400, size=(0.5, 0.82),
         bark=dict(tint='#c9c3b2', moss=0.0, lenticels=0.6, furrow=0.35)),
     'pine': dict(
-        trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.74), branches=7, reach=2.7,
-        cards_per_branch=6, size=(1.2, 1.8), skirt=11,
+        trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.56), branches=8, reach=2.7,
+        cards_per_branch=8, size=(1.0, 1.5), skirt=14,
         bark=dict(tint='#5b3f2f', moss=0.15, furrow=1.2)),
 }
 
 
+# 'detail' is the tier for trees the camera sees clearly but not up close: the same
+# trunk and boughs with the twig level dropped, and a few hundred larger cards.
+DETAIL = {
+    'oak': dict(lens=[4.6, 3.4, 2.3], kids=[6, 3], sides=(6, 5, 4), cards=400, size=(1.2, 1.9)),
+    'maple': dict(lens=[4.0, 2.8, 1.9], kids=[5, 3], sides=(6, 5, 4), cards=360, size=(1.05, 1.7)),
+    'poplar': dict(lens=[10.0, 1.9, 1.2], kids=[11, 2], sides=(6, 5, 4), cards=300, size=(0.95, 1.5)),
+    'pine': dict(whorl=(1.9, 0.85), branches=6, cards_per_branch=4, size=(1.4, 2.1), skirt=7),
+}
+
+
 class TreeBuilder:
-    def __init__(self, layout, species, seed):
+    def __init__(self, layout, species, seed, lod='hero'):
         self.layout, self.species = layout, species
-        self.P = PARAMS[species]
+        self.P = {**PARAMS[species], **(DETAIL[species] if lod == 'detail' else {})}
         self.rng = random.Random(f'{species}/{seed}')
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new('UVMap')
@@ -133,6 +143,12 @@ class TreeBuilder:
             d = (d + j + Vector((0, 0, 1)) * P['up']).normalized()
             pts.append(pts[-1] + d * seg)
             dirs.append(d)
+        if depth >= 2 and 'centre' in P:
+            # twigs that end outside the crown would stick out of it bare
+            c, e = Vector(P['centre']), Vector(P['radii'])
+            tip = pts[-1]
+            if Vector(((tip.x - c.x) / e.x, (tip.y - c.y) / e.y, (tip.z - c.z) / e.z)).length > 1.1:
+                return
         radii = [r0 + (r1 - r0) * (i / (n - 1)) for i in range(n)]
         if depth == 0:
             radii[0] *= 1.4          # root flare
@@ -171,7 +187,7 @@ class TreeBuilder:
             right = Vector((1, 0, 0))
         right.normalize()
         up = n_geo.cross(right)
-        roll = math.radians(rng.uniform(-38, 38))
+        roll = rng.uniform(0, 2 * math.pi)
         right, up = (right * math.cos(roll) + up * math.sin(roll),
                      up * math.cos(roll) - right * math.sin(roll))
         w = size
@@ -190,12 +206,24 @@ class TreeBuilder:
         centre = Vector(P['centre'])
         radii = Vector(P['radii'])
         anchors = self.anchors
+        # the crown is a handful of overlapping lobes, not one ellipsoid: each lobe is
+        # a rounded mass of leaves with its own shading, and the dark gaps between them
+        # are what make a silhouette read as a tree rather than a bush-shaped ball
+        lobes = []
+        for _ in range(P.get('lobes', 8)):
+            d = Vector((rng.gauss(0, 1), rng.gauss(0, 1), abs(rng.gauss(0, 0.9)) - 0.25)).normalized()
+            c = centre + Vector((d.x * radii.x, d.y * radii.y, d.z * radii.z)) * rng.uniform(0.4, 0.72)
+            lobes.append((c, rng.uniform(0.36, 0.52) * min(radii.x, radii.y)))
         for i in range(P['cards']):
+            lobe_c = None
             if i % 3 == 0:
                 # a third of the cards fill the volume directly, so the crown is
                 # one mass rather than a clump per branch tip with sky between
                 base = centre + Vector((rng.gauss(0, 0.55) * radii.x, rng.gauss(0, 0.55) * radii.y,
                                         rng.gauss(0, 0.5) * radii.z))
+            elif i % 3 == 1:
+                lobe_c, lobe_r = lobes[rng.randrange(len(lobes))]
+                base = lobe_c + Vector((rng.gauss(0, 0.5), rng.gauss(0, 0.5), rng.gauss(0, 0.5))) * lobe_r
             else:
                 base = anchors[i % len(anchors)]
             size = rng.uniform(*P['size'])
@@ -207,6 +235,8 @@ class TreeBuilder:
                 p = centre + Vector((q.x * radii.x, q.y * radii.y, q.z * radii.z))
             radial = p - centre
             radial = radial.normalized() if radial.length > 1e-4 else Vector((0, 0, 1))
+            if lobe_c is not None and (p - lobe_c).length > 1e-4:
+                radial = (radial * 0.4 + (p - lobe_c).normalized() * 0.6).normalized()
             rnd = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))).normalized()
             n_geo = (radial * 0.55 + rnd * 0.9).normalized()
             light_n = (radial * 0.85 + Vector((0, 0, 0.35)) + n_geo * 0.15).normalized()
@@ -294,13 +324,14 @@ class TreeBuilder:
 class HeroTree:
     """A finished tree: geometry, normals, and what the manifest needs to know."""
 
-    def __init__(self, mid, species, lean, scale, seed=1):
+    def __init__(self, mid, species, lean, scale, seed=1, lod='hero'):
         self.id, self.species, self.lean, self.scale, self.seed = mid, species, lean, scale, seed
+        self.lod = lod
         self.kind = 'tree'
         self.builder = None
 
     def build(self, layout):
-        self.builder = TreeBuilder(layout, self.species, self.seed).build()
+        self.builder = TreeBuilder(layout, self.species, self.seed, self.lod).build()
         return self
 
     def dims(self):

@@ -128,16 +128,16 @@ HOMES = Layout(
 LAYOUTS = {'city': CITY, 'homes': HOMES}
 
 
-# Hero trees: a fixed sheet, not a packed one. Eight 256 px leaf-cluster cards in
-# the top half, four 256x512 bark strips (one per species) in the bottom half.
+# Hero trees: a fixed sheet, not a packed one. Eight 512 px leaf-cluster cards in
+# the top half, four 512x1024 bark strips (one per species) in the bottom half.
 HERO_TREES = Layout(
-    'hero-trees', 1024, tiles={}, palette_origin=(0, 0), pitch=1, cols=1, pad=0, gutter=0,
+    'hero-trees', 2048, tiles={}, palette_origin=(0, 0), pitch=1, cols=1, pad=0, gutter=0,
     margin=0, reach={},
 )
 _SPECIES = ['oak', 'maple', 'poplar', 'pine']
-HERO_TREES.cards = {(sp, v): (256 * ((i * 2 + v) % 4), 256 * ((i * 2 + v) // 4), 256, 256)
+HERO_TREES.cards = {(sp, v): (512 * ((i * 2 + v) % 4), 512 * ((i * 2 + v) // 4), 512, 512)
                     for i, sp in enumerate(_SPECIES) for v in (0, 1)}
-HERO_TREES.bark = {sp: (256 * i, 512, 256, 512) for i, sp in enumerate(_SPECIES)}
+HERO_TREES.bark = {sp: (512 * i, 1024, 512, 1024) for i, sp in enumerate(_SPECIES)}
 
 LAYOUTS['hero-trees'] = HERO_TREES
 

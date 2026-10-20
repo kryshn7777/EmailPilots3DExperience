@@ -26,13 +26,19 @@ export interface KitLot {
   x: number; z: number; w: number; d: number; h: number;
   yaw: number; tint: string; moduleId: string;
 }
-export interface KitRingSet { near: number[]; mid: number[]; far: number[] }
+export interface KitRingSet {
+  near: number[]; mid: number[]; far: number[];
+  /** lots inside `mid` that swap to their `detail` module (HIGH only; trees) */
+  detail?: number[];
+}
 export interface KitModule {
   id: string; kind: string; lod0: string; footprint: [number, number]; height: number;
   /** which atlas the module samples; absent means 'main' */
   sheet?: string;
-  /** set on a hero (close-up) module: the lean module it replaces in the near ring */
+  /** set on a hero/detail module: the lean module it replaces */
   lean?: string;
+  /** 'hero' replaces `lean` in the near ring, 'detail' in the detail ring */
+  lod?: 'hero' | 'detail';
 }
 /** One atlas: what is present depends on the sheet (hero trees have no normals or glow). */
 export interface SheetAtlas {
@@ -232,13 +238,15 @@ export class KitCity {
     // real kit modules, streamed in, one draw per module type. A lot in the NEAR
     // ring swaps to its hero (close-up) module when the set has one and the tier
     // can afford it; everything else, and every phone, gets the lean module.
-    const heroOf = new Map<string, string>();
-    if (tier === 'high') for (const m of modules) if (m.lean) heroOf.set(m.lean, m.id);
+    const swaps = { hero: new Map<string, string>(), detail: new Map<string, string>() };
+    if (tier === 'high') for (const m of modules) if (m.lean) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
     const nearSet = new Set(rings.near);
+    const detailSet = new Set(rings.detail ?? []);
     const byModule = new Map<string, number[]>();
     for (const i of modelled) {
       const lean = lots[i]!.moduleId;
-      const id = nearSet.has(i) ? heroOf.get(lean) ?? lean : lean;
+      const id = nearSet.has(i) ? swaps.hero.get(lean) ?? lean
+        : detailSet.has(i) ? swaps.detail.get(lean) ?? lean : lean;
       const arr = byModule.get(id) ?? [];
       arr.push(i);
       byModule.set(id, arr);

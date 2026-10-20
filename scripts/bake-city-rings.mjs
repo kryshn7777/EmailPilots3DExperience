@@ -33,15 +33,22 @@ const OFFSETS = {
 // the night city is real buildings throughout on HIGH, and the neighbourhood
 // is real houses out to 110 units, with the impostors only past that.
 // near = the hero (close-up) models where a set has them, mid = the lean ones.
+// Trees have two close tiers because they are what the window-exit view is
+// full of: `near` -> hero trees (~10k tris), `detail` -> the mid-detail tree
+// (~2.4k) out to a radius where a lean 60-triangle blob would still read as one.
+// Houses only have the hero tier. `detail` is a subset of `mid`.
 const RINGS = {
   city: { high: { near: 18, mid: 1e6 }, low: { near: 8, mid: 45 } },
-  rooftops: { high: { near: 11, mid: 110 }, low: { near: 10, mid: 55 } },
+  rooftops: {
+    high: { near: 11, mid: 110, treeNear: 13, treeDetail: 28 },
+    low: { near: 10, mid: 55 },
+  },
 };
 
-const partition = (lots, offset, radii) => {
+const partition = (lots, offset, radii, kindOf = () => undefined) => {
   const out = {
-    high: { near: [], mid: [], far: [] },
-    low: { near: [], mid: [], far: [] },
+    high: { near: [], mid: [], far: [], detail: [] },
+    low: { near: [], mid: [], far: [], detail: [] },
   };
   lots.forEach((lot, i) => {
     let best = Infinity;
@@ -54,9 +61,14 @@ const partition = (lots, offset, radii) => {
       const d = Math.hypot(wx - c.x, dy, wz - c.z);
       if (d < best) best = d;
     }
+    const isTree = kindOf(lot) === 'tree';
     for (const tier of ['high', 'low']) {
       const r = radii[tier];
-      (best < r.near ? out[tier].near : best < r.mid ? out[tier].mid : out[tier].far).push(i);
+      const near = isTree && r.treeNear !== undefined ? r.treeNear : r.near;
+      (best < near ? out[tier].near : best < r.mid ? out[tier].mid : out[tier].far).push(i);
+      if (isTree && r.treeDetail !== undefined && best >= near && best < r.treeDetail) {
+        out[tier].detail.push(i);
+      }
     }
   });
   return out;
@@ -64,9 +76,10 @@ const partition = (lots, offset, radii) => {
 
 const cityLots = cityRecipes(cityManifest.modules).lots;
 const roofLots = homeLots(homesManifest.modules).lots;
+const homeKind = Object.fromEntries(homesManifest.modules.map((m) => [m.id, m.kind]));
 const rings = {
   city: partition(cityLots, OFFSETS.city, RINGS.city),
-  rooftops: partition(roofLots, OFFSETS.rooftops, RINGS.rooftops),
+  rooftops: partition(roofLots, OFFSETS.rooftops, RINGS.rooftops, (lot) => homeKind[lot.moduleId]),
 };
 
 for (const [key, lots] of [['city', cityLots], ['rooftops', roofLots]]) {
@@ -82,6 +95,7 @@ for (const [key, lots] of [['city', cityLots], ['rooftops', roofLots]]) {
     key,
     'high near/mid/far:',
     rings[key].high.near.length, rings[key].high.mid.length, rings[key].high.far.length,
+    `(detail ${rings[key].high.detail.length})`,
     '· low:',
     rings[key].low.near.length, rings[key].low.mid.length, rings[key].low.far.length,
   );

@@ -21,8 +21,8 @@ import numpy as np
 from mathutils import Matrix, Vector
 from PIL import Image
 
-SIZE = 256            # delivered card size
-RENDER = 512          # rendered at 2x and filtered down
+SIZE = 512            # delivered card size
+RENDER = 1024         # rendered at 2x and filtered down
 FRAME = 1.3           # metres across the ortho camera
 
 
@@ -158,9 +158,9 @@ def _srgb(h):
 # -- species -----------------------------------------------------------------------
 
 SPECIES = {
-    'oak':    dict(kind='oak', size=0.17, count=22, base='#3e6a2a', tip='#7fa84a', vein='#2d4d1d'),
-    'maple':  dict(kind='maple', size=0.15, count=18, base='#9a3f1c', tip='#d9892f', vein='#6b2a12'),
-    'poplar': dict(kind='ovate', size=0.15, count=34, base='#5f8a35', tip='#a8c768', vein='#46682a'),
+    'oak':    dict(kind='oak', size=0.15, count=34, base='#3e6a2a', tip='#7fa84a', vein='#2d4d1d'),
+    'maple':  dict(kind='maple', size=0.135, count=28, base='#9a3f1c', tip='#d9892f', vein='#6b2a12'),
+    'poplar': dict(kind='ovate', size=0.13, count=46, base='#5f8a35', tip='#a8c768', vein='#46682a'),
     'pine':   dict(kind='needle', size=0.17, count=22, base='#233f2a', tip='#4f8050', vein='#1a2f20'),
 }
 
@@ -283,7 +283,7 @@ def render_card(species, seed, work):
     r.image_settings.color_depth = '8'
     scene.view_settings.view_transform = 'Standard'
     scene.cycles.device = 'CPU'
-    scene.cycles.samples = 48
+    scene.cycles.samples = 40
     scene.cycles.use_denoising = False
     scene.cycles.max_bounces = 3
     path = os.path.join(work, f'{species}{seed}.png')

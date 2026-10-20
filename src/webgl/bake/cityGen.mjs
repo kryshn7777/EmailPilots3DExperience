@@ -199,8 +199,10 @@ const TREE_TINTS = ['#ffffff', '#f2f6ea', '#eaf1e2'];
  */
 export function homeLots(modules) {
   const rand = mulberry32(CITY_SEED + 53);
-  const houses = modules.filter((m) => m.kind === 'house');
-  const trees = modules.filter((m) => m.kind === 'tree');
+  // lots are placed with the lean modules; a module that carries `lean` is a
+  // hero/detail replacement the rings swap in, never a lot of its own
+  const houses = modules.filter((m) => m.kind === 'house' && !m.lean);
+  const trees = modules.filter((m) => m.kind === 'tree' && !m.lean);
   const { w, d, lotW, lots: perRow, lotD, street } = HOME_CELL;
   const lots = [];
   const pick = (list) => list[Math.floor(rand() * list.length)];
