@@ -8,6 +8,7 @@ Face kinds on the low-poly mesh
 """
 import math
 import random
+from contextlib import contextmanager
 
 import bmesh
 import bpy
@@ -18,6 +19,24 @@ from .geo import Builder, Frame, Z, rect_poly
 from .roofs import flat_roof, pyramid_hp
 
 X, Y = Vector((1, 0, 0)), Vector((0, 1, 0))
+
+
+def _solid_uv(face, uv, normal, cx, cy, spread, A):
+    """UVs for a flat-colour face: planar-fit into the middle of its palette cell.
+    Fitted rather than collapsed to a point, so the UV has area and a tangent frame."""
+    n = normal if normal.length > 1e-6 else Z
+    a = X - n * X.dot(n)
+    a = a.normalized() if a.length > 1e-4 else Y
+    b = n.cross(a)
+    pts = [l.vert.co for l in face.loops]
+    us = [p.dot(a) for p in pts]
+    vs = [p.dot(b) for p in pts]
+    su = max(max(us) - min(us), 1e-3)
+    sv = max(max(vs) - min(vs), 1e-3)
+    for loop, u, v in zip(face.loops, us, vs):
+        px = cx + ((u - min(us)) / su - 0.5) * spread
+        py = cy + ((v - min(vs)) / sv - 0.5) * spread
+        loop[uv].uv = (px / A, 1 - py / A)
 
 
 def _newell_normal(pts):
@@ -44,6 +63,17 @@ class Model:
 
     def rng(self, key):
         return random.Random(f'{self.id}/{key}')
+
+    @contextmanager
+    def ctx(self, slot, origin, a, b, n):
+        """High-poly faces built inside this block belong to a baked slot: `origin`,
+        `a`, `b` are its UV frame and `n` its outward normal. Only faces that face
+        the same way (the visible surface) will sample it in the hero tier."""
+        self.hp.ctx = dict(slot=slot, o=Vector(origin), a=Vector(a), b=Vector(b), n=Vector(n).normalized())
+        try:
+            yield
+        finally:
+            self.hp.ctx = None
 
     # -- low-poly face helpers -------------------------------------------------
 
@@ -288,7 +318,9 @@ class Model:
     def finish(self):
         for poly, z, spec, tid in self.roofs:
             keep = [v[:4] for v in self.volumes if v[4] >= z - 0.01]
-            flat_roof(self.hp, poly, z, spec, self.rng(f'{tid}:roof'), keep)
+            xs, ys = [p[0] for p in poly], [p[1] for p in poly]
+            with self.ctx(f'{tid}:roof', (min(xs), min(ys), z), X, Y, Z):
+                flat_roof(self.hp, poly, z, spec, self.rng(f'{tid}:roof'), keep)
         self._recenter()
 
     def _recenter(self):
@@ -299,6 +331,12 @@ class Model:
             bmesh.ops.translate(b, verts=b.verts, vec=shift)
         for m in self.lp.meta:
             if 'o' in m:
+                m['o'] = m['o'] + shift
+        # high-poly faces share one context dict per wall or roof: shift each once
+        seen = set()
+        for m in self.hp.meta:
+            if m is not None and id(m) not in seen:
+                seen.add(id(m))
                 m['o'] = m['o'] + shift
 
     def dims(self):
@@ -315,6 +353,7 @@ class Model:
     def assign_uv(self, layout, tile, palette_cells):
         """Pack this model's slots into its atlas tile and write the UVs."""
         self.layout, self.density = layout.layout_tile(self.slots, tile)
+        self.atlas_layout, self.palette = layout, palette_cells
         bm = self.lp.bm
         uv = bm.loops.layers.uv.new('UVMap')
         bm.faces.ensure_lookup_table()
@@ -325,19 +364,7 @@ class Model:
         for face, meta in zip(bm.faces, self.lp.meta):
             if meta['kind'] == 'solid':
                 cx, cy = palette_cells[meta['mat']]
-                pts = [l.vert.co for l in face.loops]
-                n = face.normal if face.normal.length > 1e-6 else Z
-                a = (X - n * X.dot(n))
-                a = a.normalized() if a.length > 1e-4 else Y
-                b = n.cross(a)
-                us = [p.dot(a) for p in pts]
-                vs = [p.dot(b) for p in pts]
-                su = max(max(us) - min(us), 1e-3)
-                sv = max(max(vs) - min(vs), 1e-3)
-                for l, u, v in zip(face.loops, us, vs):
-                    px = cx + ((u - min(us)) / su - 0.5) * spread
-                    py = cy + ((v - min(vs)) / sv - 0.5) * spread
-                    l[uv].uv = (px / A, 1 - py / A)
+                _solid_uv(face, uv, face.normal, cx, cy, spread, A)
                 continue
             x, y, wpx, hpx = self.layout[meta['slot']]
             for l in face.loops:
@@ -386,3 +413,60 @@ class Model:
         obj = bpy.data.objects.new(self.id, mesh)
         bpy.context.scene.collection.objects.link(obj)
         return obj
+
+
+    # -- hero tier ---------------------------------------------------------------------
+
+    def hero_object(self, scale):
+        """The close-up mesh: the high-poly twin itself, minus what cannot be seen.
+
+        Surfaces that face the way their wall or roof slot does sample that slot's
+        baked pixels (the bake was projected along the same normal, so the pixel at
+        a recessed window pane is the pane); every other face (reveals, trim sides,
+        tops) takes the flat colour of its material from the palette strip. There is
+        no normal map in this tier: the relief is geometry.
+        """
+        layout, cells = self.atlas_layout, self.palette
+        A = layout.size
+        src = self.hp.bm
+        src.normal_update()
+        faces = list(src.faces)
+        # drop back-to-back coincident faces (the touching sides of neighbouring boxes)
+        by_key = {}
+        for i, f in enumerate(faces):
+            key = tuple(sorted((round(v.co.x, 3), round(v.co.y, 3), round(v.co.z, 3)) for v in f.verts))
+            by_key.setdefault(key, []).append(i)
+        drop = set()
+        for idxs in by_key.values():
+            for a in range(len(idxs)):
+                for b in range(a + 1, len(idxs)):
+                    if faces[idxs[a]].normal.dot(faces[idxs[b]].normal) < -0.9:
+                        drop.update((idxs[a], idxs[b]))
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new('UVMap')
+        for i, (f, meta) in enumerate(zip(faces, self.hp.meta)):
+            if i in drop:
+                continue
+            nf = bm.faces.new([bm.verts.new(v.co) for v in f.verts])
+            nf.smooth = f.smooth
+            slot = meta and self.layout.get(meta['slot'])
+            if slot and f.normal.dot(meta['n']) > 0.9:
+                x, y, _, hpx = slot
+                for loop in nf.loops:
+                    rel = loop.vert.co - meta['o']
+                    px = x + rel.dot(meta['a']) * self.density
+                    py = y + hpx - rel.dot(meta['b']) * self.density
+                    loop[uv].uv = (px / A, 1 - py / A)
+            else:
+                cx, cy = cells[self.hp.mats[f.material_index]]
+                _solid_uv(nf, uv, f.normal, cx, cy, layout.pitch * 0.3, A)
+        bmesh.ops.scale(bm, vec=(scale, scale, scale), verts=bm.verts)
+        mesh = bpy.data.meshes.new(f'{self.id}.hero')
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new(f'{self.id}.hero', mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        return obj
+
+    def hero_tris(self):
+        return sum(len(p.vertices) - 2 for p in bpy.data.objects[f'{self.id}.hero'].data.polygons)

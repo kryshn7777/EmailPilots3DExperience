@@ -29,15 +29,25 @@ export interface KitLot {
 export interface KitRingSet { near: number[]; mid: number[]; far: number[] }
 export interface KitModule {
   id: string; kind: string; lod0: string; footprint: [number, number]; height: number;
+  /** which atlas the module samples; absent means 'main' */
+  sheet?: string;
+  /** set on a hero (close-up) module: the lean module it replaces in the near ring */
+  lean?: string;
+}
+/** One atlas: what is present depends on the sheet (hero trees have no normals or glow). */
+export interface SheetAtlas {
+  color: string; orm: string; normal?: string; emissive?: string;
+  /** leaf cards: the colour map's alpha is a cut-out */
+  alpha?: boolean;
+  low: { color: string; orm: string; emissive?: string };
 }
 /** public/models/<dir>/manifest.json, written by blender/make_buildings.py */
 export interface KitManifest {
-  /** folder under /models/ that holds this set's GLBs and atlas */
+  /** folder under /models/ that holds this set's GLBs and atlases */
   dir: string;
-  atlas: {
-    color: string; normal: string; orm: string; emissive: string;
-    low: { color: string; orm: string; emissive: string };
-  };
+  atlas: SheetAtlas;
+  /** extra sheets (hero tiers), keyed by name; `atlas` above is the 'main' sheet */
+  sheets?: Record<string, { atlas: SheetAtlas }>;
   modules: KitModule[];
 }
 
@@ -59,7 +69,9 @@ function roofPrism(): BufferGeometry {
   return g;
 }
 
-interface KitMaps { color: Texture; orm: Texture; emissive: Texture; normal: Texture | null }
+interface KitMaps {
+  color: Texture; orm: Texture; emissive: Texture | null; normal: Texture | null; alpha: boolean;
+}
 
 export interface KitOptions {
   tier?: 'high' | 'low';
@@ -122,11 +134,12 @@ export class KitCity {
     for (const m of KitCity.materials) m.envMapIntensity = value;
   }
 
-  private static loadMaps(manifest: KitManifest, tier: 'high' | 'low'): KitMaps {
-    const cacheKey = `${manifest.dir}/${tier}`;
+  private static loadMaps(manifest: KitManifest, sheet: string, tier: 'high' | 'low'): KitMaps {
+    const cacheKey = `${manifest.dir}/${sheet}/${tier}`;
     const cached = KitCity.maps.get(cacheKey);
     if (cached) return cached;
-    const files = tier === 'low' ? manifest.atlas.low : manifest.atlas;
+    const atlas = sheet === 'main' ? manifest.atlas : manifest.sheets![sheet]!.atlas;
+    const files = tier === 'low' ? atlas.low : atlas;
     const loader = new TextureLoader();
     const load = (file: string, srgb: boolean): Texture => {
       const texture = loader.load(asset(`/models/${manifest.dir}/${file}`));
@@ -138,10 +151,11 @@ export class KitCity {
     const maps: KitMaps = {
       color: load(files.color, true),
       orm: load(files.orm, false),
-      emissive: load(files.emissive, true),
+      emissive: files.emissive ? load(files.emissive, true) : null,
       // phones skip normals: the baked occlusion carries most of the depth and
       // the normal map costs a fourth texture fetch on every fragment
-      normal: tier === 'high' ? load(manifest.atlas.normal, false) : null,
+      normal: tier === 'high' && atlas.normal ? load(atlas.normal, false) : null,
+      alpha: !!atlas.alpha,
     };
     KitCity.maps.set(cacheKey, maps);
     return maps;
@@ -154,9 +168,9 @@ export class KitCity {
    * wants its own darkness.
    */
   private kitMaterial(
-    manifest: KitManifest, tier: 'high' | 'low', glow: number, cloudEnv: boolean,
+    manifest: KitManifest, sheet: string, tier: 'high' | 'low', glow: number, cloudEnv: boolean,
   ): MeshStandardMaterial {
-    const maps = KitCity.loadMaps(manifest, tier);
+    const maps = KitCity.loadMaps(manifest, sheet, tier);
     const material = new MeshStandardMaterial({
       map: maps.color,
       // glTF packs occlusion/roughness/metalness into one texture's R/G/B
@@ -165,10 +179,10 @@ export class KitCity {
       metalnessMap: maps.orm,
       roughness: 1,
       metalness: 1,
-      emissive: '#ffffff',
-      emissiveMap: maps.emissive,
-      emissiveIntensity: glow,
+      ...(maps.emissive ? { emissive: '#ffffff', emissiveMap: maps.emissive, emissiveIntensity: glow } : {}),
       ...(maps.normal ? { normalMap: maps.normal } : {}),
+      // leaf cards are cut-outs: no blending, so no sorting and no wrong draw order
+      ...(maps.alpha ? { alphaTest: 0.42 } : {}),
     });
     if (cloudEnv) {
       if (KitCity.environment) {
@@ -215,18 +229,34 @@ export class KitCity {
     }
     if (farHomes.length) this.buildHomeImpostors(lots, farHomes, kindOf);
 
-    // real kit modules, streamed in, one draw per module type
+    // real kit modules, streamed in, one draw per module type. A lot in the NEAR
+    // ring swaps to its hero (close-up) module when the set has one and the tier
+    // can afford it; everything else, and every phone, gets the lean module.
+    const heroOf = new Map<string, string>();
+    if (tier === 'high') for (const m of modules) if (m.lean) heroOf.set(m.lean, m.id);
+    const nearSet = new Set(rings.near);
     const byModule = new Map<string, number[]>();
     for (const i of modelled) {
-      const arr = byModule.get(lots[i]!.moduleId) ?? [];
+      const lean = lots[i]!.moduleId;
+      const id = nearSet.has(i) ? heroOf.get(lean) ?? lean : lean;
+      const arr = byModule.get(id) ?? [];
       arr.push(i);
-      byModule.set(lots[i]!.moduleId, arr);
+      byModule.set(id, arr);
     }
-    const material = byModule.size ? this.kitMaterial(manifest, tier, glow, cloudEnv) : null;
+    const materials = new Map<string, MeshStandardMaterial>();
+    const materialFor = (sheet: string): MeshStandardMaterial => {
+      let m = materials.get(sheet);
+      if (!m) {
+        m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
+        materials.set(sheet, m);
+      }
+      return m;
+    };
     const loader = new GLTFLoader();
     for (const [moduleId, indices] of byModule) {
       const mod = modules.find((m) => m.id === moduleId);
-      if (!mod || !material) continue;
+      if (!mod) continue;
+      const material = materialFor(mod.sheet ?? 'main');
       loader.load(asset(`/models/${manifest.dir}/${mod.lod0}`), (gltf) => {
         let found: Mesh | null = null;
         gltf.scene.updateMatrixWorld(true);

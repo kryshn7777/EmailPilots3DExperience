@@ -35,7 +35,7 @@ const OFFSETS = {
 // near = the hero (close-up) models where a set has them, mid = the lean ones.
 const RINGS = {
   city: { high: { near: 18, mid: 1e6 }, low: { near: 8, mid: 45 } },
-  rooftops: { high: { near: 22, mid: 110 }, low: { near: 10, mid: 55 } },
+  rooftops: { high: { near: 11, mid: 110 }, low: { near: 10, mid: 55 } },
 };
 
 const partition = (lots, offset, radii) => {

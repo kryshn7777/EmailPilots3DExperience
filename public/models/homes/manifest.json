@@ -22,7 +22,8 @@
       ],
       "height": 1.997,
       "tris0": 62,
-      "density": 13.88
+      "density": 13.88,
+      "sheet": "main"
     },
     {
       "id": "home-colonial",
@@ -34,7 +35,8 @@
       ],
       "height": 2.879,
       "tris0": 72,
-      "density": 7.53
+      "density": 7.53,
+      "sheet": "main"
     },
     {
       "id": "home-ranch",
@@ -46,7 +48,8 @@
       ],
       "height": 1.894,
       "tris0": 38,
-      "density": 10.25
+      "density": 10.25,
+      "sheet": "main"
     },
     {
       "id": "home-farmhouse",
@@ -58,7 +61,8 @@
       ],
       "height": 3.16,
       "tris0": 106,
-      "density": 8.95
+      "density": 8.95,
+      "sheet": "main"
     },
     {
       "id": "home-craftsman",
@@ -70,7 +74,8 @@
       ],
       "height": 2.095,
       "tris0": 83,
-      "density": 11.29
+      "density": 11.29,
+      "sheet": "main"
     },
     {
       "id": "home-victorian",
@@ -82,7 +87,8 @@
       ],
       "height": 3.642,
       "tris0": 86,
-      "density": 8.59
+      "density": 8.59,
+      "sheet": "main"
     },
     {
       "id": "home-terrace",
@@ -94,7 +100,8 @@
       ],
       "height": 2.871,
       "tris0": 10,
-      "density": 8.0
+      "density": 8.0,
+      "sheet": "main"
     },
     {
       "id": "home-modern",
@@ -106,7 +113,8 @@
       ],
       "height": 2.046,
       "tris0": 20,
-      "density": 8.89
+      "density": 8.89,
+      "sheet": "main"
     },
     {
       "id": "home-bungalow",
@@ -118,7 +126,8 @@
       ],
       "height": 2.062,
       "tris0": 82,
-      "density": 12.71
+      "density": 12.71,
+      "sheet": "main"
     },
     {
       "id": "home-suburban",
@@ -130,7 +139,8 @@
       ],
       "height": 2.739,
       "tris0": 76,
-      "density": 8.92
+      "density": 8.92,
+      "sheet": "main"
     },
     {
       "id": "home-tudor",
@@ -142,7 +152,8 @@
       ],
       "height": 3.762,
       "tris0": 24,
-      "density": 9.44
+      "density": 9.44,
+      "sheet": "main"
     },
     {
       "id": "home-duplex",
@@ -154,7 +165,8 @@
       ],
       "height": 2.739,
       "tris0": 34,
-      "density": 10.31
+      "density": 10.31,
+      "sheet": "main"
     },
     {
       "id": "tree-oak",
@@ -166,7 +178,8 @@
       ],
       "height": 3.519,
       "tris0": 92,
-      "density": 7.32
+      "density": 7.32,
+      "sheet": "main"
     },
     {
       "id": "tree-maple",
@@ -178,7 +191,8 @@
       ],
       "height": 3.432,
       "tris0": 92,
-      "density": 9.07
+      "density": 9.07,
+      "sheet": "main"
     },
     {
       "id": "tree-pine",
@@ -190,7 +204,8 @@
       ],
       "height": 3.498,
       "tris0": 36,
-      "density": 12.29
+      "density": 12.29,
+      "sheet": "main"
     },
     {
       "id": "tree-poplar",
@@ -202,7 +217,73 @@
       ],
       "height": 4.584,
       "tris0": 92,
-      "density": 11.36
+      "density": 11.36,
+      "sheet": "main"
+    },
+    {
+      "id": "tree-oak-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-oak",
+      "lod0": "tree-oak-hero.lod0.glb",
+      "footprint": [
+        3.466,
+        3.512
+      ],
+      "height": 3.94,
+      "tris0": 6344
+    },
+    {
+      "id": "tree-maple-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-maple",
+      "lod0": "tree-maple-hero.lod0.glb",
+      "footprint": [
+        2.943,
+        2.944
+      ],
+      "height": 3.675,
+      "tris0": 5340
+    },
+    {
+      "id": "tree-pine-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-pine",
+      "lod0": "tree-pine-hero.lod0.glb",
+      "footprint": [
+        2.198,
+        2.175
+      ],
+      "height": 3.697,
+      "tris0": 5164
+    },
+    {
+      "id": "tree-poplar-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-poplar",
+      "lod0": "tree-poplar-hero.lod0.glb",
+      "footprint": [
+        1.694,
+        1.731
+      ],
+      "height": 4.867,
+      "tris0": 5530
     }
-  ]
+  ],
+  "sheets": {
+    "hero-trees": {
+      "atlas": {
+        "color": "atlas-hero-trees-color.webp",
+        "orm": "atlas-hero-trees-orm.webp",
+        "low": {
+          "color": "atlas-hero-trees-color-low.webp",
+          "orm": "atlas-hero-trees-orm-low.webp"
+        },
+        "alpha": true
+      }
+    }
+  }
 }

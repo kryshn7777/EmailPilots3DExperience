@@ -79,7 +79,7 @@ PALETTE = {
     # roofing: dz is the height of one course in metres of rise
     'shingle_gray': dict(c='#4d5056', r=0.95, m=0.0, noise=0.10, pattern='shingle_lo'),
     'shingle_brn':  dict(c='#5e473a', r=0.95, m=0.0, noise=0.10, pattern='shingle_lo'),
-    'shingle_blk':  dict(c='#303236', r=0.95, m=0.0, noise=0.10, pattern='shingle_lo'),
+    'shingle_blk':  dict(c='#3c3f45', r=0.95, m=0.0, noise=0.10, pattern='shingle_lo'),
     'shingle_gray_hi': dict(c='#4d5056', r=0.95, m=0.0, noise=0.10, pattern='shingle_hi'),
     'shingle_brn_hi':  dict(c='#5e473a', r=0.95, m=0.0, noise=0.10, pattern='shingle_hi'),
     'shingle_red_hi':  dict(c='#74382f', r=0.95, m=0.0, noise=0.10, pattern='shingle_hi'),

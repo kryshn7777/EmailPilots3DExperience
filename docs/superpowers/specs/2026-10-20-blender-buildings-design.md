@@ -41,6 +41,26 @@ ground) the 3-unit-tall houses were 17 units under a camera that looks along the
 flight line and never entered the frame. Two thin cloud sheets drift between the
 rooftops and the plane.
 
+## Close-up tier
+
+Trees and houses have a **hero** version for lots the camera passes close to
+(`rings.near`, HIGH quality only), so the cheap shells stay what the mid and far
+rings use. Triangles are spent where a close-up can see them:
+
+| | lean (mid ring) | hero (near ring) |
+| --- | --- | --- |
+| trees | 36-92 tris, blob crown on a card cluster | 5-6.5k: branching trunk and boughs, ~900 leaf cards per crown, pine whorls |
+| houses | 10-106 tris, detail in the normal map | 2-5k: boards, shingle courses, louvres, door panels, gutters, steps, balusters |
+
+Hero houses reuse the lean bake's slot pixels and the palette strip, so a house keeps
+its colours and lit windows whichever tier is on screen. Per-lot budget on HIGH: about
+11 lots of radius at the near ring, which is 40 lots, roughly 115k tree triangles and
+80k house triangles.
+
+Manifest v2 describes this: `dir`, `atlas` (main sheet), `sheets{name: {atlas}}`, and
+per module `sheet`, `lean` (hero -> the module it replaces), `kind`, `footprint`,
+`height`, `tris0`.
+
 ## Known limits
 
 - One cloud environment serves all chapters of the homes (graded by intensity, not

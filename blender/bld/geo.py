@@ -55,6 +55,9 @@ class Builder:
         self.bm = bmesh.new()
         self.mats = []
         self.meta = []
+        # set by Model.ctx while a wall or roof is being built: the texture slot the
+        # faces belong to, so the hero tier can sample the same baked pixels
+        self.ctx = None
 
     def slot(self, mat):
         if mat not in self.mats:
@@ -69,7 +72,7 @@ class Builder:
         f = self.bm.faces.new([self.bm.verts.new(p) for p in pts])
         f.material_index = self.slot(mat)
         f.smooth = smooth
-        self.meta.append(meta)
+        self.meta.append(meta if meta is not None else self.ctx)
         return f
 
     # -- wall-frame primitives -------------------------------------------------

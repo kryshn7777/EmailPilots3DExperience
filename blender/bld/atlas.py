@@ -126,3 +126,29 @@ HOMES = Layout(
 )
 
 LAYOUTS = {'city': CITY, 'homes': HOMES}
+
+
+# Hero trees: a fixed sheet, not a packed one. Eight 256 px leaf-cluster cards in
+# the top half, four 256x512 bark strips (one per species) in the bottom half.
+HERO_TREES = Layout(
+    'hero-trees', 1024, tiles={}, palette_origin=(0, 0), pitch=1, cols=1, pad=0, gutter=0,
+    margin=0, reach={},
+)
+_SPECIES = ['oak', 'maple', 'poplar', 'pine']
+HERO_TREES.cards = {(sp, v): (256 * ((i * 2 + v) % 4), 256 * ((i * 2 + v) // 4), 256, 256)
+                    for i, sp in enumerate(_SPECIES) for v in (0, 1)}
+HERO_TREES.bark = {sp: (256 * i, 512, 256, 512) for i, sp in enumerate(_SPECIES)}
+
+LAYOUTS['hero-trees'] = HERO_TREES
+
+
+# Hero houses: the same twelve slots packed at twice the density. 512 px tiles give
+# ~25 px per metre against the lean sheet's ~12, which is what a close-up needs from
+# the siding, brick and window panes the geometry does not carry.
+HOMES_HERO = Layout(
+    'homes-hero', 2048,
+    tiles={'house': [(512 * c, 512 * r, 512, 512) for r in range(3) for c in range(4)]},
+    palette_origin=(0, 1984), pitch=32, cols=64, pad=8, gutter=14, margin=8,
+    reach={'wall': (1.2, 2.6), 'roof': (2.6, 5.0)},
+)
+LAYOUTS['homes-hero'] = HOMES_HERO

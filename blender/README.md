@@ -6,7 +6,7 @@ are *code*: change a number, re-run, get new buildings.
 
 ```sh
 pip install -r blender/requirements.txt          # bpy is Blender as a Python module (Python 3.13)
-npm run build:buildings                          # towers+blocks (city) and houses+trees (homes)
+npm run build:buildings                          # towers+blocks (city); houses+trees and their hero tiers (homes)
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
@@ -42,10 +42,32 @@ The occlusion is **path-traced multi-bounce diffuse light under a uniform sky**,
 not plain AO: an open surface bakes to 1.0, a cavity to what light actually reaches
 it after bouncing around the reveals and balconies.
 
+## Hero tier (close-ups)
+
+The shipped low-poly shells are the mid and far tiers. Lots nearest the camera swap
+(HIGH quality only) to a **hero** model, built from the same description:
+
+| sheet | what | tris each |
+| --- | --- | --- |
+| `hero-trees` | recursive branching trunk and boughs (bark strips, constant texel density), thousands of leaf cards (front/back pairs with radial normals, so the crown shades like a volume), pine whorls and skirt | 5 to 6.5k |
+| `hero-houses` | the high-poly twin itself: lap-siding boards, shingle courses, louvred shutters, raised door panels, gutters, downspouts, porch steps, balusters, chimney caps and pots | 2 to 5k |
+
+Hero houses sample the **same baked slot pixels** as the lean shell wherever a face
+points the way its wall or roof slot does (the bake was projected along that normal, so
+the pixel at a recessed pane is the pane), at 512-px tiles (about 20 to 29 px per metre).
+Every other face (reveals, trim sides, board edges, tops) takes the flat colour of its
+material from the palette strip, and there is no normal map: the relief is geometry.
+Faces that coincide back to back are dropped, and the wall slabs leave their outer
+ends open (they sit in the neighbouring wall's plane).
+
+Each hero entry in `manifest.json` carries `lean: <module id>` (what it replaces) and
+`sheet: <sheet name>`; the sheets' atlases live under `sheets{}`. `bake-city-rings.mjs`
+decides per lot which tier it gets from its distance to the camera path.
+
 ## Layout of the code
 
 ```
-make_buildings.py   entry point: build -> UV -> bake -> export (one --set at a time)
+make_buildings.py   entry point: build -> UV -> bake -> export (one --set / --sheet at a time)
 make_cloud_env.py   path-traced cloud sea + cumulus -> public/hdri/cloud_env_1k.hdr
 make_ground.py      numpy/Pillow: the seamless street-and-lawn cell (no Blender)
 bld/
@@ -54,7 +76,9 @@ bld/
   facade.py         tower facades: curtain wall, punched, deco, ribbon, steel, louvre, shopfront
   roofs.py          flat roofs: parapets, plant, skylights, solar rows, helipads
   house.py          house walls with real openings, gable/hip roofs, porches, chimneys, dormers
-  homes.py          the twelve houses     trees.py   the four trees
+  homes.py          the twelve houses     trees.py   the four trees (lean)
+  hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
+  bark.py           periodic procedural bark strips
   archetypes.py     the eight towers and four blocks
   model.py          the low/high pair, UV assignment, bake proxies
   atlas.py          sheet layouts and the rectangle packer

@@ -93,8 +93,12 @@ def _window(hp, fr, o, z0, spec, rng):
     if o['shutters']:
         sw = w * 0.42
         mat = spec.get('shutter', 'shutter')
-        hp.fbox(fr, u0 - 0.05 - sw, u0 - 0.05, 0, 0.06, z, z1, mat, skip=('-w',))
-        hp.fbox(fr, u1 + 0.05, u1 + 0.05 + sw, 0, 0.06, z, z1, mat, skip=('-w',))
+        for a, b in ((u0 - 0.05 - sw, u0 - 0.05), (u1 + 0.05, u1 + 0.05 + sw)):
+            hp.fbox(fr, a, b, 0, 0.06, z, z1, mat, skip=('-w',))
+            # louvres: a slat every 11 cm, each standing 1.5 cm proud of the frame
+            for k in range(int((h - 0.2) / 0.11)):
+                zs = z + 0.1 + k * 0.11
+                hp.fbox(fr, a + 0.05, b - 0.05, 0.06, 0.075, zs, zs + 0.07, mat, skip=('-w',))
 
 
 def _attic(hp, fr, uc, z, spec, rng):
@@ -114,6 +118,18 @@ def _door(hp, fr, o, z0, spec, rng):
     hp.fquad(fr, u0 + w * 0.18, u1 - w * 0.18, z0 + h * 0.58, z0 + h * 0.9, -0.085,
              rng.choice(WARM) if (o['lit'] or rng.random() < 0.4) else 'glass_dark')
     hp.fbox(fr, u0 - 0.3, u1 + 0.3, 0, 0.95, z0, z0 + 0.2, 'concrete', skip=('-w',))
+    # raised panels (two over four) and a knob: the geometry of a real door
+    pm, gap = 0.13, 0.07
+    pw = (w - 2 * pm - gap) / 2
+    gl = h * 0.58 - 0.08  # the glazed light sits above this; panels only below it
+    rows = [(0.1, gl * 0.5 - 0.03), (gl * 0.5 + 0.03, gl)]
+    for ci in range(2):
+        px0 = u0 + pm + ci * (pw + gap)
+        for r0, r1 in rows:
+            if r1 - r0 > 0.2:
+                hp.fbox(fr, px0, px0 + pw, -0.10, -0.075, z0 + r0, z0 + r1, o['mat'], skip=('-w',))
+    hp.fbox(fr, u1 - 0.17, u1 - 0.09, -0.10, -0.03, z0 + h * 0.46, z0 + h * 0.46 + 0.08, 'frame_light',
+            skip=('-w',))
 
 
 def _garage(hp, fr, o, z0, spec, rng):
@@ -159,7 +175,19 @@ def house_wall(hp, fr, L, z0, z1, spec, rng):
             items.append((o, (u - w / 2, u + w / 2, 0.0, o['h'])))
     for u0, u1, v0, v1 in decompose(L, H, [r for _, r in items], breaks=[found_h]):
         mat = found_mat if (v0 + v1) / 2 < found_h else spec['wall']
-        hp.fbox(fr, u0, u1, -0.28, 0.0, z0 + v0, z0 + v1, mat, skip=('-w',))
+        # the slab's outer ends sit in the neighbouring wall's plane: a second, coplanar
+        # skin there z-fights in the close-up tier and shadows its neighbour in the bake
+        ends = (('-u',) if u0 < 1e-6 else ()) + (('+u',) if u1 > L - 1e-6 else ())
+        hp.fbox(fr, u0, u1, -0.28, 0.0, z0 + v0, z0 + v1, mat, skip=('-w',) + ends)
+    if spec['wall'].startswith(('siding', 'deck_wood')):
+        # lap siding: real boards, each standing 2 cm proud, so every course throws a
+        # shadow line. In the lean tier this lands in the normal map instead.
+        for u0, u1, v0, v1 in decompose(L, H, [r for _, r in items], breaks=[found_h]):
+            if (v0 + v1) / 2 < found_h:
+                continue
+            for k in range(int((v1 - v0) / 0.17)):
+                z = z0 + v0 + k * 0.17
+                hp.fbox(fr, u0, u1, 0.0, 0.022, z, z + 0.15, spec['wall'], skip=('-w', '-u', '+u'))
     trim = spec.get('trim', 'trim_white')
     # clapboard wants corner boards; brick, stucco and stone turn the corner themselves
     if spec.get('corners', not spec['wall'].startswith(('brick', 'stucco', 'fieldstone'))):
@@ -202,12 +230,24 @@ def house_block(m, cx, cy, w, d, z0, ze, walls, roof, name, ridge='x', skip=()):
         m.lp.face([fr.p(u, 0, v) for u, v in outline], 'lp', expect=fr.n,
                   meta=dict(slot=key, kind='wall', o=fr.p(0, 0, z0), a=fr.u, b=Z))
         spec = walls[nm]
-        house_wall(m.hp, fr, L, z0, ze, spec, m.rng(key))
-        if gable:
-            m.hp.face([fr.p(0, 0, ze), fr.p(L, 0, ze), fr.p(L / 2, 0, zr)], spec['wall'],
-                      expect=fr.n)
-            if spec.get('attic'):
-                _attic(m.hp, fr, L / 2, ze + rise * 0.3, spec, m.rng(key + ':attic'))
+        with m.ctx(key, fr.p(0, 0, z0), fr.u, Z, fr.n):
+            house_wall(m.hp, fr, L, z0, ze, spec, m.rng(key))
+            if not gable and L > 3.0:
+                # a downspout at each end of the long walls
+                for u in (0.2, L - 0.3):
+                    m.hp.fbox(fr, u, u + 0.09, 0.0, 0.1, z0 + 0.35, ze - 0.02, 'frame_light', skip=('-w',))
+            if gable:
+                m.hp.face([fr.p(0, 0, ze), fr.p(L, 0, ze), fr.p(L / 2, 0, zr)], spec['wall'],
+                          expect=fr.n)
+                if spec['wall'].startswith('siding'):
+                    for k in range(int(rise / 0.17) - 1):
+                        z = ze + 0.05 + k * 0.17
+                        half = (L / 2) * (1 - (z + 0.15 - ze) / rise)
+                        if half > 0.1:
+                            m.hp.fbox(fr, L / 2 - half, L / 2 + half, 0.0, 0.022, z, z + 0.15,
+                                      spec['wall'], skip=('-w', '-u', '+u'))
+                if spec.get('attic'):
+                    _attic(m.hp, fr, L / 2, ze + rise * 0.3, spec, m.rng(key + ':attic'))
     if kind == 'gable':
         _gable_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name)
     elif kind == 'hip':
@@ -222,7 +262,36 @@ def _roof_face(m, key, pts, expect, mat, origin, a, b, w_m, h_m):
     m._slot(key, 'roof', w_m, h_m)
     m.lp.face(pts, 'lp', expect=expect,
               meta=dict(slot=key, kind='roof', o=Vector(origin), a=a, b=b))
-    m.hp.face(pts, mat, expect=expect)
+    with m.ctx(key, origin, a, b, expect):
+        m.hp.face(pts, mat, expect=expect)
+
+
+def _courses(m, key, origin, a, b, n, length, u_range, mat, pitch=0.17, step=0.03):
+    """Stepped roofing courses on a roof plane. The riser of each course is flat
+    colour, the tread samples the roof slot's baked pixels like the plane under it.
+    `u_range(s)` gives the width across the slope at distance s from the eave."""
+    o = Vector(origin)
+    P = lambda u, s, h: o + a * u + b * s + n * h
+    s = 0.0
+    while s + pitch <= length + 1e-6:
+        u0, u1 = u_range(s)
+        v0, v1 = u_range(s + pitch)
+        m.hp.face([P(u0, s, 0), P(u1, s, 0), P(u1, s, step), P(u0, s, step)], mat, expect=-b)
+        with m.ctx(key, origin, a, b, n):
+            m.hp.face([P(u0, s, step), P(u1, s, step), P(v1, s + pitch, 0), P(v0, s + pitch, 0)],
+                      mat, expect=n)
+        s += pitch
+
+
+def _gutter(m, p0, p1, z):
+    """Half-round gutter hung just below the fascia along one eave edge."""
+    a, b = Vector(p0), Vector(p1)
+    d = (b - a).normalized()
+    a, b = a + d * 0.3, b - d * 0.3   # stop short of the rake overhang at each end
+    fr = Frame(a, b - a)
+    L = (b - a).length
+    m.hp.fbox(fr, 0.0, L, 0.03, 0.15, z - 0.17, z - 0.05, 'frame_light', skip=('-w',))
+    m.hp.fbox(fr, 0.0, L, 0.14, 0.16, z - 0.05, z + 0.02, 'frame_light', skip=('-w',))
 
 
 def _fascia(m, p0, p1, z, mat, outward):
@@ -250,8 +319,10 @@ def _gable_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name):
         else:
             origin, a = pts[1], wd(-1, 0)
         _roof_face(m, f'{name}:R', pts, expect, mat, origin, a, up, 2 * half, length)
+        _courses(m, f'{name}:R', origin, a, up, expect.normalized(), length, lambda s: (0.0, 2 * half), mat)
         ex0, ex1 = (pts[0], pts[1]) if sgn < 0 else (pts[1], pts[0])
         _fascia(m, (ex0.x, ex0.y), (ex1.x, ex1.y), ze_e, roof.get('fascia', 'trim_white'), sgn)
+        _gutter(m, (ex0.x, ex0.y), (ex1.x, ex1.y), ze_e)
     ridge_fr = Frame((W(-half, 0, 0).x, W(-half, 0, 0).y), wd(1, 0))
     m.hp.fbox(ridge_fr, 0, 2 * half, -0.14, 0.14, zr - 0.04, zr + 0.1, mat, skip=('-v',))
 
@@ -275,10 +346,15 @@ def _hip_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name):
         pts = poly([W(-L2, sgn * S2, ze_e), W(L2, sgn * S2, ze_e), W(rl, 0, zr), W(-rl, 0, zr)])
         up = (wd(0, -sgn * S2) + Z * (zr - ze_e)).normalized()
         origin, a = (pts[0], wd(1, 0)) if sgn < 0 else (pts[1], wd(-1, 0))
-        _roof_face(m, f'{name}:RS', pts, Vector((*R(0, sgn * pitch), 1.0)), mat, origin, a, up,
-                   2 * L2, math.hypot(S2, zr - ze_e))
+        slope = math.hypot(S2, zr - ze_e)
+        nrm = Vector((*R(0, sgn * pitch), 1.0))
+        _roof_face(m, f'{name}:RS', pts, nrm, mat, origin, a, up, 2 * L2, slope)
+        wid = lambda s: (2 * L2) + (2 * rl - 2 * L2) * s / slope
+        _courses(m, f'{name}:RS', origin, a, up, nrm.normalized(), slope,
+                 lambda s: ((2 * L2 - wid(s)) / 2, (2 * L2 + wid(s)) / 2), mat)
         e0, e1 = (pts[0], pts[1]) if sgn < 0 else (pts[1], pts[0])
         _fascia(m, (e0.x, e0.y), (e1.x, e1.y), ze_e, roof.get('fascia', 'trim_white'), sgn)
+        _gutter(m, (e0.x, e0.y), (e1.x, e1.y), ze_e)
     for sgn in (-1, 1):
         pts = poly([W(sgn * L2, -S2, ze_e), W(sgn * L2, S2, ze_e), W(sgn * rl, 0, zr)])
         up = (wd(-sgn * (L2 - rl), 0) + Z * (zr - ze_e)).normalized()
@@ -308,7 +384,8 @@ def chimney(m, x, y, w, d, z0, z1, mat='brick_h_red'):
         m._slot(key, 'wall', L, z1 - z0)
         m.lp.face([fr.p(0, 0, z0), fr.p(L, 0, z0), fr.p(L, 0, z1), fr.p(0, 0, z1)], 'lp',
                   expect=fr.n, meta=dict(slot=key, kind='wall', o=fr.p(0, 0, z0), a=fr.u, b=Z))
-        house_wall(m.hp, fr, L, z0, z1, spec, m.rng(key))
+        with m.ctx(key, fr.p(0, 0, z0), fr.u, Z, fr.n):
+            house_wall(m.hp, fr, L, z0, z1, spec, m.rng(key))
     m._solid([(px, py, z1) for px, py in poly], 'concrete', Z)
     m.hp.box(x, y, w + 0.16, d + 0.16, z1 - 0.12, z1, 'concrete')
     m.hp.cylinder(x - w / 4, y, 0.12, z1, z1 + 0.35, 8, 'concrete_d')
@@ -345,12 +422,25 @@ def porch(m, cx, cy, w, d, ze, posts=2, roof_mat='shingle_gray', z0=0.0):
         m.volume(px, cy - d / 2 + 0.2, 0.2, 0.2, z0 + 0.4, ze, 'trim_white')
     m.count += 1
     _shed(m, cx, cy, w + 0.3, d + 0.3, ze, ze + 0.4, roof_mat, f'porch{m.count}')
-    # railing, high-poly only
+    # railing, steps and post trim: high-poly only (the baked deck carries them)
     fr = Frame((cx - w / 2, cy - d / 2), (1, 0))
-    m.hp.fbox(fr, 0.1, w - 0.1, 0.05, 0.12, z0 + 0.4 + 0.85, z0 + 0.4 + 0.92, 'trim_white')
+    gap0, gap1 = w / 2 - 0.75, w / 2 + 0.75
+    for r0, r1 in ((0.1, gap0), (gap1, w - 0.1)):
+        m.hp.fbox(fr, r0, r1, -0.11, -0.05, z0 + 0.4 + 0.85, z0 + 0.4 + 0.92, 'trim_white')
+        m.hp.fbox(fr, r0, r1, -0.11, -0.05, z0 + 0.4 + 0.08, z0 + 0.4 + 0.14, 'trim_white')
     for k in range(int(w / 0.18)):
-        m.hp.box(cx - w / 2 + 0.15 + k * 0.18, cy - d / 2 + 0.08, 0.04, 0.04,
-                 z0 + 0.4, z0 + 0.4 + 0.85, 'trim_white')
+        u = 0.15 + k * 0.18
+        if gap0 - 0.05 < u < gap1 + 0.05:
+            continue
+        m.hp.box(cx - w / 2 + u, cy - d / 2 + 0.08, 0.04, 0.04,
+                 z0 + 0.4 + 0.14, z0 + 0.4 + 0.85, 'trim_white')
+    for k in range(2):
+        m.hp.fbox(fr, gap0 + 0.05, gap1 - 0.05, -0.05, 0.3 * (k + 1), z0, z0 + 0.4 * (1 - (k + 1) / 3),
+                  'deck_wood', skip=('-v',))
+    for i in range(n):
+        px = cx - w / 2 + 0.2 + (w - 0.4) * i / (n - 1)
+        m.hp.box(px, cy - d / 2 + 0.2, 0.3, 0.3, z0 + 0.4, z0 + 0.52, 'trim_white')
+        m.hp.box(px, cy - d / 2 + 0.2, 0.3, 0.3, ze - 0.12, ze, 'trim_white')
 
 
 def dormer(m, x, main_cy, main_d, ze, pitch, name, roof_mat, wall_mat='siding_white', width=1.5):

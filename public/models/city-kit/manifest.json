@@ -2,19 +2,20 @@
   "dir": "city-kit",
   "atlas": {
     "color": "atlas-color.webp",
-    "normal": "atlas-normal.webp",
     "orm": "atlas-orm.webp",
-    "emissive": "atlas-emissive.webp",
     "low": {
       "color": "atlas-color-low.webp",
       "orm": "atlas-orm-low.webp",
       "emissive": "atlas-emissive-low.webp"
-    }
+    },
+    "normal": "atlas-normal.webp",
+    "emissive": "atlas-emissive.webp"
   },
   "modules": [
     {
       "id": "skyscraper-glass-a",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-glass-a.lod0.glb",
       "footprint": [
         0.519,
@@ -27,6 +28,7 @@
     {
       "id": "skyscraper-glass-b",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-glass-b.lod0.glb",
       "footprint": [
         0.523,
@@ -39,6 +41,7 @@
     {
       "id": "skyscraper-deco",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-deco.lod0.glb",
       "footprint": [
         0.539,
@@ -51,6 +54,7 @@
     {
       "id": "skyscraper-stone",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-stone.lod0.glb",
       "footprint": [
         0.61,
@@ -63,6 +67,7 @@
     {
       "id": "skyscraper-twin",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-twin.lod0.glb",
       "footprint": [
         0.667,
@@ -75,6 +80,7 @@
     {
       "id": "skyscraper-slab",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-slab.lod0.glb",
       "footprint": [
         1.15,
@@ -87,6 +93,7 @@
     {
       "id": "skyscraper-needle",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-needle.lod0.glb",
       "footprint": [
         0.31,
@@ -99,6 +106,7 @@
     {
       "id": "skyscraper-crown",
       "kind": "tower",
+      "sheet": "main",
       "lod0": "skyscraper-crown.lod0.glb",
       "footprint": [
         0.506,
@@ -111,6 +119,7 @@
     {
       "id": "block-brick",
       "kind": "block",
+      "sheet": "main",
       "lod0": "block-brick.lod0.glb",
       "footprint": [
         0.816,
@@ -123,6 +132,7 @@
     {
       "id": "block-podium",
       "kind": "block",
+      "sheet": "main",
       "lod0": "block-podium.lod0.glb",
       "footprint": [
         1.03,
@@ -135,6 +145,7 @@
     {
       "id": "block-loft",
       "kind": "block",
+      "sheet": "main",
       "lod0": "block-loft.lod0.glb",
       "footprint": [
         0.721,
@@ -147,6 +158,7 @@
     {
       "id": "block-mansard",
       "kind": "block",
+      "sheet": "main",
       "lod0": "block-mansard.lod0.glb",
       "footprint": [
         0.894,
