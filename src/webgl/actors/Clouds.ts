@@ -139,7 +139,7 @@ export class Clouds {
       // and there is open sky overhead to climb toward.
       p.set(
         center.x - spread * 0.56 + r() * spread,
-        center.y - 12 + Math.pow(r(), 1.4) * 15.5,
+        center.y - 16 + Math.pow(r(), 1.4) * 15.5,
         center.z - 50 + r() * 100,
       );
       // smaller puffs than before: the deck is twice as populous now, and
@@ -213,8 +213,8 @@ export class Clouds {
       // the slab straddles the line too, so the raymarch is what the camera
       // is actually inside during the formation chapter
       const box = new Box3(
-        new Vector3(center.x - 52, center.y - 9, center.z - 30),
-        new Vector3(center.x + 46, center.y + 3.5, center.z + 30),
+        new Vector3(center.x - 52, center.y - 12, center.z - 30),
+        new Vector3(center.x + 46, center.y + 1, center.z + 30),
       );
       this.volumeGeometry = new BoxGeometry(
         box.max.x - box.min.x,
@@ -318,7 +318,7 @@ export class Clouds {
      * sky over at 0.36 and the beacon's own weather owns everything past 0.5.
      */
     const day =
-      0.42 *
+      0.26 *
       MathUtils.smoothstep(t, 0.17, 0.26) *
       (1 - MathUtils.smoothstep(t, 0.53, 0.585));
     this.spriteMaterial.uniforms.uOpacity!.value = day;
@@ -332,7 +332,7 @@ export class Clouds {
       // to nothing is how the slab arrives and leaves without a hard edge
       const slab =
         MathUtils.smoothstep(t, 0.2, 0.28) * (1 - MathUtils.smoothstep(t, 0.4, 0.47));
-      this.volumeMaterial.uniforms.uCoverage!.value = 0.14 + 0.48 * slab;
+      this.volumeMaterial.uniforms.uCoverage!.value = 0.14 + 0.30 * slab;
       this.volume!.visible = slab > 0.004;
     }
   }

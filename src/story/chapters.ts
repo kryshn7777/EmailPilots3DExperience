@@ -19,6 +19,13 @@ export interface GradeParams {
   fogFar: number;
   /** IBL strength */
   envIntensity: number;
+  /**
+   * Mist standing on the ground or the sea, on top of the distance fog (see
+   * webgl/fog.ts): `strength` 0..1 is how much the fog hugs the surface, `boost`
+   * how much denser than the plain fog it is down there, `scale` the height over
+   * which it thins out. Absent means ordinary distance fog.
+   */
+  mist?: { strength: number; boost: number; scale: number; base: 'ground' | 'sea' };
 }
 
 export interface RigParams {
@@ -66,17 +73,22 @@ export const CHAPTERS: Chapter[] = [
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.45, sunDir: [0.3, 0.8, 0.4], fogColor: '#2b3652', fogNear: 12, fogFar: 200, envIntensity: 0.5 },
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.45, sunDir: [0.3, 0.8, 0.4], fogColor: '#2b3652', fogNear: 30, fogFar: 360, envIntensity: 0.5,
+      // the district below is hazed by mist standing in its streets, not by a veil
+      // between the lens and the roofs: the roofs and the sky above stay crisp
+      mist: { strength: 1, boost: 1.5, scale: 5.5, base: 'ground' } },
   },
   {
     id: 'takeoff', t0: 0.17, t1: 0.26,
     rig: { fov: 55, camLag: 0.020, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 1.1, offsetSide: 0.2, offsetBack: 0.5 },
-    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#3a4a6a', fogNear: 20, fogFar: 160, envIntensity: 0.45 },
+    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#3a4a6a', fogNear: 45, fogFar: 340, envIntensity: 0.45,
+      mist: { strength: 1, boost: 1.4, scale: 7, base: 'ground' } },
   },
   {
     id: 'formation', t0: 0.26, t1: 0.36,
     rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2 },
-    grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#b8c7e0', fogNear: 30, fogFar: 220, envIntensity: 0.6 },
+    grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#b8c7e0', fogNear: 55, fogFar: 320, envIntensity: 0.6,
+      mist: { strength: 0.85, boost: 1.25, scale: 9, base: 'ground' } },
   },
   {
     id: 'storm', t0: 0.36, t1: 0.48,
@@ -90,7 +102,9 @@ export const CHAPTERS: Chapter[] = [
     // sea and the freighter standing off it are staged at 80–100 units, and
     // at the old far=115 the ship dissolved into fog colour instead of
     // reading as distance
-    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 14, fogFar: 185, envIntensity: 0.26 },
+    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 22, fogFar: 260, envIntensity: 0.26,
+      // sea mist lies on the water; the lighthouse, the sky and the stars stand above it
+      mist: { strength: 1, boost: 1.6, scale: 5, base: 'sea' } },
   },
   {
     id: 'no-fly', t0: 0.58, t1: 0.66,
@@ -100,7 +114,7 @@ export const CHAPTERS: Chapter[] = [
   {
     id: 'city', t0: 0.66, t1: 0.78,
     rig: { fov: 62, camLag: 0.018, lookAhead: 0.008, turbAmp: 0.12, offsetUp: 0.9, offsetSide: 0.3, offsetBack: 0.6 },
-    grade: { zenith: '#0b1024', horizon: '#2a2138', sunColor: '#ffc96b', sunIntensity: 0.3, sunDir: [-0.4, 0.5, 0.1], fogColor: '#151a33', fogNear: 6, fogFar: 68, envIntensity: 0.3 },
+    grade: { zenith: '#0b1024', horizon: '#2a2138', sunColor: '#ffc96b', sunIntensity: 0.3, sunDir: [-0.4, 0.5, 0.1], fogColor: '#151a33', fogNear: 8, fogFar: 105, envIntensity: 0.3 },
   },
   {
     id: 'copilot', t0: 0.78, t1: 0.88,

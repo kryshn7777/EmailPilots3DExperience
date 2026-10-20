@@ -1,101 +1,128 @@
+// The night sea. Fresnel reflection of the sky the chapter is wearing, a dim
+// body colour that glows where thin crests are lit from behind, wave detail from
+// mipmapped normal maps at three scales, foam only where the surface folds, and the
+// lighthouse beam raking across the swell as a sector of light with a sparkle
+// path running back to the lamp.
 uniform float uTime;
+uniform sampler2D uNormalMap;
+uniform sampler2D uFoamMap;
+
 uniform vec3 uDeep;
-uniform vec3 uCrest;
+uniform vec3 uShallow;
 uniform vec3 uFoam;
+uniform vec3 uZenith;
+uniform vec3 uHorizon;
 uniform vec3 uMoonDir;
+uniform vec3 uMoonColor;
+uniform float uFlash;
+
+uniform vec3 uLantern;      // world position of the lamp
+uniform vec2 uBeamDir;      // world xz bearing of the beam
+uniform vec3 uBeamColor;
+uniform float uBeamPower;   // 0 when the lamp is out
+
 uniform vec2 uTowerXZ;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+uniform vec4 uFogHeight;
 uniform vec3 uCamPos;
 uniform float uReveal;
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
-varying float vCrest;
+varying float vHeight;
+varying float vFold;
+
+// a normal map layer as a slope, so layers add rather than blend
+vec2 slopeOf(vec2 uv) {
+  vec3 d = texture2D(uNormalMap, uv).rgb * 2.0 - 1.0;
+  vec3 n = vec3(d.r, d.b, d.g); // stored as (x, z, y)
+  return -n.xz / max(n.y, 0.2);
+}
 
 void main() {
-  vec3 n = normalize(vNormal);
-  float depth = distance(uCamPos, vWorldPos);
+  vec3 P = vWorldPos;
+  vec3 V = normalize(uCamPos - P);
+  float dist = distance(uCamPos, P);
 
-  /**
-   * Micro-ripples perturb the normal per fragment — vertex waves alone left
-   * the surface reading as a smooth rubber sheet up close. They carry the
-   * chop the vertex stage had to give up (see ocean.vert).
-   *
-   * `detail` is not optional. These are sines of world position with ~2–3
-   * unit wavelengths, and a procedural function has no mipmap: once one pixel
-   * spans several units — which it does within about 30 units at this grazing
-   * angle — they alias into a regular fish-scale lattice across the whole
-   * shadowed half of the sea. Fading them out with distance is the fix, and
-   * it costs nothing visually because past 30 units they were never resolving
-   * as ripples anyway.
-   */
-  // Starts at 8, not 24. Aliasing begins as soon as a pixel spans about half
-  // a wavelength, and these ripples are 2-3 units — at this FOV that is inside
-  // 15 units, so a fade starting at 24 was already too late to help.
-  float detail = 1.0 - smoothstep(8.0, 34.0, depth);
-  vec2 rp = vWorldPos.xz;
-  float r1 = sin(dot(rp, vec2(2.1, 1.4)) + uTime * 2.8);
-  float r2 = sin(dot(rp, vec2(-1.6, 2.5)) + uTime * 3.6);
-  float r3 = sin(dot(rp, vec2(3.3, -2.2)) + uTime * 4.4);
-  float r4 = sin(dot(rp, vec2(0.85, 0.61)) + uTime * 4.2);
-  n = normalize(
-    n + vec3(r1 + r3 * 0.5 + r4 * 0.8, 0.0, r2 - r3 * 0.5 + r4 * 0.6) * 0.09 * detail
-  );
+  // — wave detail: three scales of the same spectrum, turned and drifting different ways
+  vec2 xz = P.xz;
+  vec2 uvA = xz / 64.0 + vec2(0.012, 0.007) * uTime;
+  vec2 uvB = mat2(0.80, 0.60, -0.60, 0.80) * xz / 17.9 + vec2(-0.021, 0.015) * uTime;
+  vec2 uvC = mat2(0.45, -0.89, 0.89, 0.45) * xz / 4.7 + vec2(0.05, -0.03) * uTime;
+  float fineFade = 1.0 - smoothstep(30.0, 140.0, dist);
+  vec2 slope = slopeOf(uvA) * 0.55 + slopeOf(uvB) * 0.42 + slopeOf(uvC) * 0.30 * fineFade;
+  vec3 N = normalize(vec3(vNormal.x - slope.x, vNormal.y, vNormal.z - slope.y));
 
-  // Body colour by crest height. Thresholds are scaled with the swell
-  // amplitudes in ocean.vert (1.6x there, ~1.4x here) — left where they were,
-  // every wave would clip past the top of the ramp and the sea would read as
-  // a flat white sheet. Scaling slightly UNDER the amplitude is deliberate:
-  // more of this bigger sea should be breaking.
-  float ch = smoothstep(-1.0, 1.2, vCrest);
-  vec3 color = mix(uDeep, uCrest, ch);
+  // — reflection of the sky
+  vec3 R = reflect(-V, N);
+  R.y = abs(R.y);
+  vec3 sky = mix(uHorizon, uZenith, pow(clamp(R.y, 0.0, 1.0), 0.45));
+  sky += vec3(0.55, 0.65, 0.9) * uFlash * 0.55;
+  float cosV = clamp(dot(N, V), 0.0, 1.0);
+  float fres = 0.02 + 0.98 * pow(1.0 - cosV, 5.0);
+  // a rough sea scatters the grazing reflection rather than mirroring it
+  fres = min(fres, 0.78);
 
-  // whitecaps on the sharpest crests, broken up by the ripple field
-  float cap = smoothstep(0.72, 1.15, vCrest + r1 * 0.08 * detail);
-  color = mix(color, uFoam, cap * 0.9);
-  // Streaked foam trails blown down the faces and into the troughs. r2*r3 is
-  // the worst aliaser of the lot — a product of two high-frequency sines — so
-  // it fades with the same distance term.
-  float streak = smoothstep(0.6, 1.0, r2 * r3) * smoothstep(0.28, -0.56, vCrest);
-  color = mix(color, uFoam, streak * 0.22 * detail);
+  // — the body of the water: dark, brightest where a thin crest is lit through
+  vec3 L = normalize(uMoonDir);
+  float crest = smoothstep(-0.3, 1.1, vHeight);
+  float ndl = max(dot(N, L), 0.0);
+  float through = pow(clamp(dot(V, -L) * 0.5 + 0.5, 0.0, 1.0), 3.0) * smoothstep(0.1, 1.0, vHeight);
+  vec3 body = mix(uDeep, uShallow, crest * 0.7 + ndl * 0.15);
+  body += uMoonColor * through * 0.28;
 
-  // crash ring around the lighthouse islet: a surge that breathes. Faster and
-  // travelling twice as far now, because the swell driving it is bigger.
-  float d = distance(vWorldPos.xz, uTowerXZ);
+  vec3 color = mix(body, sky, fres);
+
+  // — moonlight: a narrow path of glitter and a broad sheen
+  vec3 Hm = normalize(V + L);
+  float ndh = max(dot(N, Hm), 0.0);
+  color += uMoonColor * (pow(ndh, 700.0) * 1.6 + pow(ndh, 90.0) * 0.16) * fres;
+
+  // — the lighthouse beam on the water
+  vec2 rel = P.xz - uLantern.xz;
+  float r = length(rel);
+  vec2 bearing = rel / max(r, 1e-3);
+  float ang = acos(clamp(dot(bearing, uBeamDir), -1.0, 1.0));
+  float sector = exp(-ang * ang / (2.0 * 0.15 * 0.15));
+  float reach = smoothstep(10.0, 38.0, r) * (1.0 - smoothstep(110.0, 200.0, r));
+  vec3 toLamp = normalize(uLantern - P);
+  float lit = sector * reach * uBeamPower;
+  color += uBeamColor * lit * (0.10 + 0.55 * max(dot(N, toLamp), 0.0));
+  // the glitter trail between the lamp and the lens
+  float glint = pow(max(dot(R, toLamp), 0.0), 120.0);
+  color += uBeamColor * glint * sector * uBeamPower * 1.4 * fres;
+
+  // — foam: only where the surface folds over, broken up by lace and the baked foam map
+  vec4 fm = texture2D(uFoamMap, xz / 64.0 + vec2(0.004, 0.002) * uTime);
+  float lace = texture2D(uFoamMap, mat2(0.6, 0.8, -0.8, 0.6) * xz / 14.0 + vec2(0.02, 0.0) * uTime).g;
+  float fold = smoothstep(0.42, 0.04, vFold);
+  float foam = clamp(fold * (0.35 + 0.9 * lace) + fm.r * 0.55 * smoothstep(0.1, 0.9, vHeight), 0.0, 1.0);
+  // the surge around the islet
+  float d = distance(P.xz, uTowerXZ);
   float surge = 2.9 + sin(uTime * 1.5) * 1.15;
-  float ring = smoothstep(1.25, 0.0, abs(d - surge)) * smoothstep(7.5, 2.0, d);
-  float churn = smoothstep(2.9, 1.2, d); // permanent froth against the rocks
-  color = mix(color, uFoam, clamp(ring * 0.95 + churn * 0.75, 0.0, 0.95));
+  float ring = smoothstep(1.2, 0.0, abs(d - surge)) * smoothstep(7.5, 2.0, d);
+  float churn = smoothstep(3.0, 1.2, d);
+  foam = clamp(foam + (ring * 0.9 + churn * 0.8) * (0.5 + 0.7 * lace), 0.0, 1.0);
+  foam *= smoothstep(260.0, 90.0, dist);
+  // foam is lit like a solid: sky ambient, moon, and the beam when it passes
+  vec3 foamLit = uFoam * (uHorizon * 1.1 + 0.05 + uMoonColor * 0.25 * ndl + uBeamColor * lit * 1.3 + vec3(0.5, 0.6, 0.8) * uFlash);
+  color = mix(color, foamLit, foam * 0.85);
 
-  // moon/beam glint — tight sparkles over a broad sheen
-  vec3 view = normalize(uCamPos - vWorldPos);
-  vec3 halfDir = normalize(view + normalize(uMoonDir));
-  float ndh = max(dot(n, halfDir), 0.0);
-  /**
-   * The sparkle term is the aliasing AMPLIFIER, and it is why this artifact
-   * survived four attempts to fix it upstream.
-   *
-   * pow(ndh, 240) is a knife-edge function of the normal, so any wobble in n
-   * that is undersampled on screen comes back as hard-edged specks — and
-   * because the ripple field is periodic, those specks land in a regular
-   * lattice rather than as noise. Isolating it took hiding every Points object
-   * in the beacon (rain and splashes both innocent) to prove the pattern was
-   * on the water surface itself.
-   *
-   * So it fades with the same distance term as the ripples that feed it. Close
-   * up, where the normal is properly sampled, it is untouched; past ~34 units
-   * the water keeps the broad sheen and loses the glitter.
-   */
-  float spec = pow(ndh, 42.0);
-  float sparkle = pow(ndh, 240.0) * detail;
-  color += vec3(0.55, 0.85, 0.8) * (spec * 0.45 + sparkle * 0.9);
-
-  // manual fog (ShaderMaterial skips the scene fog chunks) — depth is already
-  // computed at the top for the detail fade
-  float fog = smoothstep(uFogNear, uFogFar, depth);
-  color = mix(color, uFogColor, fog);
+  // — mist standing on the sea (see webgl/fog.ts), then the plain distance fog
+  float fogF = smoothstep(uFogNear, uFogFar, dist);
+  if (uFogHeight.x > 0.0 && fogF > 0.0) {
+    float tau = -log(max(1.0 - fogF, 1e-4));
+    float k = 1.0 / max(uFogHeight.z, 0.1);
+    float h0 = max(uCamPos.y - uFogHeight.y, 0.0);
+    float h1 = max(P.y - uFogHeight.y, 0.0);
+    float e0 = exp(-k * h0), e1 = exp(-k * h1);
+    float dh = k * (h1 - h0);
+    float along = abs(dh) < 1e-3 ? e0 : clamp((e0 - e1) / dh, 0.0, 1.0);
+    fogF = 1.0 - exp(-tau * mix(1.0, along * uFogHeight.w, uFogHeight.x));
+  }
+  color = mix(color, uFogColor, fogF);
 
   gl_FragColor = vec4(color, uReveal);
 }

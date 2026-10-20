@@ -20,13 +20,14 @@ import {
   Vector3,
 } from 'three';
 import {
-  HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, ROOFTOP_DECK_Y, fenceRuns, homeLots,
+  HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, fenceRuns, homeLots,
 } from '../bake/cityGen.mjs';
 import { PATH_POINTS } from '../rig/pathPoints.mjs';
 import { cloudDeckTexture, glowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
 import { StreetCars } from './StreetCars';
+import { Yards } from './Yards';
 import { mulberry32 } from '../util';
 import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
@@ -53,6 +54,7 @@ export class Rooftops {
   private kitCity: KitCity | null = null;
   private fences: Fences | null = null;
   private cars: StreetCars | null = null;
+  private yards: Yards | null = null;
   private path: Vector3[] | null = null;
   private deck: Mesh[] = [];
   private disposables: { dispose(): void }[] = [];
@@ -69,13 +71,17 @@ export class Rooftops {
     // at the old 4.5–7 a single cloud tile smeared over most of the frame as
     // soon as the flight climbed — giant marbled slabs, not weather
     for (const [y, repeat, opacity, scale] of [
-      // thin on purpose: these hang between the plane and the roofs, and at the
-      // tower district's 0.5 they milked every house to a pale shape
-      [ROOFTOP_DECK_Y - 3.5, 20, 0.15, 1],
-      [ROOFTOP_DECK_Y, 13, 0.1, 0.82],
+      // mist, not weather: both sheets lie BELOW the roofs (houses stand about three
+      // units tall on the ground at ROOFTOP_BASE_Y), so the streets and the lower
+      // walls pool in it while the roofs and the whole sky above stay clear. They
+      // used to hang over the roofs, between the lens and every house.
+      [ROOFTOP_BASE_Y + 0.35, 20, 0.1, 1],
+      [ROOFTOP_BASE_Y + 1.3, 13, 0.05, 0.82],
     ] as const) {
       const material = new MeshBasicMaterial({
         map: deckMap,
+        // tinted to the dusk, not left white: white mist bleached the lawns
+        color: '#8d9db8',
         transparent: true,
         opacity,
         depthWrite: false,
@@ -225,6 +231,7 @@ export class Rooftops {
       if (map) map.offset.x = time * (i === 0 ? 0.0016 : 0.0029);
     }
     this.cars?.update(time);
+    this.yards?.update(time);
   }
 
   private async init(quality: Quality): Promise<void> {
@@ -282,12 +289,31 @@ export class Rooftops {
     this.cars = new StreetCars(quality, spots);
     this.cars.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.cars.group);
+
+    // Yard details for every house the flight passes over: beds, patios, pools,
+    // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
+    const yardReach = quality.tier === 'high' ? 90 : 50;
+    const at2 = new Vector3();
+    this.yards = new Yards(
+      lots,
+      kinds,
+      spots,
+      (lot) => {
+        at2.set(lot.x, ROOFTOP_BASE_Y, lot.z);
+        for (const c of path) if (c.distanceToSquared(at2) < yardReach * yardReach) return true;
+        return false;
+      },
+      quality.tier,
+    );
+    this.yards.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.yards.group);
   }
 
   dispose(): void {
     this.kitCity?.dispose();
     this.fences?.dispose();
     this.cars?.dispose();
+    this.yards?.dispose();
     for (const d of this.disposables) d.dispose();
   }
 }
