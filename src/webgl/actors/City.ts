@@ -17,6 +17,7 @@ import {
   Points,
   PointsMaterial,
   Quaternion,
+  RepeatWrapping,
   ShaderMaterial,
   Vector3,
 } from 'three';
@@ -31,6 +32,8 @@ import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
+import { CityStreet, type Footprint } from './CityStreet';
+import { pavingMaps } from '../bake/RoomTextures';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -38,7 +41,6 @@ import type { FlightPath } from '../rig/FlightPath';
 import type { Quality } from '../quality';
 import carVert from '../shaders/carLights.vert.glsl';
 import carFrag from '../shaders/carLights.frag.glsl';
-import carGlowVert from '../shaders/carGlow.vert.glsl';
 
 const WINDOW_AMBER = new Color('#ffc96b');
 const DELIVERIES = 5;
@@ -79,7 +81,21 @@ export class City {
     this.group.position.set(anchor.x, 0, 1);
 
     // ground sheet under the buildings
-    const groundMaterial = new MeshStandardMaterial({ color: '#0a0d16', roughness: 0.95 });
+    // wet paving, not a black sheet: slabs, joints, stains, normal and roughness (HIGH)
+    const paving = pavingMaps(4107);
+    for (const t of [paving.map, paving.normalMap, paving.roughnessMap]) {
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.repeat.set(195, 150);
+    }
+    this.disposables.push(paving.map, paving.normalMap, paving.roughnessMap);
+    const groundMaterial = new MeshStandardMaterial({
+      map: paving.map,
+      ...(quality.tier === 'high'
+        ? { normalMap: paving.normalMap, roughnessMap: paving.roughnessMap, roughness: 1 }
+        : { roughness: 0.6 }),
+      color: '#8c8c94',
+      metalness: 0.05,
+    });
     // 260x200, not 140x100: the district is 97 x 39 now and the old sheet's
     // edge cut across the frame in the upper corners of the dive
     const ground = new Mesh(new PlaneGeometry(260, 200), groundMaterial);
@@ -140,6 +156,13 @@ export class City {
         .filter((row): row is [Building, { hx: number; hz: number }, true] => !!row[1] && row[2])
         .map(([b, e]) => [b, e]);
     this.buildWindows(keep(nearMid));
+    const footprints: Footprint[] = [];
+    extents.forEach((e, i) => {
+      const lot = (lots as KitLot[])[i]!;
+      footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz });
+    });
+    this.street = new CityStreet(footprints, quality);
+    this.group.add(this.street.group);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
@@ -281,6 +304,7 @@ export class City {
 
   private trafficMaterial: ShaderMaterial | null = null;
   private streetCars: StreetCars | null = null;
+  private street: CityStreet | null = null;
   private streetlights: Streetlights | null = null;
 
   private static readonly CANYON_LEN = 66;
@@ -379,7 +403,16 @@ export class City {
     const x0 = City.CANYON_X0;
     const x1 = City.CANYON_X0 + City.CANYON_LEN;
     const n = quality.tier === 'high' ? 9 : 5;
-    this.streetCars = new StreetCars(quality, [], {
+    // parked along both curbs, clear of the cross streets (nose with the lane's own traffic)
+    const parked: { x: number; z: number; yaw: number }[] = [];
+    const rand = mulberry32(9031);
+    for (let x = x0 + 2; x < x1 - 2; x += 3.6 + rand() * 2.2) {
+      if (CROSS_STREET_X.some((sx) => Math.abs(x - sx) < 3.2)) continue;
+      if (rand() < 0.4) continue;
+      const side = rand() < 0.5 ? -1 : 1;
+      parked.push({ x, z: side * 1.97, yaw: side < 0 ? Math.PI : 0 });
+    }
+    this.streetCars = new StreetCars(quality, parked, {
       scale: 1.35,
       lanes: [
         // z -1.1 drives -x (oncoming, headlights at the camera); z +1.1 drives +x with the flight
@@ -583,6 +616,7 @@ export class City {
     // or without scroll (scroll-coupled surge removed by request)
     if (this.trafficMaterial) this.trafficMaterial.uniforms.uTime!.value = time;
     this.streetCars?.update(time);
+    this.street?.update(time);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
     let colorsDirty = false;
@@ -659,6 +693,7 @@ export class City {
 
   dispose(): void {
     this.kitCity?.dispose();
+    this.street?.dispose();
     for (const landing of this.planeLandings) landing.plane.dispose();
     for (const d of this.disposables) d.dispose();
   }
