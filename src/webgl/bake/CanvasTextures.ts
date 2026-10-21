@@ -777,45 +777,6 @@ export function cloudDeckTexture(): CanvasTexture {
   return texture;
 }
 
-/** The arrival laptop: the payoff screen the dart flies into. */
-export function arrivalScreenTexture(): CanvasTexture {
-  const [canvas, ctx] = makeCanvas(512);
-  ctx.fillStyle = '#0b101d';
-  ctx.fillRect(0, 0, 512, 512);
-  ctx.fillStyle = '#141c30';
-  ctx.fillRect(0, 0, 512, 54);
-  ctx.fillStyle = '#9be8ff';
-  ctx.font = '700 24px monospace';
-  ctx.fillText('INBOX', 24, 36);
-
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#7fe8d8';
-  ctx.font = '900 46px monospace';
-  ctx.fillText('EMAIL', 256, 226);
-  ctx.fillText('RECEIVED', 256, 282);
-  ctx.strokeStyle = 'rgba(127, 232, 216, 0.5)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(112, 312);
-  ctx.lineTo(400, 312);
-  ctx.stroke();
-
-  // the delivered dart, resting in the inbox
-  ctx.fillStyle = 'rgba(155, 232, 255, 0.9)';
-  ctx.beginPath();
-  ctx.moveTo(212, 388);
-  ctx.lineTo(300, 350);
-  ctx.lineTo(230, 412);
-  ctx.lineTo(238, 378);
-  ctx.closePath();
-  ctx.fill();
-  ctx.textAlign = 'left';
-
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
-}
-
 /** Soft radial spot — dust motes, rain caps, glows. */
 export function glowTexture(): CanvasTexture {
   const [canvas, ctx] = makeCanvas(64);
