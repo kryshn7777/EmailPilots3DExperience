@@ -48,9 +48,10 @@ void main() {
 
   // — wave detail: three scales of the same spectrum, turned and drifting different ways
   vec2 xz = P.xz;
-  vec2 uvA = xz / 64.0 + vec2(0.012, 0.007) * uTime;
-  vec2 uvB = mat2(0.80, 0.60, -0.60, 0.80) * xz / 17.9 + vec2(-0.021, 0.015) * uTime;
-  vec2 uvC = mat2(0.45, -0.89, 0.89, 0.45) * xz / 4.7 + vec2(0.05, -0.03) * uTime;
+  float flow = uTime * 1.9; // the detail maps and the foam drift on the wall clock, briskly enough to read
+  vec2 uvA = xz / 64.0 + vec2(0.012, 0.007) * flow;
+  vec2 uvB = mat2(0.80, 0.60, -0.60, 0.80) * xz / 17.9 + vec2(-0.021, 0.015) * flow;
+  vec2 uvC = mat2(0.45, -0.89, 0.89, 0.45) * xz / 4.7 + vec2(0.05, -0.03) * flow;
   float fineFade = 1.0 - smoothstep(30.0, 140.0, dist);
   vec2 slope = slopeOf(uvA) * 0.55 + slopeOf(uvB) * 0.42 + slopeOf(uvC) * 0.30 * fineFade;
   vec3 N = normalize(vec3(vNormal.x - slope.x, vNormal.y, vNormal.z - slope.y));
@@ -95,8 +96,8 @@ void main() {
   color += uBeamColor * glint * sector * uBeamPower * 1.4 * fres;
 
   // — foam: only where the surface folds over, broken up by lace and the baked foam map
-  vec4 fm = texture2D(uFoamMap, xz / 64.0 + vec2(0.004, 0.002) * uTime);
-  float lace = texture2D(uFoamMap, mat2(0.6, 0.8, -0.8, 0.6) * xz / 14.0 + vec2(0.02, 0.0) * uTime).g;
+  vec4 fm = texture2D(uFoamMap, xz / 64.0 + vec2(0.004, 0.002) * flow);
+  float lace = texture2D(uFoamMap, mat2(0.6, 0.8, -0.8, 0.6) * xz / 14.0 + vec2(0.02, 0.0) * flow).g;
   float fold = smoothstep(0.42, 0.04, vFold);
   float foam = clamp(fold * (0.35 + 0.9 * lace) + fm.r * 0.55 * smoothstep(0.1, 0.9, vHeight), 0.0, 1.0);
   // the surge around the islet

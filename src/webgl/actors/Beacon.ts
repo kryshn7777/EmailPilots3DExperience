@@ -83,6 +83,8 @@ const SHIP_Y = 2.85;
  */
 /** extra scroll the sea holds before it starts letting go — see `reveal` */
 const SEA_FADE_DELAY = 0.012;
+/** seconds for the lamp to come full circle */
+const BEAM_PERIOD = 7;
 
 /** the freighter's size and track, in the island's frame (see buildShip): it crosses ahead of the camera, left to right */
 const SHIP_SCALE = 2.8;
@@ -112,7 +114,7 @@ export class Beacon {
   private ship = new Group();
   private wake!: Mesh;
   private radar: Mesh | null = null;
-  /** last computed sweep bearing — derived from t each frame, never carried */
+  /** the lamp's bearing: the wall clock, one turn every BEAM_PERIOD seconds */
   private beamYaw = 0;
   private disposables: { dispose(): void }[] = [];
 
@@ -524,39 +526,10 @@ export class Beacon {
     time: number, camera: Camera, t: number, planePos: Vector3, flash = 0, fogColor?: Color, delivery = 0,
   ): number {
     if (!this.group.visible) return 0;
-    /**
-     * The sweep is SCROLL-DRIVEN: there is no wall-clock term anywhere in the
-     * bearing, so the beam does not turn on a still page. It used to add
-     * `time * 0.45`, which meant the lamp kept sweeping whether or not you
-     * were reading.
-     *
-     * What stays is the rate limiter, and it is not decoration. The scroll
-     * gain is 40–60 radians per unit t, so a thousandth of scroll jitter —
-     * the scrub spring settling, the camera's own turbulence — is several
-     * degrees of swing. Driving rotation.y straight off t made the beam
-     * shiver on a still page just as visibly as the old clock did, and blew
-     * the lens beat entirely. Clamping the per-frame step absorbs that and
-     * still comes to a complete stop once t stops changing.
-     */
-    const freeYaw = t * 40;
-    // keyframed beat at t≈0.515: the beam deliberately sweeps across the
-    // lens — guaranteed on every scroll-through, not left to sweep luck
-    let camYaw = 0;
-    {
-      const dx = camera.position.x - this.towerTop.x;
-      const dz = camera.position.z - this.towerTop.z;
-      camYaw = Math.atan2(-dz, dx);
-    }
-    const beat = MathUtils.smoothstep(t, 0.495, 0.505) * (1 - MathUtils.smoothstep(t, 0.53, 0.54));
-    const sweep = camYaw + (t - 0.5175) * 60; // crosses the lens mid-window
-    // blend ANGLES, not raw accumulators: freeYaw is hundreds of radians, so
-    // a direct lerp spun the beam wildly through the blend (the stutter)
-    const freeNear = sweep + Math.atan2(Math.sin(freeYaw - sweep), Math.cos(freeYaw - sweep));
-    const desired = MathUtils.lerp(freeNear, sweep, beat);
-    // a ±π wrap flip becomes a fast continuous sweep, not a single-frame
-    // teleport — and scroll jitter becomes nothing at all
-    const step = Math.atan2(Math.sin(desired - this.beamYaw), Math.cos(desired - this.beamYaw));
-    this.beamYaw += MathUtils.clamp(step, -0.11, 0.11);
+    // The lamp turns on the wall clock, once round every BEAM_PERIOD seconds, whether or not the
+    // page is moving: no scroll keyframes, no beat staged for the lens. The beam crosses the plane
+    // and the camera as often as the lamp comes round to them.
+    this.beamYaw = (time / BEAM_PERIOD) * Math.PI * 2;
     this.beamPivot.rotation.y = this.beamYaw;
     this.beamMaterial.uniforms.uTime!.value = time;
     // the beam stands down entering CH7 — inside-the-cone frames wash teal

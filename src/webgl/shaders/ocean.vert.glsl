@@ -36,8 +36,9 @@ void main() {
     float a = radians(w.x);
     vec2 d = vec2(cos(a), sin(a));
     float k = 6.28318530718 / w.y;
-    // deep-water dispersion, slowed for the camera: longer waves travel faster
-    float omega = 0.6 * sqrt(6.5 * k);
+    // deep-water dispersion, slowed for the camera: longer waves travel faster. The swell runs on
+    // the wall clock (not the scroll), so it has to read as moving on a page that is standing still.
+    float omega = 1.0 * sqrt(6.5 * k);
     float phase = k * dot(d, p) - omega * uTime + float(i) * 1.7;
     float s = sin(phase), c = cos(phase);
     float A = w.z, Q = w.w;

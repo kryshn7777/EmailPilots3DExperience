@@ -24,7 +24,8 @@ const TRAIL_PTS = 14;
 const TRAIL_STEP = 0.0016; // story-t between trail samples
 /** never sample before the takeoff window — the airway must not reach into the room */
 const T_MIN = CONTRAIL_FROM;
-const T_MAX = 0.965;
+/** the flock stays with the plane over the town only: it is gone before the cloud sea */
+const T_MAX = 0.34;
 
 interface Mate {
   /** story-t offset from the camera: the mate is always this far up or down the airway */
@@ -118,9 +119,9 @@ export class Flock {
   }
 
   update(t: number, time: number, path: FlightPath, camera: Camera): void {
-    // out over the world only: inside the room and inside the arrival office
-    // there is no airway to fly
-    const show = MathUtils.smoothstep(t, 0.155, 0.195) * (1 - MathUtils.smoothstep(t, 0.94, 0.975));
+    // over the town only: not inside the room, and gone again by the time the fog closes over the
+    // district (it used to follow the plane the whole way to the arrival office)
+    const show = MathUtils.smoothstep(t, 0.155, 0.195) * (1 - MathUtils.smoothstep(t, 0.27, 0.31));
     this.group.visible = show > 0.01;
     if (!this.group.visible) return;
 
