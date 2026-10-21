@@ -102,8 +102,13 @@ def save_maps(sheet, maps, out, debug, size_full):
         im = Image.fromarray(arr, mode)
         if debug:
             im.save(os.path.join(debug, f'{sheet}-{name}.png'))
-        for variant, size in ((full, size_full), (low, size_full // 2)):
-            # the half-size set is for phones; they skip the normal map entirely
+        # the half-size set is for phones. Colour and glow are what the eye reads on a facade,
+        # so the main sheet keeps those at full size there (a half-size window grid went to
+        # mush on a phone); the occlusion/roughness map halves, and a 1024 atlas is small enough
+        # to keep whole
+        low_size = size_full if (size_full <= 1024 or (sheet == 'main' and name in ('color', 'emissive'))) else size_full // 2
+        for variant, size in ((full, size_full), (low, low_size)):
+            # phones skip the normal map entirely
             if name not in variant:
                 continue
             path = os.path.join(out, variant[name])

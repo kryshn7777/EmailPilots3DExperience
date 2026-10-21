@@ -8,8 +8,10 @@ The cell geometry is HOME_CELL in src/webgl/bake/cityGen.mjs and must match it
 periodic value noise, so the cell tiles with no seam however many times it is
 repeated; there is no Blender in this one, just numpy and Pillow.
 
-Writes public/models/homes/ground-color.webp and ground-glow.webp (the
-streetlamp pools). `LAMPS` is mirrored by the lamp sprites in Rooftops.ts.
+Writes public/models/homes/ground-color.webp, ground-normal.webp and ground-rough.webp
+(the PBR surface: aggregate grain, slab joints, curbs and cracks as relief, wet-polished
+tyre lanes and paint as roughness) and ground-glow.webp (the streetlamp pools). `LAMPS`
+is mirrored by the streetlights in Rooftops.ts.
 """
 import os
 
@@ -175,11 +177,52 @@ def main():
     h = h * (1 - 0.12 * speck[..., None])
 
     h = np.clip(h, 0, 1)
+
+    # ---- relief and roughness: the same layers again, as height and gloss ---------------
+    blade = fbm(260, 2, 61)
+    relief = 0.5 + 0.10 * (blade - 0.5) + 0.06 * (fbm(34, 3, 67) - 0.5)       # lawn: blades and tussocks
+    rough = np.full((PX, PX), 0.96, np.float32)
+    gravel = fbm(380, 2, 77)
+    crack = (np.abs(fbm(16, 4, 83) - 0.5) < 0.011).astype(np.float32)
+    patch_a = (np.abs(fbm(5, 3, 89) - 0.5) < 0.05).astype(np.float32)          # old patched strips
+    asph_relief = 0.5 + 0.16 * (gravel - 0.5) - 0.28 * crack - 0.04 * patch_a
+    asph_rough = 0.90 - 0.10 * patch_a
+    relief = relief * (1 - asphalt_m) + asph_relief * asphalt_m
+    rough = rough * (1 - asphalt_m) + asph_rough * asphalt_m
+    for dz in (-0.55, 0.55):   # the polished lanes run smoother where tyres have worn the aggregate
+        lane = mask_of(lambda d, dz=dz: d.rectangle(rect(0, zc + dz - 0.32, W, zc + dz + 0.32), fill=255), 18)
+        rough = rough - 0.16 * lane * asphalt_m
+    conc_relief = 0.5 + 0.07 * (fbm(150, 2, 91) - 0.5) - 0.42 * joints
+    relief = relief * (1 - walk_m) + conc_relief * walk_m
+    rough = rough * (1 - walk_m) + 0.80 * walk_m
+    relief = relief * (1 - walk2) + (0.5 + 0.05 * (fbm(120, 2, 93) - 0.5)) * walk2
+    rough = rough * (1 - walk2) + 0.82 * walk2
+    relief = relief + 0.30 * curb_m
+    rough = rough * (1 - curb_m) + 0.78 * curb_m
+    relief = relief + 0.04 * (paint + zeb)
+    rough = rough * (1 - np.clip(paint + zeb, 0, 1)) + 0.58 * np.clip(paint + zeb, 0, 1)
+    rough = np.clip(rough, 0.2, 1.0)
+
+    def half(a):
+        n, m = a.shape
+        return a.reshape(n // 2, 2, m // 2, 2).mean(axis=(1, 3))
+    r2 = half(relief)
+    # tangent-space normal (OpenGL convention: y up in the image), strength tuned by eye
+    dx = (np.roll(r2, -1, axis=1) - np.roll(r2, 1, axis=1)) * 0.5
+    dy = (np.roll(r2, -1, axis=0) - np.roll(r2, 1, axis=0)) * 0.5
+    k = 9.0
+    nrm = np.stack([-dx * k, dy * k, np.ones_like(r2)], axis=-1)
+    nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
     out = os.path.join(ROOT, 'public', 'models', 'homes')
     os.makedirs(out, exist_ok=True)
     # the colours above are authored directly as sRGB, so they are stored as-is
     Image.fromarray((h * 255).astype(np.uint8)).save(
         os.path.join(out, 'ground-color.webp'), 'WEBP', quality=88, method=6)
+
+    Image.fromarray(((nrm * 0.5 + 0.5) * 255).astype(np.uint8)).save(
+        os.path.join(out, 'ground-normal.webp'), 'WEBP', quality=90, method=6)
+    Image.fromarray((half(half(rough)) * 255).astype(np.uint8), 'L').save(
+        os.path.join(out, 'ground-rough.webp'), 'WEBP', quality=88, method=6)
 
     # ---- streetlamp pools (emissive map, 512 px) --------------------------------------
     gp = 512

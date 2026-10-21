@@ -22,9 +22,10 @@ export class WindowFrame {
       [SIZE, BAR, 0, -SIZE / 2, 0],
       [BAR, SIZE, SIZE / 2, 0, 0],
       [BAR, SIZE, -SIZE / 2, 0, 0],
-      [BAR * 0.6, SIZE, 0, 0, 0], // center mullion
+      // no centre mullion: the flight line runs through the middle of the opening, and a bar
+      // there (a "hinge" post) stood exactly where the dart passes, so it flew into the pole
     ];
-    // one merged mesh: five identical-material bars had no reason to be five
+    // one merged mesh: four identical-material bars had no reason to be four
     // draw calls in a scene that also has to fit a phone's call budget
     const parts = bars.map(([w, h, x, y, z]) =>
       new BoxGeometry(w, h, 0.25).translate(x, y, z),

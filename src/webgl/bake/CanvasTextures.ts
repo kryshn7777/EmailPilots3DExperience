@@ -8,13 +8,14 @@ import { detectQuality } from '../quality';
 
 // bake scale: the desk chapter parks the lens close enough to magnify a 512
 // canvas ~2.5x, which read as smeared low-res. All makeCanvas callers draw in
-// their original coordinate space; the backing store is 2x on HIGH (mobile
-// keeps 1x so bake memory stays flat there).
-const BAKE_SCALE = detectQuality('').tier === 'high' ? 2 : 1;
+// their original coordinate space; the backing store is 2x on HIGH and 1.5x on
+// phones (a phone's screen is as dense as a desktop's, so 1x read as soft there
+// too; 1.5x keeps the bake memory about half of HIGH's).
+const BAKE_SCALE = detectQuality('').tier === 'high' ? 2 : 1.5;
 
 function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size * BAKE_SCALE;
+  canvas.width = canvas.height = Math.round(size * BAKE_SCALE);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2d context unavailable');
   ctx.scale(BAKE_SCALE, BAKE_SCALE);
@@ -448,9 +449,10 @@ export function bookSpineTexture(): CanvasTexture {
   // seeded, so the wall is the same wall on every reload
   let seed = 20260810;
   const rand = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // a bright, varied shelf: jewel cloth and painted spines, so it reads as colour even in lamplight
   const cloth = [
-    '#3f4a63', '#6b4230', '#2f5d4a', '#5a3550', '#4a4f5c', '#7a6234', '#2b3f57', '#734a3a',
-    '#39543f', '#4c3550', '#5b6070', '#6d5a2c', '#334a66', '#5d3a30', '#2e4c46', '#453c58',
+    '#c8382c', '#2f74d8', '#1fa064', '#e5a823', '#e8762b', '#17aaa2', '#7d4cc4', '#c93a8e',
+    '#4aa6e0', '#90c23c', '#ea6a5c', '#26408f', '#9a2142', '#2f8a4c', '#f3c534', '#5d72d6',
   ];
   for (let cell = 0; cell < BOOK_SPINE_CELLS * BOOK_SPINE_CELLS; cell++) {
     ctx.save();
@@ -466,11 +468,17 @@ export function bookSpineTexture(): CanvasTexture {
       ctx.fillRect(rand() * C, 0, 1 + rand() * 2, C); // cloth grain runs with the spine
     }
 
+    // a second colour on about half of them: a painted band across the foot of the spine
+    if (rand() < 0.55) {
+      ctx.fillStyle = cloth[(cell * 5 + 3) % cloth.length]!;
+      ctx.fillRect(0, C * 0.62, C, C * 0.26);
+    }
+
     // rounded-spine shading
     const round = ctx.createLinearGradient(0, 0, C, 0);
-    round.addColorStop(0, 'rgba(255,255,255,0.18)');
-    round.addColorStop(0.3, 'rgba(255,255,255,0.04)');
-    round.addColorStop(1, 'rgba(0,0,0,0.36)');
+    round.addColorStop(0, 'rgba(255,255,255,0.2)');
+    round.addColorStop(0.3, 'rgba(255,255,255,0.05)');
+    round.addColorStop(1, 'rgba(0,0,0,0.26)');
     ctx.fillStyle = round;
     ctx.fillRect(0, 0, C, C);
 
@@ -478,7 +486,7 @@ export function bookSpineTexture(): CanvasTexture {
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.fillRect(0, C * 0.07, C, C * 0.035);
     ctx.fillRect(0, C * 0.895, C, C * 0.035);
-    const gilt = rand() < 0.5 ? '#c9a44c' : '#d6d0c2';
+    const gilt = rand() < 0.5 ? '#f1cf6a' : '#f4efe2';
     ctx.fillStyle = gilt;
     ctx.fillRect(0, C * 0.118, C, 2);
     ctx.fillRect(0, C * 0.872, C, 2);
@@ -499,6 +507,35 @@ export function bookSpineTexture(): CanvasTexture {
     }
     ctx.restore();
   }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/** A small desk globe: blue seas, green and ochre land, a graticule. Equirectangular. */
+export function globeTexture(): CanvasTexture {
+  const [canvas, ctx] = makeCanvas(512);
+  ctx.fillStyle = '#2d78c9';
+  ctx.fillRect(0, 0, 512, 512);
+  let seed = 4242;
+  const rand = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 16; i++) {
+    const x = rand() * 512;
+    const y = 90 + rand() * 300;
+    ctx.fillStyle = rand() < 0.5 ? '#4fa84a' : '#d3b35a';
+    for (let k = 0; k < 7; k++) {
+      ctx.beginPath();
+      ctx.ellipse(x + (rand() - 0.5) * 60, y + (rand() - 0.5) * 40, 20 + rand() * 38, 14 + rand() * 26, rand() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = '#f4f7fb';
+  ctx.fillRect(0, 0, 512, 30);
+  ctx.fillRect(0, 484, 512, 28);
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= 512; x += 43) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke(); }
+  for (let y = 0; y <= 512; y += 43) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke(); }
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   return texture;

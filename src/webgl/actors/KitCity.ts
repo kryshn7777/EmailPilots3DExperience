@@ -91,6 +91,8 @@ export interface KitOptions {
    * cloud sea and wants it; the night city must not mirror a daytime sky.
    */
   cloudEnv?: boolean;
+  /** real modules cast and receive the sun's shadows (HIGH, where the engine has a shadow map) */
+  shadows?: boolean;
 }
 
 /**
@@ -207,7 +209,7 @@ export class KitCity {
     lots: KitLot[],
     rings: KitRingSet,
     manifest: KitManifest,
-    { tier = 'high', glow = 1, cloudEnv = false }: KitOptions = {},
+    { tier = 'high', glow = 1, cloudEnv = false, shadows = false }: KitOptions = {},
     private color = new Color(),
   ) {
     const modules = manifest.modules;
@@ -308,6 +310,7 @@ export class KitCity {
           inst.setColorAt(k, this.color.set(lot.tint));
         });
         if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        inst.castShadow = inst.receiveShadow = shadows;
         this.group.add(inst);
         this.disposables.push(inst);
         requestCompile(inst);

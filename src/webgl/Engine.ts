@@ -9,6 +9,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  PCFShadowMap,
   PMREMGenerator,
   PerspectiveCamera,
   Scene,
@@ -65,9 +66,11 @@ import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
+import { BEACON_ANCHOR, LANTERN } from './rig/pathPoints.mjs';
 import { setCompiler } from './warm';
 import { Raycast } from './interact/Raycast';
 import { Tooltip } from './interact/Tooltip';
+import { DeliveryPopup } from './interact/DeliveryPopup';
 import { SkyDome } from './materials/SkyDome';
 import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
@@ -96,6 +99,10 @@ const ROUTE_PRESETS: Record<string, IdlePreset> = {
  * Phase-3 engine: CH1–5 art-complete (desk, panel, takeoff window, volumetric
  * cloud sea, storm) over the chapter grade system; CH6–10 remain blockout.
  */
+/** half-width of the sun's shadow window around the plane (site units) and its map size */
+const SUN_SHADOW_HALF = 56;
+const SUN_SHADOW_MAP = 2048;
+
 export class Engine {
   private renderer: WebGLRenderer;
   private scene = new Scene();
@@ -136,6 +143,11 @@ export class Engine {
   private confetti: PaperBurst;
   private raycast = new Raycast();
   private tooltip = new Tooltip();
+  private deliveryPopup = new DeliveryPopup();
+  /** the lantern room's centre, where the dart is delivered (see pathPoints.mjs) */
+  private lanternCentre = new Vector3(...LANTERN);
+  /** 0 away from the lamp, 1 with the dart inside it: drives the flare and the dart's size */
+  private delivered = 0;
   private director: ScrollDirector | null = null;
 
   private fog: Fog;
@@ -151,6 +163,8 @@ export class Engine {
   private prevT = 0;
   private idlePreset: IdlePreset | null = null;
   private maneuverPulse = 0;
+  /** 1 at night, 0 in daylight: how brightly the town's lamps burn */
+  private lampLevel = 1;
   private rafId = 0;
   private startTime = performance.now();
   private lastTime = this.startTime;
@@ -162,6 +176,7 @@ export class Engine {
   private sunDirWorld = new Vector3(0.6, 0.25, 0.1);
   private sunScreenDir = new Vector2(0.7, 0.3);
   private tmpV = new Vector3();
+  private tmpV2 = new Vector3();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -177,6 +192,25 @@ export class Engine {
     // keep it for dev, drop it in production builds
     if (import.meta.env.PROD) this.renderer.debug.checkShaderErrors = false;
     this.quality = detectQuality(gpuRendererString(this.renderer.getContext()));
+    // real-time shadows: the desk lamp in the study, the sun over the town (HIGH only)
+    if (this.quality.tier === 'high') {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = PCFShadowMap;
+    }
+
+    if (this.quality.tier === 'high') {
+      // the sun's shadows over the town: an ortho window that follows the plane
+      const shadow = this.sun.shadow;
+      this.sun.castShadow = true;
+      shadow.mapSize.set(SUN_SHADOW_MAP, SUN_SHADOW_MAP);
+      shadow.camera.left = shadow.camera.bottom = -SUN_SHADOW_HALF;
+      shadow.camera.right = shadow.camera.top = SUN_SHADOW_HALF;
+      shadow.camera.near = 1;
+      shadow.camera.far = 150;
+      shadow.bias = -0.0006;
+      shadow.normalBias = 0.05;
+      shadow.radius = 2.5;
+    }
 
     this.fog = new Fog('#05070f', 10, 90);
     this.scene.fog = this.fog;
@@ -221,7 +255,7 @@ export class Engine {
     );
 
     const rand = mulberry32(919);
-    this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand);
+    this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand, this.quality.tier === 'high');
     this.panel = new Panel(this.path.chapterAnchor(1));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
@@ -231,14 +265,14 @@ export class Engine {
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
-    this.beacon = new Beacon(this.path.chapterAnchor(5), this.raycast, this.tooltip, this.quality);
+    this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
     this.city = new City(this.path.chapterAnchor(7), this.path, this.quality);
     this.copilot = new Copilot(this.path.chapterAnchor(8));
     // fixed roll-out point, not a story-t sample: the flight now turns off
     // the runway into the arrival office, so sampling near t=1 would drag the
     // whole airfield along with the turn
-    this.landing = new Landing(new Vector3(270, 0.5, 0));
+    this.landing = new Landing(new Vector3(270, 0.5, 0), this.quality);
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);
@@ -489,6 +523,13 @@ export class Engine {
     this.sky.sunIntensity = sunLevel;
     this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2;
+    // sky-and-ground bounce: shadowed surfaces take the colour of the sky from above and of
+    // the sunlit ground from below, so shade is never a flat grey and rooftops pick up warmth
+    this.hemi.color.copy(this.sky.horizon).lerp(this.sky.zenith, 0.35);
+    this.hemi.groundColor.copy(this.fog.color).lerp(this.sun.color, 0.3).multiplyScalar(0.55);
+    this.hemi.intensity = 0.3 + 0.3 * MathUtils.clamp(sunLevel / 1.6, 0, 1);
+    // lamps are lit under the window at night and go out as the sun comes up
+    this.lampLevel = 1 - MathUtils.smoothstep(sunLevel, 0.5, 1.3);
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
     // mist standing on the ground or the sea: blends between chapters, with the base
@@ -560,8 +601,10 @@ export class Engine {
 
   private renderFrame(): void {
     const now = performance.now();
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const rawMs = now - this.lastTime;
+    const dt = Math.min(rawMs / 1000, 0.1);
     this.lastTime = now;
+    this.govern(rawMs, now);
     const time = (now - this.startTime) / 1000;
     const target = this.idlePreset ? this.idlePreset.t : this.scrollT;
     // mass-spring scrub: the world has WEIGHT — it leans into motion,
@@ -610,13 +653,24 @@ export class Engine {
     }
     this.prevT = t;
 
+    // the lighthouse delivery: for the beat where the dart flies into the lantern the camera
+    // holds outside it, south-east of the tower, instead of trailing the dart through the glass
+    const shot = this.rig.shot;
+    shot.weight = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.512, 0.526) * (1 - MathUtils.smoothstep(t, 0.566, 0.58));
+    shot.position.set(147.6, 24.2, 0.9);
+    shot.look.copy(this.lanternCentre);
+
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
     this.plane.group.visible = this.idlePreset !== null || t > 0.012;
     // the dart is swallowed by the arrival screen it flies into
     const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
-    this.plane.group.scale.setScalar(1 - absorbed);
+    // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
+    const intoLamp = this.idlePreset ? 1 : MathUtils.smoothstep(this.rig.planeWorldPos.distanceTo(this.lanternCentre), 0.5, 4.2);
+    this.delivered = 1 - intoLamp;
+    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp, 1e-4));
+    if (intoLamp < 0.02) this.plane.group.visible = false;
     this.launchString.update(this.idlePreset ? 1 : t, this.path);
     this.plane.flex(time, t > CONTRAIL_FROM || this.idlePreset ? 1 : 0);
 
@@ -644,8 +698,18 @@ export class Engine {
     }
 
     // sun follows the plane so the directional light never runs out of range
-    this.sun.position.copy(this.rig.planeWorldPos).addScaledVector(this.sunDirWorld, 60);
     this.sun.target.position.copy(this.rig.planeWorldPos);
+    if (this.sun.castShadow) {
+      // snap the shadow window to whole shadow-map texels along the light's own axes,
+      // so shadows hold still on the ground as the plane flies instead of swimming
+      const texel = (2 * SUN_SHADOW_HALF) / SUN_SHADOW_MAP;
+      const right = this.tmpV.set(0, 1, 0).cross(this.sunDirWorld).normalize();
+      const up = this.tmpV2.copy(this.sunDirWorld).cross(right);
+      const at = this.sun.target.position;
+      const snap = (v: number): number => ((v % texel) + texel) % texel;
+      at.addScaledVector(right, -snap(at.dot(right))).addScaledVector(up, -snap(at.dot(up)));
+    }
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirWorld, 60);
 
     this.sky.followCamera(this.camera.position);
     this.sky.flash = this.storm.flash;
@@ -736,7 +800,7 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
-    this.rooftops.update(time);
+    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
@@ -765,9 +829,18 @@ export class Engine {
     );
     this.traffic.update(t, time);
     this.plane.setBeamHit(
-      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color),
+      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color, this.delivered),
     );
-    this.city.update(t, time);
+    // dev hook for automated inspection: `window.__cam = { p: [x,y,z], l: [x,y,z] }` takes the camera
+    const hook = this.probe ? (window as unknown as { __cam?: { p: number[]; l: number[] } }).__cam : undefined;
+    if (hook) {
+      this.camera.position.set(hook.p[0]!, hook.p[1]!, hook.p[2]!);
+      this.camera.lookAt(hook.l[0]!, hook.l[1]!, hook.l[2]!);
+    }
+    // the delivery readout, pinned to the lamp
+    this.camera.updateMatrixWorld();
+    this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
+    this.city.update(t, time, this.rig.planeWorldPos);
     this.copilot.update(
       this.rig.planeWorldPos,
       this.plane.group.quaternion,
@@ -808,9 +881,35 @@ export class Engine {
     this.rafId = requestAnimationFrame(this.loop);
   };
 
+  /**
+   * Dynamic resolution (LOW only): the pixel ratio is scaled by `resolution`, which a frame-time
+   * governor moves between 0.5 and 1. A phone that holds ~60 fps climbs to full density; one that
+   * cannot backs off a step at a time instead of stuttering at native resolution.
+   */
+  private resolution = 0.75;
+  private frameEma = 16;
+  private govAt = 0;
+
+  private govern(dtMs: number, now: number): void {
+    if (this.quality.tier !== 'low' || this.probe || this.options.reducedMotion || dtMs > 250) return;
+    this.frameEma += (dtMs - this.frameEma) * 0.06;
+    if (now - this.govAt < 1400 || now - this.startTime < 2500) return;
+    this.govAt = now;
+    let next = this.resolution;
+    if (this.frameEma > 27 && next > 0.5) next = Math.max(0.5, next * 0.85);
+    else if (this.frameEma < 17.5 && next < 1) next = Math.min(1, next * 1.1);
+    if (Math.abs(next - this.resolution) > 0.01) {
+      this.resolution = next;
+      this.resize();
+    }
+  }
+
+  private probe = new URLSearchParams(location.search).has('probe');
+
   private resize = (): void => {
     const dpr =
-      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale;
+      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale *
+      (this.quality.tier === 'low' ? this.resolution : 1);
     const { clientWidth, clientHeight } = this.canvas;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
@@ -834,6 +933,7 @@ export class Engine {
     this.director?.dispose();
     this.raycast.dispose();
     this.tooltip.dispose();
+    this.deliveryPopup.dispose();
     this.composer.dispose();
     this.plane.dispose();
     this.trail.dispose();

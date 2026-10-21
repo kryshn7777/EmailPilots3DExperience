@@ -1,8 +1,5 @@
 import {
-  AdditiveBlending,
-  BufferGeometry,
   CatmullRomCurve3,
-  Float32BufferAttribute,
   Group,
   InstancedMesh,
   Matrix4,
@@ -10,21 +7,22 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
-  Points,
-  PointsMaterial,
   Quaternion,
   RepeatWrapping,
+  NoColorSpace,
   SRGBColorSpace,
   TextureLoader,
+  Vector2,
   Vector3,
 } from 'three';
 import {
   HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, fenceRuns, homeLots,
 } from '../bake/cityGen.mjs';
 import { PATH_POINTS } from '../rig/pathPoints.mjs';
-import { glowTexture, meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
+import { meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
+import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { Yards } from './Yards';
 import { mulberry32 } from '../util';
@@ -54,14 +52,16 @@ export class Rooftops {
   private fences: Fences | null = null;
   private cars: StreetCars | null = null;
   private yards: Yards | null = null;
+  private lamps: Streetlights | null = null;
+  private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
   private disposables: { dispose(): void }[] = [];
 
   constructor(rand: () => number, quality: Quality) {
     void rand;
-    this.buildGround();
+    this.buildGround(quality.tier === 'high');
 
-    this.buildLamps();
+    this.buildLamps(quality);
     this.buildFences(quality);
     void this.init(quality);
   }
@@ -72,14 +72,14 @@ export class Rooftops {
    * a cell boundary, so texture repeats line up with the lot grid the houses
    * are placed on and no offset maths is needed.
    */
-  private buildGround(): void {
+  private buildGround(shadows: boolean): void {
     const { w, d } = HOME_CELL;
     const cellsX = HOME_CELLS.x[1] - HOME_CELLS.x[0];
     const cellsZ = HOME_CELLS.z[1] - HOME_CELLS.z[0];
     const loader = new TextureLoader();
-    const load = (file: string): ReturnType<TextureLoader['load']> => {
+    const load = (file: string, srgb = true): ReturnType<TextureLoader['load']> => {
       const t = loader.load(asset(`/models/homes/${file}`));
-      t.colorSpace = SRGBColorSpace;
+      t.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
       t.wrapS = t.wrapT = RepeatWrapping;
       t.anisotropy = 8;
       t.repeat.set(cellsX, cellsZ);
@@ -87,9 +87,14 @@ export class Rooftops {
     };
     const color = load('ground-color.webp');
     const glow = load('ground-glow.webp');
+    // HIGH reads the surface as PBR: aggregate and slab joints from the normal map, wet-polished
+    // tyre lanes and paint from the roughness map (phones keep the colour alone)
+    const normal = shadows ? load('ground-normal.webp', false) : null;
+    const rough = shadows ? load('ground-rough.webp', false) : null;
     const material = new MeshStandardMaterial({
       map: color,
-      roughness: 0.95,
+      ...(normal ? { normalMap: normal, normalScale: new Vector2(1, 1) } : {}),
+      ...(rough ? { roughnessMap: rough, roughness: 1 } : { roughness: 0.95 }),
       metalness: 0,
       // lamp pools on the streets: warm light you can read from altitude
       emissive: '#ffffff',
@@ -100,6 +105,7 @@ export class Rooftops {
     // repeats line up with the lot grid; the country beyond is a different surface
     const ground = new Mesh(new PlaneGeometry(w * cellsX, d * cellsZ), material);
     ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = shadows;
     ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
 
@@ -109,38 +115,29 @@ export class Rooftops {
     const meadowMaterial = new MeshStandardMaterial({ map: meadow, roughness: 1, metalness: 0 });
     const outskirts = new Mesh(new PlaneGeometry(1500, 1500), meadowMaterial);
     outskirts.rotation.x = -Math.PI / 2;
+    outskirts.receiveShadow = shadows;
     outskirts.position.set(80, ROOFTOP_BASE_Y - 0.06, -26);
     this.group.add(outskirts);
+    this.groundMaterial = material;
     this.disposables.push(ground.geometry, material, color, glow, outskirts.geometry, meadowMaterial, meadow);
+    if (normal) this.disposables.push(normal);
+    if (rough) this.disposables.push(rough);
   }
 
-  /** Warm lamp sprites over every streetlamp in every cell. */
-  private buildLamps(): void {
+  /** A real streetlight at every lamp position in every cell: pole, arm, luminaire, glow. */
+  private buildLamps(quality: Quality): void {
     const { w, d } = HOME_CELL;
-    const positions: number[] = [];
+    const street = HOME_CELL.lotD + HOME_CELL.street / 2;
+    const lamps: Lamp[] = [];
     for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
       for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
-        for (const [lx, lz] of LAMPS) positions.push(ix * w + lx, ROOFTOP_BASE_Y + 1.7, iz * d + lz);
+        // the arm always reaches out over the roadway
+        for (const [lx, lz] of LAMPS) lamps.push({ x: ix * w + lx, z: iz * d + lz, yaw: lz < street ? 0 : Math.PI });
       }
     }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(positions, 3));
-    const lamps = new Points(
-      g,
-      new PointsMaterial({
-        map: glowTexture(),
-        color: '#ffc98a',
-        size: 0.9,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
-        blending: AdditiveBlending,
-        sizeAttenuation: true,
-      }),
-    );
-    lamps.frustumCulled = false;
-    this.group.add(lamps);
-    this.disposables.push(g, lamps.material as PointsMaterial);
+    this.lamps = new Streetlights(lamps, quality.tier);
+    this.lamps.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.lamps.group);
   }
 
   /**
@@ -172,10 +169,11 @@ export class Rooftops {
   }
 
   /** Soft contact shadows under every house and tree: grounds them on the lawn. */
-  private buildShadows(lots: KitLot[], kinds: Map<string, string>): void {
+  private buildShadows(lots: KitLot[], kinds: Map<string, string>, high: boolean): void {
     const map = softShadowTexture();
     const material = new MeshBasicMaterial({
-      map, color: '#000000', transparent: true, opacity: 0.55, depthWrite: false, fog: true,
+      // with real sun shadows on HIGH these are only ambient contact darkening
+      map, color: '#000000', transparent: true, opacity: high ? 0.36 : 0.55, depthWrite: false, fog: true,
     });
     const geometry = new PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
@@ -197,9 +195,13 @@ export class Rooftops {
     this.disposables.push(map, material, geometry, inst);
   }
 
-  /** Per-frame work: traffic and the firepits' flicker. */
-  update(time: number): void {
+  /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
+  update(time: number, night = 1, focus?: Vector3): void {
     if (!this.group.visible) return;
+    this.lamps?.setLevel(night);
+    if (focus) this.lamps?.follow(focus);
+    // the pools of lamplight painted on the streets fade with the lamps
+    if (this.groundMaterial) this.groundMaterial.emissiveIntensity = 0.5 * night;
     this.cars?.update(time);
     this.yards?.update(time);
   }
@@ -220,13 +222,13 @@ export class Rooftops {
     // hotter than the city's. cloudEnv: homes in a cloud sea take their light
     // and reflections from the baked cloud environment.
     this.kitCity = new KitCity(lots as KitLot[], rings, manifest, {
-      tier: quality.tier, glow: 1.2, cloudEnv: true,
+      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high',
     });
     // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.kitCity.group);
     const kinds = new Map(manifest.modules.map((m) => [m.id, m.kind]));
-    this.buildShadows(lots as KitLot[], kinds);
+    this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
     this.buildCars(lots as KitLot[], kinds, quality);
   }
 
@@ -284,6 +286,7 @@ export class Rooftops {
     this.fences?.dispose();
     this.cars?.dispose();
     this.yards?.dispose();
+    this.lamps?.dispose();
     for (const d of this.disposables) d.dispose();
   }
 }

@@ -1,17 +1,34 @@
 import {
+  Box3,
   BoxGeometry,
+  BufferAttribute,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   Group,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   PlaneGeometry,
   PointLight,
   SphereGeometry,
+  Vector2,
   Vector3,
 } from 'three';
-import { arrivalScreenTexture, replyTexture, runwayTexture } from '../bake/CanvasTextures';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import {
+  BOOK_SPINE_CELLS, arrivalScreenTexture, bookSpineTexture, frameArtTexture, meadowTexture, replyTexture,
+  runwayTexture,
+} from '../bake/CanvasTextures';
+import {
+  WAINSCOT, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
+} from '../bake/RoomTextures';
+import { asset } from '../asset';
+import { requestCompile } from '../warm';
+import { AIRLINER, Airliner } from './Airliner';
+import type { Quality } from '../quality';
 
 /**
  * CH10: a real dawn airfield. Marked runway with edge/threshold lights, an
@@ -35,11 +52,17 @@ export class Landing {
   private windsock: Mesh;
   private reply: Mesh;
   private replyHome = new Vector3();
-  private screenMaterial!: MeshStandardMaterial;
-  private screenLight!: PointLight;
+  private screenMaterial: MeshStandardMaterial | null = null;
+  private screenLight: PointLight | null = null;
+  private officeBuilt = false;
+  /** the departure: lined up on the runway, rolls and climbs out as the dart comes in behind it */
+  private departing = new Airliner();
+  /** one parked at the apron */
+  private parked = new Airliner();
+  private rolled = 0;
   private disposables: { dispose(): void }[] = [];
 
-  constructor(runwayEnd: Vector3) {
+  constructor(runwayEnd: Vector3, quality: Quality) {
     const cx = runwayEnd.x;
     const cz = runwayEnd.z;
     const RUNWAY_LEN = 64;
@@ -47,11 +70,15 @@ export class Landing {
     const startX = cx - 48; // threshold the plane crosses first
 
     // apron of dark grass under everything
-    const grass = new MeshStandardMaterial({ color: '#161b14', roughness: 1 });
+    const meadow = meadowTexture();
+    meadow.repeat.set(4, 2.5);
+    const grass = new MeshStandardMaterial({ map: meadow, color: '#b4bda4', roughness: 1 });
+    this.disposables.push(meadow);
     const field = new Mesh(new PlaneGeometry(190, 120), grass);
     field.rotation.x = -Math.PI / 2;
     field.position.set(cx - 14, -0.02, cz);
     this.group.add(field);
+    field.receiveShadow = quality.tier === 'high';
     this.disposables.push(field.geometry, grass);
 
     // runway strip (texture long-axis = V → rotate so V runs along X)
@@ -61,6 +88,7 @@ export class Landing {
     strip.rotation.z = Math.PI / 2;
     strip.position.set(startX + RUNWAY_LEN / 2 - 6, 0.01, cz);
     this.group.add(strip);
+    strip.receiveShadow = quality.tier === 'high';
     this.disposables.push(strip.geometry, asphalt);
 
     // taxiway + apron slab by the hangar
@@ -72,7 +100,15 @@ export class Landing {
     apron.rotation.x = -Math.PI / 2;
     apron.position.set(cx - 6, 0.006, cz + 21);
     this.group.add(taxiway, apron);
+    taxiway.receiveShadow = apron.receiveShadow = quality.tier === 'high';
     this.disposables.push(taxiway.geometry, apron.geometry, taxi);
+
+    // traffic: a jet lined up to depart (animated in update) and one parked at the apron
+    this.group.add(this.departing.group, this.parked.group);
+    this.parked.group.position.set(cx - 5.3, 0.006, cz + 21);
+    this.parked.body.position.y = AIRLINER.wheelDrop;
+    this.parked.group.rotation.y = 0.12;
+    this.disposables.push(this.departing, this.parked);
 
     // runway edge lights (warm) + threshold bars (green near / red far)
     this.edgeLightMaterial = new MeshStandardMaterial({
@@ -165,7 +201,12 @@ export class Landing {
     this.group.add(pole, this.windsock);
     this.disposables.push(pole.geometry, this.windsock.geometry, sockMat);
 
-    this.buildArrivalOffice();
+    // the office has a lot of surface to draw; it is built once the page is idle (and at
+    // once if the flight lands on it first), not during boot
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
+      .requestIdleCallback;
+    if (idle) idle(() => this.ensureOffice(), { timeout: 4000 });
+    else setTimeout(() => this.ensureOffice(), 2500);
 
     // the printed reply waits on the arrival desk, beside the laptop
     const paper = new MeshStandardMaterial({ map: replyTexture(), roughness: 0.9 });
@@ -179,57 +220,181 @@ export class Landing {
   }
 
   /**
-   * The delivery itself: an office off the apron with its door open to the
-   * taxiway, a desk, and the laptop the flight ends inside. The flight line's
+   * The delivery itself: a warm reception office off the apron with its door open to the
+   * taxiway, a walnut desk, and the laptop the flight ends inside. The flight line's
    * last control point IS this screen, so the dart flies into it head-on.
+   *
+   * Same language as the study: sage plaster over painted wainscot, oak boards under a
+   * wool rug, leather and brass, one warm lamp and a warm ceiling bounce, with the dawn
+   * coming in cool-gold through the side windows.
    */
   private buildArrivalOffice(): void {
     const { x, z } = OFFICE;
-    const shell = new MeshStandardMaterial({ color: '#2b3244', roughness: 0.8 });
-    const trim = new MeshStandardMaterial({ color: '#e6eaf2', roughness: 0.5 });
-    const deskMat = new MeshStandardMaterial({ color: '#262b38', roughness: 0.4 });
-    const steel = new MeshStandardMaterial({ color: '#9aa1b0', roughness: 0.3, metalness: 0.8 });
-    this.disposables.push(shell, trim, deskMat, steel);
-    const box = (
-      m: MeshStandardMaterial,
-      w: number, h: number, d: number,
-      px: number, py: number, pz: number,
-    ): void => {
+    const W = 11; // room width and depth
+    const H = 3.6;
+    const own = (...items: { dispose(): void }[]): void => { this.disposables.push(...items); };
+    const surface = (m: SurfaceMaps, extra: ConstructorParameters<typeof MeshStandardMaterial>[0] = {}): MeshStandardMaterial => {
+      own(m.map, m.normalMap);
+      if (m.roughnessMap) own(m.roughnessMap);
+      return new MeshStandardMaterial({
+        map: m.map, normalMap: m.normalMap, ...(m.roughnessMap ? { roughnessMap: m.roughnessMap } : {}), roughness: 1, ...extra,
+      });
+    };
+    const repeat = (m: SurfaceMaps, u: number, v: number): void => {
+      for (const t of [m.map, m.normalMap, m.roughnessMap]) t?.repeat.set(u, v);
+    };
+    const add = (mesh: Object3D): void => { this.group.add(mesh); };
+    const box = (m: MeshStandardMaterial, w: number, h: number, d: number, px: number, py: number, pz: number): Mesh => {
       const mesh = new Mesh(new BoxGeometry(w, h, d), m);
       mesh.position.set(px, py, pz);
-      this.group.add(mesh);
-      this.disposables.push(mesh.geometry);
+      add(mesh);
+      own(mesh.geometry);
+      return mesh;
     };
+    const plane = (m: MeshStandardMaterial | MeshBasicMaterial, w: number, h: number, px: number, py: number, pz: number, ry = 0, rx = 0): Mesh => {
+      const mesh = new Mesh(new PlaneGeometry(w, h), m);
+      mesh.position.set(px, py, pz);
+      mesh.rotation.set(rx, ry, 0);
+      add(mesh);
+      own(mesh.geometry);
+      return mesh;
+    };
+
+    // the outside: pale painted stucco, seen from the taxiway
+    const stuccoMaps = plasterMaps([214, 204, 184], 41);
+    repeat(stuccoMaps, 3, 1);
+    const stucco = surface(stuccoMaps, { roughness: 0.95 });
+    own(stucco);
     // floor slab, back and side walls, ceiling. The −z face stays open: that
     // is the doorway the dart comes through.
-    box(deskMat, 11, 0.08, 11, x, 0.04, z);
-    box(shell, 11, 3.6, 0.16, x, 1.8, z + 5.5);
-    box(shell, 0.16, 3.6, 11, x - 5.5, 1.8, z);
-    box(shell, 0.16, 3.6, 11, x + 5.5, 1.8, z);
-    box(shell, 11, 0.16, 11, x, 3.66, z);
-    // doorway reveal — a lit frame so the opening reads as a door
-    box(trim, 0.3, 3.6, 0.3, x - 2.6, 1.8, z - 5.4);
-    box(trim, 0.3, 3.6, 0.3, x + 2.6, 1.8, z - 5.4);
-    box(trim, 5.5, 0.3, 0.3, x, 3.45, z - 5.4);
+    const slab = new MeshStandardMaterial({ color: '#3b3a38', roughness: 0.9 });
+    own(slab);
+    box(slab, W, 0.08, W, x, 0.04, z);
+    box(stucco, W, H, 0.16, x, H / 2, z + W / 2);
+    box(stucco, 0.16, H, W, x - W / 2, H / 2, z);
+    box(stucco, 0.16, H, W, x + W / 2, H / 2, z);
+    box(stucco, W, 0.16, W, x, H + 0.06, z);
 
-    // ceiling panel: the only light in here, so the screen reads as the hero
-    const panelFace = new MeshStandardMaterial({
-      color: '#eef2fa',
-      emissive: '#e8eefb',
-      emissiveIntensity: 1.5,
+    // inside: sage plaster
+    const plaster = plasterMaps([172, 184, 158], 43);
+    repeat(plaster, 3, 1.1);
+    const wall = surface(plaster, { roughness: 0.93, normalScale: new Vector2(0.55, 0.55) });
+    const ceilingMat = new MeshStandardMaterial({ color: '#ece4d2', roughness: 0.95 });
+    own(wall, ceilingMat);
+    const inX0 = x - W / 2 + 0.081;
+    const inX1 = x + W / 2 - 0.081;
+    const inZ1 = z + W / 2 - 0.081;
+    plane(wall, W, H, x, H / 2, inZ1, Math.PI);          // back wall, faces the door
+    plane(wall, W, H, inX0, H / 2, z, Math.PI / 2);      // left wall, faces +x
+    plane(wall, W, H, inX1, H / 2, z, -Math.PI / 2);     // right wall, faces -x
+    plane(ceilingMat, W, W, x, H - 0.0, z, 0, Math.PI / 2);
+
+    // oak boards and a wool rug under the desk
+    const oak = woodMaps({ boards: 8, base: [190, 138, 86], seed: 47, joints: 1, gap: 2.2, roughness: 0.46, normal: 2.6 });
+    repeat(oak, W / 5.5, W / 3.2);
+    const floorMat = surface(oak, { metalness: 0 });
+    own(floorMat);
+    plane(floorMat, W, W, x, 0.085, z, 0, -Math.PI / 2);
+    const rugSet = rugMaps(51);
+    const rugMat = new MeshStandardMaterial({ map: rugSet.map, normalMap: rugSet.normalMap, normalScale: new Vector2(0.7, 0.7), roughness: 1 });
+    own(rugSet.map, rugSet.normalMap, rugMat);
+    plane(rugMat, 6.2, 4.6, x, 0.09, z + 2.0, 0, -Math.PI / 2);
+
+    // painted wainscot, chair rail, baseboard and crown
+    const wain = wainscotMaps([222, 211, 188], 53);
+    repeat(wain, W / WAINSCOT.bayW, 1);
+    const wainMat = surface(wain, { roughness: 0.55, normalScale: new Vector2(1.1, 1.1) });
+    const paint = new MeshStandardMaterial({ color: '#ddd3bd', roughness: 0.5 });
+    own(wainMat, paint);
+    plane(wainMat, W, WAINSCOT.height, x, 0.09 + WAINSCOT.height / 2, inZ1 - 0.002, Math.PI);
+    plane(wainMat, W, WAINSCOT.height, inX0 + 0.002, 0.09 + WAINSCOT.height / 2, z, Math.PI / 2);
+    plane(wainMat, W, WAINSCOT.height, inX1 - 0.002, 0.09 + WAINSCOT.height / 2, z, -Math.PI / 2);
+    const railY = 0.09 + WAINSCOT.height + 0.02;
+    box(paint, W - 0.3, 0.1, 0.09, x, railY, inZ1 - 0.04);
+    box(paint, 0.09, 0.1, W - 0.3, inX0 + 0.04, railY, z);
+    box(paint, 0.09, 0.1, W - 0.3, inX1 - 0.04, railY, z);
+    box(paint, W - 0.3, 0.3, 0.08, x, 0.25, inZ1 - 0.04);
+    box(paint, 0.08, 0.3, W - 0.3, inX0 + 0.04, 0.25, z);
+    box(paint, 0.08, 0.3, W - 0.3, inX1 - 0.04, 0.25, z);
+    box(paint, W - 0.3, 0.22, 0.14, x, H - 0.1, inZ1 - 0.06);
+    box(paint, 0.14, 0.22, W - 0.3, inX0 + 0.06, H - 0.1, z);
+    box(paint, 0.14, 0.22, W - 0.3, inX1 - 0.06, H - 0.1, z);
+
+    // doorway reveal — a painted frame so the opening reads as a door
+    box(paint, 0.3, H, 0.3, x - 2.6, H / 2, z - 5.4);
+    box(paint, 0.3, H, 0.3, x + 2.6, H / 2, z - 5.4);
+    box(paint, 5.5, 0.3, 0.3, x, H - 0.15, z - 5.4);
+
+    // dawn at the side windows: a pane of low gold light in a white frame, with a mullion cross
+    const dawn = new MeshBasicMaterial({ toneMapped: false });
+    own(dawn);
+    dawn.color.set('#ffd2a2').multiplyScalar(1.5);
+    const windowAt = (pz: number, side: 1 | -1): void => {
+      const wx = side === 1 ? inX0 + 0.012 : inX1 - 0.012;
+      const ry = side === 1 ? Math.PI / 2 : -Math.PI / 2;
+      plane(dawn, 1.5, 1.9, wx, 1.95, pz, ry);
+      // frame + cross
+      const f = (w: number, h: number, dy: number, dz: number): void => {
+        box(paint, 0.06, h, w, wx + side * 0.03, 1.95 + dy, pz + dz);
+      };
+      f(0.09, 2.08, 0, -0.795); f(0.09, 2.08, 0, 0.795);
+      f(1.7, 0.09, 1.0, 0); f(1.7, 0.09, -1.0, 0);
+      f(1.5, 0.05, 0, 0); f(0.05, 1.9, 0, 0);
+    };
+    for (const pz of [z - 1.4, z + 2.4]) { windowAt(pz, 1); windowAt(pz, -1); }
+    for (const side of [1, -1] as const) {
+      const wl = new PointLight('#ffc48a', 3.2, 9, 1.6);
+      wl.position.set(side === 1 ? inX0 + 1.0 : inX1 - 1.0, 1.9, z + 0.5);
+      this.group.add(wl);
+    }
+
+    // a walnut desk facing the door, brass pulls, leather chair behind it
+    const walnut = woodMaps({ boards: 1, base: [116, 80, 56], seed: 55, roughness: 0.36, normal: 1.1 });
+    own(walnut.map, walnut.normalMap, walnut.roughnessMap);
+    const deskTop = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, envMapIntensity: 0.9,
     });
-    this.disposables.push(panelFace);
-    box(panelFace, 3.2, 0.04, 1.4, x, 3.5, z + 0.4);
-    const roomLight = new PointLight('#eef3ff', 7, 14, 1.7);
-    roomLight.position.set(x, 2.9, z + 0.6);
-    this.group.add(roomLight);
+    const deskDark = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, color: '#a68e79',
+    });
+    const brass = new MeshStandardMaterial({ color: '#c09a5e', roughness: 0.3, metalness: 1 });
+    own(deskTop, deskDark, brass);
+    box(deskTop, 4.2, 0.09, 2.2, x, DESK_TOP, z + 2.1);
+    box(deskDark, 4.2, 0.12, 2.2, x, DESK_TOP - 0.1, z + 2.1);
+    box(deskDark, 0.14, 0.62, 2.0, x - 1.95, DESK_TOP - 0.46, z + 2.1);
+    box(deskDark, 0.14, 0.62, 2.0, x + 1.95, DESK_TOP - 0.46, z + 2.1);
+    box(deskDark, 3.8, 0.4, 0.05, x, DESK_TOP - 0.3, z + 3.05);
+    box(deskDark, 1.1, 0.52, 1.8, x + 1.3, DESK_TOP - 0.3, z + 2.15); // drawer unit
+    box(brass, 0.4, 0.03, 0.03, x + 1.3, DESK_TOP - 0.2, z + 1.23);
+    box(brass, 0.4, 0.03, 0.03, x + 1.3, DESK_TOP - 0.45, z + 1.23);
 
-    // desk facing the door, laptop open toward the incoming flight
-    box(deskMat, 4.2, 0.09, 2.2, x, DESK_TOP, z + 2.1);
-    box(steel, 0.08, 0.85, 1.9, x - 1.95, DESK_TOP - 0.5, z + 2.1);
-    box(steel, 0.08, 0.85, 1.9, x + 1.95, DESK_TOP - 0.5, z + 2.1);
-    box(deskMat, 1.7, 0.05, 1.15, x - 0.5, DESK_TOP + 0.06, z + 1.55); // deck
-    box(deskMat, 1.5, 1.25, 0.06, x - 0.5, DESK_TOP + 0.68, z + 2.24); // lid
+    const leather = leatherMaps([104, 62, 38], 57);
+    own(leather.map, leather.normalMap, leather.roughnessMap!);
+    const seat = new MeshStandardMaterial({ map: leather.map, normalMap: leather.normalMap, roughnessMap: leather.roughnessMap, roughness: 1 });
+    own(seat);
+    const chair = new Group();
+    chair.position.set(x + 0.2, 0.09, z + 3.9);
+    chair.rotation.y = Math.PI + 0.15;
+    const cp = (m: MeshStandardMaterial, w: number, h: number, d: number, px: number, py: number, pz: number): void => {
+      const mesh = new Mesh(new BoxGeometry(w, h, d), m);
+      mesh.position.set(px, py, pz);
+      chair.add(mesh);
+      own(mesh.geometry);
+    };
+    cp(seat, 0.9, 0.16, 0.9, 0, 0.55, 0);
+    cp(seat, 0.9, 1.0, 0.14, 0, 1.1, -0.42);
+    cp(seat, 0.14, 0.3, 0.7, -0.5, 0.78, 0);
+    cp(seat, 0.14, 0.3, 0.7, 0.5, 0.78, 0);
+    cp(brass, 0.1, 0.5, 0.1, 0, 0.25, 0);
+    cp(brass, 0.8, 0.06, 0.1, 0, 0.04, 0);
+    cp(brass, 0.1, 0.06, 0.8, 0, 0.04, 0);
+    add(chair);
+
+    // the laptop, as it was: deck and lid dark steel, open toward the door
+    const deckMat = new MeshStandardMaterial({ color: '#2a3042', roughness: 0.45, metalness: 0.5 });
+    own(deckMat);
+    box(deckMat, 1.7, 0.05, 1.15, x - 0.5, DESK_TOP + 0.06, z + 1.55); // deck
+    box(deckMat, 1.5, 1.25, 0.06, x - 0.5, DESK_TOP + 0.68, z + 2.24); // lid
 
     const screenMaterial = new MeshStandardMaterial({
       map: arrivalScreenTexture(),
@@ -242,15 +407,165 @@ export class Landing {
     const screen = new Mesh(new PlaneGeometry(1.34, 1.06), screenMaterial);
     screen.position.set(x - 0.5, DESK_TOP + 0.68, z + 2.2);
     screen.rotation.y = Math.PI; // faces −z, into the approach
-    this.group.add(screen);
+    add(screen);
     this.screenLight = new PointLight('#9be8ff', 0, 6, 2);
     this.screenLight.position.set(x - 0.5, DESK_TOP + 0.7, z + 1.4);
-    this.group.add(this.screenLight);
-    this.disposables.push(screen.geometry, screenMaterial);
+    add(this.screenLight);
+    own(screen.geometry, screenMaterial);
+
+    // a brass desk lamp with a green shade: the warm key light of the room
+    const enamel = new MeshStandardMaterial({ color: '#27503f', roughness: 0.32, metalness: 0.35, side: DoubleSide });
+    const bulbGlow = new MeshStandardMaterial({ color: '#fff1d6', emissive: '#ffd49a', emissiveIntensity: 1.5 });
+    own(enamel, bulbGlow);
+    const lx = x + 1.7;
+    const lz = z + 2.7;
+    const lampBase = new Mesh(new CylinderGeometry(0.16, 0.19, 0.04, 24), brass);
+    lampBase.position.set(lx, DESK_TOP + 0.065, lz);
+    const lampStem = new Mesh(new CylinderGeometry(0.022, 0.022, 0.62, 8), brass);
+    lampStem.position.set(lx, DESK_TOP + 0.38, lz);
+    const lampShade = new Mesh(new CylinderGeometry(0.07, 0.24, 0.3, 28, 1, true), enamel);
+    lampShade.position.set(lx, DESK_TOP + 0.74, lz);
+    const lampBulb = new Mesh(new SphereGeometry(0.07, 12, 10), bulbGlow);
+    lampBulb.position.set(lx, DESK_TOP + 0.68, lz);
+    add(lampBase); add(lampStem); add(lampShade); add(lampBulb);
+    own(lampBase.geometry, lampStem.geometry, lampShade.geometry, lampBulb.geometry);
+    const deskLight = new PointLight('#ffcc8f', 3.4, 8, 1.6);
+    deskLight.position.set(lx, DESK_TOP + 0.6, lz - 0.1);
+    add(deskLight);
+
+    // a warm ceiling bounce, and a pair of pendants over the desk
+    const roomLight = new PointLight('#ffd9a8', 6.5, 14, 1.6);
+    roomLight.position.set(x, 2.9, z + 0.6);
+    add(roomLight);
+    for (const px of [-1.3, 1.3]) {
+      const cord = new Mesh(new CylinderGeometry(0.01, 0.01, 0.9, 6), paint);
+      cord.position.set(x + px, H - 0.45, z + 2.2);
+      const dome = new Mesh(new CylinderGeometry(0.05, 0.3, 0.26, 24, 1, true), enamel);
+      dome.position.set(x + px, H - 1.0, z + 2.2);
+      const glow = new Mesh(new SphereGeometry(0.08, 10, 8), bulbGlow);
+      glow.position.set(x + px, H - 1.04, z + 2.2);
+      add(cord); add(dome); add(glow);
+      own(cord.geometry, dome.geometry, glow.geometry);
+    }
+
+    // a wall of books on the right, a framed picture or two, a clock, a plant
+    const shelfWood = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, color: '#9a8470',
+    });
+    const spineMap = bookSpineTexture();
+    const books = new MeshStandardMaterial({ map: spineMap, roughness: 0.74 });
+    own(shelfWood, spineMap, books);
+    const spineCell = (g: BoxGeometry, cell: number): BoxGeometry => {
+      const uv = g.attributes.uv as BufferAttribute;
+      const step = 1 / BOOK_SPINE_CELLS;
+      const inset = step * 0.03;
+      const span = step - inset * 2;
+      const cx = (cell % BOOK_SPINE_CELLS) * step + inset;
+      const cy = Math.floor(cell / BOOK_SPINE_CELLS) * step + inset;
+      for (let v = 0; v < uv.count; v++) uv.setXY(v, cx + uv.getX(v) * span, cy + uv.getY(v) * span);
+      return g;
+    };
+    const shelfX = inX1 - 0.3;
+    const shelfZ = z - 1.2;
+    // an open bookcase: a back, two ends and a top, so the books on its boards show
+    box(shelfWood, 0.04, 3.0, 3.4, shelfX + 0.23, 0.09 + 1.5, shelfZ);
+    box(shelfWood, 0.5, 3.0, 0.06, shelfX, 0.09 + 1.5, shelfZ - 1.7);
+    box(shelfWood, 0.5, 3.0, 0.06, shelfX, 0.09 + 1.5, shelfZ + 1.7);
+    box(shelfWood, 0.56, 0.06, 3.5, shelfX, 0.09 + 3.0, shelfZ);
+    for (let row = 0; row < 5; row++) {
+      const y = 0.1 + row * 0.62 + 0.03;
+      box(shelfWood, 0.5, 0.05, 3.4, shelfX, y + 0.02, shelfZ);
+      let zz = shelfZ - 1.55;
+      let i = 0;
+      while (zz < shelfZ + 1.4) {
+        const wd = 0.1 + ((row * 7 + i) % 4) * 0.035;
+        const th = 0.34 + ((row * 5 + i) % 3) * 0.07;
+        const dp = 0.3 + ((row * 3 + i) % 3) * 0.03;
+        const book = new Mesh(spineCell(new BoxGeometry(dp, th, wd), (row * 5 + i * 3) % (BOOK_SPINE_CELLS * BOOK_SPINE_CELLS)), books);
+        book.position.set(shelfX - 0.05 - (0.3 - dp) / 2 + 0.02, y + 0.05 + th / 2, zz + wd / 2);
+        add(book);
+        own(book.geometry);
+        zz += wd + 0.012;
+        i++;
+        if (i % 11 === 0) zz += 0.25; // a gap now and then
+      }
+    }
+    const frameWood = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, color: '#8f7258',
+    });
+    const mat = new MeshStandardMaterial({ color: '#efe6d2', roughness: 0.9 });
+    own(frameWood, mat);
+    ([[-2.4, 2.35, 0], [2.6, 2.3, 1]] as const).forEach(([dx, fy, variant]) => {
+      const art = frameArtTexture(variant);
+      const artMat = new MeshStandardMaterial({ map: art, roughness: 0.8 });
+      own(art, artMat);
+      const fz = inZ1 - 0.06;
+      box(frameWood, 1.5, 1.8, 0.06, x + dx, fy, fz);
+      plane(mat, 1.34, 1.64, x + dx, fy, fz - 0.034, Math.PI);
+      plane(artMat, 1.0, 1.3, x + dx, fy, fz - 0.036, Math.PI);
+    });
+    const clockFace = new Mesh(new CylinderGeometry(0.4, 0.4, 0.05, 32), new MeshStandardMaterial({ color: '#f0e9d8', roughness: 0.5 }));
+    clockFace.rotation.z = Math.PI / 2;
+    clockFace.position.set(inX0 + 0.05, 2.7, z + 0.5);
+    add(clockFace);
+    own(clockFace.geometry, clockFace.material as MeshStandardMaterial);
+
+    // the plant is the same potted plant as the study's, streamed in after first paint
+    new GLTFLoader().load(asset('/models/potted_plant_04.glb'), (gltf) => {
+      const s = gltf.scene;
+      const bb = new Box3().setFromObject(s);
+      const size = bb.getSize(new Vector3());
+      s.scale.setScalar(1.5 / Math.max(size.y, 1e-3));
+      bb.setFromObject(s);
+      s.position.set(inX0 + 0.8, 0.09 - bb.min.y, z + 4.2);
+      this.group.add(s);
+      requestCompile(s);
+    });
+  }
+
+  /**
+   * The jet ahead of the dart: it holds on the centreline, rolls with constant acceleration,
+   * rotates and leaves the ground at the far end of the runway while the dart comes down
+   * behind it. A pure function of t, so it scrubs both ways.
+   */
+  private flyDeparture(t: number, time: number): void {
+    const T0 = 0.885; // brakes off
+    const TL = 0.92; // lift-off
+    const ROLL = 26; // units of runway used
+    const X0 = 250;
+    const u = MathUtils.clamp((t - T0) / (TL - T0), 0, 1);
+    let x = X0 + ROLL * u * u;
+    let height = 0;
+    const after = Math.max(0, t - TL);
+    if (after > 0) {
+      x = X0 + ROLL + ((2 * ROLL) / (TL - T0)) * after * 0.9;
+      height = 62 * Math.pow(MathUtils.clamp(after / 0.07, 0, 1.4), 1.5);
+    }
+    // nose up through the rotation, a steady climb attitude after
+    const pitch = 0.23 * MathUtils.smoothstep(t, 0.911, 0.924);
+    const sin = Math.sin(pitch);
+    const cos = Math.cos(pitch);
+    const g = AIRLINER.mainGearX;
+    const w = AIRLINER.wheelDrop;
+    // pitch about the main gear: keep the tyres' contact point at this group's origin
+    this.departing.body.rotation.z = pitch;
+    this.departing.body.position.set(-(g * cos + w * sin), -(g * sin - w * cos), 0);
+    this.departing.group.position.set(x, 0.012 + height, this.group.position.z);
+    this.rolled = ROLL * u * u;
+    this.departing.rollAndGear(this.rolled, MathUtils.smoothstep(t, 0.93, 0.945));
+    this.departing.blink(time);
+    this.parked.blink(time + 0.4);
+  }
+
+  private ensureOffice(): void {
+    if (this.officeBuilt) return;
+    this.officeBuilt = true;
+    this.buildArrivalOffice();
   }
 
   update(t: number, time: number): void {
     if (!this.group.visible) return;
+    this.ensureOffice();
     this.edgeLightMaterial.emissiveIntensity = 1.4 + Math.sin(time * 1.6) * 0.4;
 
     // the rabbit: one bright pulse racing toward the threshold, looping
@@ -262,12 +577,13 @@ export class Landing {
     }
 
     this.windsock.rotation.y = Math.sin(time * 0.7) * 0.4;
+    this.flyDeparture(t, time);
 
     // the mail lands: the screen wakes as the dart reaches it, then holds
     const arrive = MathUtils.smoothstep(t, 0.978, 0.995);
     const ping = arrive * (1 + Math.sin(time * 3.4) * 0.14);
-    this.screenMaterial.emissiveIntensity = 0.12 + ping * 2.3;
-    this.screenLight.intensity = ping * 3.5;
+    if (this.screenMaterial) this.screenMaterial.emissiveIntensity = 0.12 + ping * 2.3;
+    if (this.screenLight) this.screenLight.intensity = ping * 3.5;
 
     // the printed reply slides out of the tray once the mail is in
     const slide = MathUtils.smoothstep(t, 0.985, 0.999);

@@ -108,6 +108,7 @@ export class Beacon {
   private hovered = false;
   private towerTop = new Vector3();
   private flareMaterial: SpriteMaterial;
+  private flare!: Sprite;
   private ship = new Group();
   private wake!: Mesh;
   /** last computed sweep bearing — derived from t each frame, never carried */
@@ -300,10 +301,10 @@ export class Beacon {
       depthWrite: false,
       depthTest: false,
     });
-    const flare = new Sprite(this.flareMaterial);
-    flare.position.set(0, 12.2 * TOWER_SCALE, 0);
-    flare.scale.setScalar(5 * TOWER_SCALE);
-    this.group.add(flare);
+    this.flare = new Sprite(this.flareMaterial);
+    this.flare.position.set(0, 12.2 * TOWER_SCALE, 0);
+    this.flare.scale.setScalar(5 * TOWER_SCALE);
+    this.group.add(this.flare);
     this.disposables.push(this.flareMaterial);
 
     this.buildShip();
@@ -572,13 +573,20 @@ export class Beacon {
   }
 
   /** Makes the sea reflect the sky the chapter is wearing, colour for colour. */
+  /** world position of the lamp: where the dart is delivered */
+  get lantern(): Vector3 {
+    return this.towerTop;
+  }
+
   bindSky(sky: SkyDome): void {
     const u = this.oceanMaterial.uniforms;
     u.uZenith!.value = sky.zenith;
     u.uHorizon!.value = sky.horizon;
   }
 
-  update(time: number, camera: Camera, t: number, planePos: Vector3, flash = 0, fogColor?: Color): number {
+  update(
+    time: number, camera: Camera, t: number, planePos: Vector3, flash = 0, fogColor?: Color, delivery = 0,
+  ): number {
     if (!this.group.visible) return 0;
     /**
      * The sweep is SCROLL-DRIVEN: there is no wall-clock term anywhere in the
@@ -665,7 +673,9 @@ export class Beacon {
     dz = camera.position.z - this.towerTop.z;
     len = Math.hypot(dx, dz) || 1;
     const camHit = Math.pow(Math.max((beamX * dx + beamZ * dz) / len, 0), 30) * lampGlow;
-    this.flareMaterial.opacity = camHit * 0.95;
+    // the delivery: the lamp flares white as the dart goes in, whichever way the beam is turned
+    this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32);
+    this.flare.scale.setScalar(5 * TOWER_SCALE * (1 + delivery * 0.45));
 
     // — the freighter stands in toward the light —
     // The passage is STORY-T driven, not wall-clock: the ship has to cross

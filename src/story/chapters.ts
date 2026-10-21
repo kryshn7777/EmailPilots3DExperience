@@ -73,7 +73,7 @@ export const CHAPTERS: Chapter[] = [
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.45, sunDir: [0.3, 0.8, 0.4], fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5,
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.5, 0.3, 0.35], fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5,
       // fog belongs to the distance: clear streets below the window, the far town
       // sinking into the horizon (the mist term thickens it along the ground only)
       mist: { strength: 1, boost: 1.9, scale: 6, base: 'ground' } },
@@ -127,7 +127,7 @@ export const CHAPTERS: Chapter[] = [
     // and at the old 0.018 lag the camera stopped ten units short of it, in
     // the middle of the office, with the payoff a postage stamp in frame
     rig: { fov: 40, camLag: 0.006, lookAhead: 0.004, turbAmp: 0.02, offsetUp: 0.55, offsetSide: 0.25, offsetBack: 0.5 },
-    grade: { zenith: '#4a5a80', horizon: '#ff9e7a', sunColor: '#ffe8c9', sunIntensity: 1.2, sunDir: [0.7, 0.15, 0.3], fogColor: '#c9a58f', fogNear: 25, fogFar: 200, envIntensity: 0.55 },
+    grade: { zenith: '#4a5a80', horizon: '#ff9e7a', sunColor: '#ffe8c9', sunIntensity: 1.2, sunDir: [0.7, 0.27, 0.3], fogColor: '#c9a58f', fogNear: 25, fogFar: 200, envIntensity: 0.55 },
   },
 ];
 
