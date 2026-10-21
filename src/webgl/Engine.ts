@@ -9,6 +9,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  PCFShadowMap,
   PMREMGenerator,
   PerspectiveCamera,
   Scene,
@@ -177,6 +178,11 @@ export class Engine {
     // keep it for dev, drop it in production builds
     if (import.meta.env.PROD) this.renderer.debug.checkShaderErrors = false;
     this.quality = detectQuality(gpuRendererString(this.renderer.getContext()));
+    // real-time shadows: the desk lamp in the study, the sun over the town (HIGH only)
+    if (this.quality.tier === 'high') {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = PCFShadowMap;
+    }
 
     this.fog = new Fog('#05070f', 10, 90);
     this.scene.fog = this.fog;
@@ -221,7 +227,7 @@ export class Engine {
     );
 
     const rand = mulberry32(919);
-    this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand);
+    this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand, this.quality.tier === 'high');
     this.panel = new Panel(this.path.chapterAnchor(1));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);

@@ -8,19 +8,23 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Group,
+  HemisphereLight,
   InstancedMesh,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   PointLight,
   SphereGeometry,
+  SpotLight,
   Quaternion,
   Points,
   PointsMaterial,
   TorusGeometry,
+  Vector2,
   Vector3,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -28,26 +32,31 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import {
   BOOK_SPINE_CELLS,
   bookSpineTexture,
-  floorPlankTexture,
   frameArtTexture,
   glowTexture,
   laptopKeysTexture,
   laptopScreenTexture,
   letterTexture,
-  rugTexture,
-  wallPanelTexture,
 } from '../bake/CanvasTextures';
+import {
+  WAINSCOT, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
+} from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
 
 /**
- * CH1: the night desk. The laptop mid-send is the story's launchpad — the
+ * CH1: the night study. The laptop mid-send is the story's launchpad — the
  * flight path starts at its screen and the paper plane flies out of it.
- * Warm lamp pool, the letter (the "real preview" sheet), coffee, dust motes.
+ *
+ * A lived-in room rather than an office cell: walnut desk and oak boards under
+ * a wool rug, sage plaster over painted wainscot, leather and brass, with one
+ * tungsten lamp as the key light (it casts real shadows on HIGH), a warm bounce
+ * from the ceiling, and cool light from the window and the laptop for contrast.
+ * The letter, coffee and dust motes sit in the lamp pool.
  */
 export class Desk {
   readonly group = new Group();
-  readonly lamp: PointLight;
+  readonly lamp: SpotLight;
   /** kept out of the static merge — the end balls actually swing */
   private cradle = new Group();
   private cradleArms: Group[] = [];
@@ -58,27 +67,27 @@ export class Desk {
   private dustGeometry = new BufferGeometry();
   private disposables: { dispose(): void }[] = [];
 
-  constructor(origin: Vector3, dustCount: number, rand: () => number) {
+  constructor(origin: Vector3, dustCount: number, rand: () => number, private shadows = false) {
     this.group.position.copy(origin);
 
     // the desk is built below as an office slab (no GLB);
     // an interim invisible-thin top is unnecessary — props already float at
     // the exact height the table's top surface lands on (y −0.10)
 
-    // the room: plank floor, paneled walls, and the window wall the flight
-    // exits through
-    const wallMap = wallPanelTexture();
-    const wall = new MeshStandardMaterial({ map: wallMap, roughness: 0.9 });
-    const floorMap = floorPlankTexture();
-    // polished office floor: low roughness + a strong env weight is what
-    // turns the sky probe into an actual reflection you can see moving
-    const floorMat = new MeshStandardMaterial({
-      map: floorMap,
-      roughness: 0.24,
-      metalness: 0.12,
-      envMapIntensity: 1.5,
-    });
-    this.disposables.push(wall, floorMat, wallMap, floorMap);
+    // the room: oak boards, plaster over painted wainscot, and the window wall the
+    // flight exits through. One walnut drawing serves the desk, shelves, frames and cabinets.
+    const walnut = woodMaps({ boards: 1, base: [116, 80, 56], seed: 21, roughness: 0.36, normal: 1.1 });
+    this.disposables.push(walnut.map, walnut.normalMap, walnut.roughnessMap);
+    const setRepeat = (m: SurfaceMaps, x: number, y: number): void => {
+      for (const t of [m.map, m.normalMap, m.roughnessMap]) t?.repeat.set(x, y);
+    };
+    const surface = (m: SurfaceMaps, extra: ConstructorParameters<typeof MeshStandardMaterial>[0] = {}): MeshStandardMaterial => {
+      this.disposables.push(m.map, m.normalMap);
+      if (m.roughnessMap) this.disposables.push(m.roughnessMap);
+      return new MeshStandardMaterial({
+        map: m.map, normalMap: m.normalMap, ...(m.roughnessMap ? { roughnessMap: m.roughnessMap } : {}), roughness: 1, ...extra,
+      });
+    };
     // The room runs from the side wall (local x -10) to the window wall's outer
     // face (6.72). These planes used to run on to x = 16, 9 units out into the open
     // air past the window: a ghost wall, ceiling trim and floor standing in the sky
@@ -87,24 +96,32 @@ export class Desk {
     const ROOM_X1 = 6.72;
     const roomW = ROOM_X1 - ROOM_X0;
     const roomX = (ROOM_X0 + ROOM_X1) / 2;
-    /** shortens a plane's U range so a texture keeps its density when the plane is narrowed */
-    const narrowed = (g: PlaneGeometry, keep: number): PlaneGeometry => {
-      const uv = g.attributes.uv!;
-      for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * keep);
-      return g;
-    };
-    floorMap.repeat.set(5, 3.5);
-    const floor = new Mesh(narrowed(new PlaneGeometry(roomW, 18), roomW / 26), floorMat);
+    const FLOOR_Y = -1.28;
+
+    // sage-green plaster, warm enough that lamplight turns it golden, not grey
+    const plaster = plasterMaps([172, 184, 158], 11);
+    setRepeat(plaster, roomW / 3.4, 6.5 / 3.4);
+    const wall = surface(plaster, { roughness: 0.93, normalScale: new Vector2(0.55, 0.55) });
+    // satin-finished oak: planks about a hand wide, long runs with the odd butt joint
+    const oak = woodMaps({ boards: 6, base: [190, 138, 86], seed: 3, joints: 1, gap: 2.4, roughness: 0.46, normal: 2.8 });
+    setRepeat(oak, roomW / 6.6, 18 / 3.3);
+    const floorMat = surface(oak, { metalness: 0, envMapIntensity: 0.9 });
+    this.disposables.push(wall, floorMat);
+    const floor = new Mesh(new PlaneGeometry(roomW, 18), floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(roomX, -1.28, 0);
-    wallMap.repeat.set(5, 1.3);
-    const backWall = new Mesh(narrowed(new PlaneGeometry(roomW, 6.5), roomW / 26), wall);
+    floor.position.set(roomX, FLOOR_Y, 0);
+    const backWall = new Mesh(new PlaneGeometry(roomW, 6.5), wall);
     backWall.position.set(roomX, 1.9, -3.7);
     const sideWall = new Mesh(new PlaneGeometry(18, 6.5), wall);
     sideWall.rotation.y = Math.PI / 2;
     sideWall.position.set(-4.6, 1.9, 0.6);
-    this.group.add(floor, backWall, sideWall);
-    this.disposables.push(floor.geometry, backWall.geometry, sideWall.geometry);
+    // a plastered ceiling closes the room: it is what bounces the lamp back down
+    const ceilingMat = new MeshStandardMaterial({ color: '#e9e1d0', roughness: 0.95 });
+    const ceiling = new Mesh(new PlaneGeometry(roomW, 18), ceilingMat);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.set(roomX, 5.16, 0);
+    this.group.add(floor, backWall, sideWall, ceiling);
+    this.disposables.push(floor.geometry, backWall.geometry, sideWall.geometry, ceiling.geometry, ceilingMat);
 
     // the tower this floor belongs to: a curtain-wall skirt dropping from
     // the sill into the overcast. Without it the study reads as a box in
@@ -117,110 +134,151 @@ export class Desk {
     const skirt = new Mesh(new BoxGeometry(23, 26, 12.6), towerSkin);
     skirt.position.set(2.4, -14.4, 0.5);
     const sill = new Mesh(new BoxGeometry(23.6, 0.35, 13.2), towerSkin);
-    sill.position.set(2.4, -1.42, 0.5);
+    // its top face sits just under the floor: at -1.42 it stood 0.035 proud of the boards
+    // and hid the whole floor under dark glass-coloured slab
+    sill.position.set(2.4, -1.52, 0.5);
     this.group.add(skirt, sill);
     this.disposables.push(skirt.geometry, sill.geometry, towerSkin);
 
-    // baseboards ground the walls
-    const boardMaterial = new MeshStandardMaterial({ color: '#0e1420', roughness: 0.7 });
-    const backBoard = new Mesh(new BoxGeometry(roomW, 0.28, 0.07), boardMaterial);
-    backBoard.position.set(roomX, -1.15, -3.67);
-    const sideBoard = new Mesh(new BoxGeometry(0.07, 0.28, 18), boardMaterial);
-    sideBoard.position.set(-4.57, -1.15, 0.6);
-    this.group.add(backBoard, sideBoard);
-    this.disposables.push(backBoard.geometry, sideBoard.geometry, boardMaterial);
+    // painted raised-panel wainscot below a chair rail, with a deep baseboard
+    const wainscot = wainscotMaps([222, 211, 188], 5);
+    setRepeat(wainscot, roomW / WAINSCOT.bayW, 1);
+    const wainscotMat = surface(wainscot, { roughness: 0.55, normalScale: new Vector2(1.1, 1.1) });
+    // the side wall shares the drawing, with its own repeat
+    const wainscotSide: SurfaceMaps = { map: wainscot.map.clone(), normalMap: wainscot.normalMap.clone() };
+    setRepeat(wainscotSide, 18 / WAINSCOT.bayW, 1);
+    const wainscotSideMat = surface(wainscotSide, { roughness: 0.55, normalScale: new Vector2(1.1, 1.1) });
+    this.disposables.push(wainscotMat, wainscotSideMat);
+    const backPanel = new Mesh(new PlaneGeometry(roomW, WAINSCOT.height), wainscotMat);
+    backPanel.position.set(roomX, FLOOR_Y + WAINSCOT.height / 2, -3.69);
+    const sidePanel = new Mesh(new PlaneGeometry(18, WAINSCOT.height), wainscotSideMat);
+    sidePanel.rotation.y = Math.PI / 2;
+    sidePanel.position.set(-4.59, FLOOR_Y + WAINSCOT.height / 2, 0.6);
+    this.group.add(backPanel, sidePanel);
+    this.disposables.push(backPanel.geometry, sidePanel.geometry);
 
-    // — wall relief: slim shadow-gap reveals, no raised panel frames —
-    // (cream wainscot frames read as a period drawing room; the modern set
-    // keeps only the horizontal lines, in cool white)
-    const trimMaterial = new MeshStandardMaterial({ color: '#e6eaf2', roughness: 0.5 });
-    this.disposables.push(trimMaterial);
-    const crownBack = new Mesh(new BoxGeometry(roomW, 0.22, 0.12), trimMaterial);
-    crownBack.position.set(roomX, 5.05, -3.66);
-    const crownSide = new Mesh(new BoxGeometry(0.12, 0.22, 18), trimMaterial);
-    crownSide.position.set(-4.56, 5.05, 0.6);
-    // no chair rail — a mid-wall moulding line is the most period-reading
-    // detail a room can have; the modern set keeps only crown + cove
-    this.group.add(crownBack, crownSide);
-    this.disposables.push(crownBack.geometry, crownSide.geometry);
-    // a single recessed light cove tracing the back wall replaces the panels
-    const coveMaterial = new MeshStandardMaterial({
-      color: '#dfe7f7',
-      emissive: '#cfe0ff',
-      emissiveIntensity: 0.9,
-    });
-    const coveBack = new Mesh(new BoxGeometry(roomW, 0.05, 0.03), coveMaterial);
-    coveBack.position.set(roomX, 2.9, -3.63);
-    const coveSide = new Mesh(new BoxGeometry(0.03, 0.05, 18), coveMaterial);
-    coveSide.position.set(-4.55, 2.9, 0.6);
-    this.group.add(coveBack, coveSide);
-    this.disposables.push(coveBack.geometry, coveSide.geometry, coveMaterial);
+    const paint = new MeshStandardMaterial({ color: '#ddd3bd', roughness: 0.5 });
+    this.disposables.push(paint);
+    const railY = FLOOR_Y + WAINSCOT.height + 0.02;
+    const backRail = new Mesh(new BoxGeometry(roomW, 0.11, 0.1), paint);
+    backRail.position.set(roomX, railY, -3.66);
+    const sideRail = new Mesh(new BoxGeometry(0.1, 0.11, 18), paint);
+    sideRail.position.set(-4.56, railY, 0.6);
+    const backBoard = new Mesh(new BoxGeometry(roomW, 0.34, 0.09), paint);
+    backBoard.position.set(roomX, FLOOR_Y + 0.17, -3.66);
+    const sideBoard = new Mesh(new BoxGeometry(0.09, 0.34, 18), paint);
+    sideBoard.position.set(-4.56, FLOOR_Y + 0.17, 0.6);
+    // crown moulding where the plaster meets the ceiling
+    const crownBack = new Mesh(new BoxGeometry(roomW, 0.26, 0.16), paint);
+    crownBack.position.set(roomX, 5.02, -3.62);
+    const crownSide = new Mesh(new BoxGeometry(0.16, 0.26, 18), paint);
+    crownSide.position.set(-4.52, 5.02, 0.6);
+    this.group.add(backRail, sideRail, backBoard, sideBoard, crownBack, crownSide);
+    this.disposables.push(
+      backRail.geometry, sideRail.geometry, backBoard.geometry, sideBoard.geometry,
+      crownBack.geometry, crownSide.geometry,
+    );
+
+    // architrave and sill around the window the flight leaves by (opening: z -1.0..2.6, y 0.3..3.7)
+    const trim = (w: number, h: number, d: number, x: number, y: number, z: number): void => {
+      const m = new Mesh(new BoxGeometry(w, h, d), paint);
+      m.position.set(x, y, z);
+      this.group.add(m);
+      this.disposables.push(m.geometry);
+    };
+    trim(0.09, 0.22, 3.98, 6.44, 3.69, 0.8);
+    trim(0.09, 3.5, 0.2, 6.44, 1.99, -1.1);
+    trim(0.09, 3.5, 0.2, 6.44, 1.99, 2.7);
+    trim(0.34, 0.08, 4.1, 6.34, 0.3, 0.8);
+    trim(0.2, 0.2, 4.1, 6.4, 0.22, 0.8);
 
     // rug under the desk pulls the furniture into one composition
-    const rugMap = rugTexture();
-    const rugMaterial = new MeshStandardMaterial({ map: rugMap, roughness: 0.95 });
-    const rug = new Mesh(new PlaneGeometry(9.6, 6.4), rugMaterial);
+    const rugSet = rugMaps(8);
+    const rugMaterial = new MeshStandardMaterial({
+      map: rugSet.map, normalMap: rugSet.normalMap, normalScale: new Vector2(0.7, 0.7), roughness: 1,
+    });
+    const rug = new Mesh(new PlaneGeometry(7.6, 6.4), rugMaterial);
     rug.rotation.x = -Math.PI / 2;
     rug.rotation.z = 0.02;
-    rug.position.set(0.4, -1.272, 0.3);
+    rug.position.set(0.4, -1.272, 0.4);
     this.group.add(rug);
-    this.disposables.push(rug.geometry, rugMaterial, rugMap);
+    this.disposables.push(rug.geometry, rugMaterial, rugSet.map, rugSet.normalMap);
 
-    // curtains flanking the window opening, folded cloth
+    // curtains flanking the window opening: heavy linen, folded
     const curtainMaterial = new MeshStandardMaterial({
-      color: '#5a2333',
-      roughness: 0.85,
+      color: '#8a4a3c',
+      roughness: 0.92,
       side: DoubleSide,
     });
     this.disposables.push(curtainMaterial);
     for (const cz of [-1.55, 3.2] as const) {
-      const g = new PlaneGeometry(1.45, 4.35, 18, 1);
+      const g = new PlaneGeometry(1.45, 4.35, 36, 1);
       const pos = g.attributes.position!;
       for (let i = 0; i < pos.count; i++) {
-        pos.setZ(i, Math.sin(pos.getX(i) * 9) * 0.1);
+        const x = pos.getX(i);
+        pos.setZ(i, Math.sin(x * 11) * 0.09 + Math.sin(x * 4.3 + cz) * 0.05);
       }
       g.computeVertexNormals();
       const curtain = new Mesh(g, curtainMaterial);
       curtain.rotation.y = -Math.PI / 2;
-      curtain.position.set(6.42, 1.85, cz);
+      curtain.position.set(6.4, 1.85, cz);
       this.group.add(curtain);
       this.disposables.push(g);
     }
-    // curtain rod across the opening
-    const rodMaterial = new MeshStandardMaterial({ color: '#3a4050', roughness: 0.35, metalness: 0.7 });
-    const rod = new Mesh(new CylinderGeometry(0.035, 0.035, 6.2, 8), rodMaterial);
+    // curtain rod across the opening, brass, with finials
+    const brass = new MeshStandardMaterial({ color: '#c09a5e', roughness: 0.3, metalness: 1, envMapIntensity: 1.2 });
+    this.disposables.push(brass);
+    const rod = new Mesh(new CylinderGeometry(0.035, 0.035, 6.2, 10), brass);
     rod.rotation.x = Math.PI / 2;
-    rod.position.set(6.42, 4.05, 0.8);
+    rod.position.set(6.4, 4.05, 0.8);
     this.group.add(rod);
-    this.disposables.push(rod.geometry, rodMaterial);
+    for (const fz of [-2.3, 3.9]) {
+      const finial = new Mesh(new SphereGeometry(0.085, 12, 10), brass);
+      finial.position.set(6.4, 4.05, fz);
+      this.group.add(finial);
+      this.disposables.push(finial.geometry);
+    }
+    this.disposables.push(rod.geometry);
 
-    // framed art + a wall clock so the walls aren't bare planes
-    const frameMaterial = new MeshStandardMaterial({ color: '#12151d', roughness: 0.45 });
-    this.disposables.push(frameMaterial);
+    // framed art with a cream mat in walnut frames, and a wall clock, so the walls aren't bare planes
+    const frameMaterial = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, color: '#8f7258',
+    });
+    const matMaterial = new MeshStandardMaterial({ color: '#efe6d2', roughness: 0.9 });
+    this.disposables.push(frameMaterial, matMaterial);
     ([[-0.6, 2.6, 0], [1.9, 2.35, 1]] as const).forEach(([fx, fy, variant]) => {
       const art = frameArtTexture(variant);
       const artMaterial = new MeshStandardMaterial({ map: art, roughness: 0.8 });
       this.disposables.push(art, artMaterial);
-      const frame = new Mesh(new BoxGeometry(1.06, 1.36, 0.06), frameMaterial);
+      const frame = new Mesh(new BoxGeometry(1.14, 1.44, 0.07), frameMaterial);
       frame.position.set(fx, fy, -3.66);
-      const canvasArt = new Mesh(new PlaneGeometry(0.9, 1.2), artMaterial);
-      canvasArt.position.set(fx, fy, -3.62);
-      this.group.add(frame, canvasArt);
-      this.disposables.push(frame.geometry, canvasArt.geometry);
+      const mat = new Mesh(new PlaneGeometry(1.0, 1.3), matMaterial);
+      mat.position.set(fx, fy, -3.623);
+      const canvasArt = new Mesh(new PlaneGeometry(0.74, 0.98), artMaterial);
+      canvasArt.position.set(fx, fy, -3.619);
+      this.group.add(frame, mat, canvasArt);
+      this.disposables.push(frame.geometry, mat.geometry, canvasArt.geometry);
     });
+    const ink = new MeshStandardMaterial({ color: '#2a2622', roughness: 0.5 });
     const clockFace = new Mesh(
-      new CylinderGeometry(0.42, 0.42, 0.06, 24),
-      new MeshStandardMaterial({ color: '#e8e2d4', roughness: 0.5 }),
+      new CylinderGeometry(0.42, 0.42, 0.06, 32),
+      new MeshStandardMaterial({ color: '#f0e9d8', roughness: 0.5 }),
     );
     clockFace.rotation.z = Math.PI / 2;
     clockFace.position.set(-4.55, 3.1, -1.2);
-    const hourHand = new Mesh(new BoxGeometry(0.02, 0.05, 0.2), boardMaterial);
+    const clockRim = new Mesh(new TorusGeometry(0.43, 0.035, 8, 32), brass);
+    clockRim.rotation.y = Math.PI / 2;
+    clockRim.position.set(-4.52, 3.1, -1.2);
+    const hourHand = new Mesh(new BoxGeometry(0.02, 0.05, 0.2), ink);
     hourHand.position.set(-4.51, 3.1, -1.26);
-    const minuteHand = new Mesh(new BoxGeometry(0.02, 0.05, 0.3), boardMaterial);
+    const minuteHand = new Mesh(new BoxGeometry(0.02, 0.05, 0.3), ink);
     minuteHand.rotation.x = 2.1;
     minuteHand.position.set(-4.51, 3.12, -1.16);
-    this.group.add(clockFace, hourHand, minuteHand);
-    this.disposables.push(clockFace.geometry, clockFace.material as MeshStandardMaterial, hourHand.geometry, minuteHand.geometry);
+    this.group.add(clockFace, clockRim, hourHand, minuteHand);
+    this.disposables.push(
+      clockFace.geometry, clockFace.material as MeshStandardMaterial, clockRim.geometry,
+      hourHand.geometry, minuteHand.geometry, ink,
+    );
 
     // window wall at local x≈6.6 with the opening the path threads (world x≈7)
     const wallX = 6.6;
@@ -336,7 +394,7 @@ export class Desk {
     this.disposables.push(led.geometry, ledMaterial);
 
     // cool screen spill onto the desk and the emerging sheet
-    this.screenLight = new PointLight('#9fc4ff', 2.5, 5, 2);
+    this.screenLight = new PointLight('#9fc4ff', 1.1, 5, 2);
     this.screenLight.position.set(0.5, 0.5, 0);
     this.group.add(this.screenLight);
 
@@ -361,6 +419,7 @@ export class Desk {
         s.position.set(x, -0.1 - box.min.y, z); // rest on the desk top
         s.rotation.y = rotY;
         this.group.add(s);
+        this.lit(s);
         requestCompile(s);
       });
     };
@@ -379,6 +438,7 @@ export class Desk {
         s.position.set(x, -0.1 - box.min.y, z);
         s.rotation.y = rotY;
         this.group.add(s);
+        this.lit(s);
         requestCompile(s);
       });
     };
@@ -403,19 +463,27 @@ export class Desk {
         requestCompile(s);
       });
     };
-    // the desk itself: modern executive office desk — dark laminate slab on
-    // brushed-steel panel legs with a drawer pedestal. Top face lands exactly
-    // at y −0.10 where the laptop + props sit.
-    const deskTop = new MeshStandardMaterial({
-      color: '#262b38', roughness: 0.22, metalness: 0.18, envMapIntensity: 1.4,
+    // the desk itself: a walnut pedestal desk with a lacquered top and brass pulls.
+    // Its top face lands exactly at y −0.10 where the laptop + props sit.
+    const deskTop = new MeshPhysicalMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1,
+      clearcoat: 0.55, clearcoatRoughness: 0.22, envMapIntensity: 1.1,
+    });
+    const deskDark = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1,
+      color: '#a68e79', envMapIntensity: 0.9,
     });
     const deskSteel = new MeshStandardMaterial({
       color: '#9aa1b0', roughness: 0.16, metalness: 0.95, envMapIntensity: 1.6,
     });
-    const deskDark = new MeshStandardMaterial({
-      color: '#171b26', roughness: 0.42, metalness: 0.3, envMapIntensity: 1.2,
-    });
-    this.disposables.push(deskTop, deskSteel, deskDark);
+    const rubber = new MeshStandardMaterial({ color: '#1b1a19', roughness: 0.7 });
+    this.disposables.push(deskTop, deskSteel, deskDark, rubber);
+    /** a box face shows a proportional window of the grain, so small panels keep the top's grain density */
+    const grained = <T extends BufferGeometry>(g: T, su: number, sv: number, ou = 0, ov = 0): T => {
+      const uv = g.attributes.uv!;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, ou + uv.getX(i) * su, ov + uv.getY(i) * sv);
+      return g;
+    };
     // furniture is authored as loose boxes but SHIPS as three merged meshes —
     // one per material. Thirty-odd draw calls for static geometry is the
     // kind of thing that quietly eats the mobile call budget.
@@ -435,23 +503,25 @@ export class Desk {
       else furniture.set(m, [g]);
     };
     part(new BoxGeometry(7.0, 0.09, 4.3), deskTop, 0, -0.145, 0);
-    // slim fascia under the slab reads as the slab's thickness edge
-    part(new BoxGeometry(7.0, 0.07, 4.3), deskDark, 0, -0.222, 0);
+    // a thick moulded apron under the slab reads as the top's edge
+    part(grained(new BoxGeometry(7.0, 0.13, 4.3), 1, 0.05, 0, 0.3), deskDark, 0, -0.245, 0);
     // panel legs + modesty panel
-    part(new BoxGeometry(0.09, 1.09, 3.7), deskSteel, -3.32, -0.815, 0);
-    part(new BoxGeometry(0.09, 1.09, 3.7), deskSteel, 3.32, -0.815, 0);
-    part(new BoxGeometry(6.5, 0.62, 0.06), deskDark, 0, -0.58, -1.78);
-    // drawer pedestal with two faces + steel pulls
-    part(new BoxGeometry(1.5, 1.02, 1.0), deskDark, -2.35, -0.79, -0.9);
-    part(new BoxGeometry(1.38, 0.4, 0.04), deskTop, -2.35, -0.55, -0.39);
-    part(new BoxGeometry(1.38, 0.4, 0.04), deskTop, -2.35, -1.01, -0.39);
-    part(new BoxGeometry(0.5, 0.035, 0.03), deskSteel, -2.35, -0.44, -0.365);
-    part(new BoxGeometry(0.5, 0.035, 0.03), deskSteel, -2.35, -0.9, -0.365);
+    part(grained(new BoxGeometry(0.16, 1.09, 3.7), 0.4, 0.5), deskDark, -3.3, -0.815, 0);
+    part(grained(new BoxGeometry(0.16, 1.09, 3.7), 0.4, 0.5, 0.5), deskDark, 3.3, -0.815, 0);
+    part(grained(new BoxGeometry(6.5, 0.62, 0.06), 0.9, 0.15, 0, 0.5), deskDark, 0, -0.58, -1.78);
+    // drawer pedestal: two raised drawer fronts and brass pulls
+    part(grained(new BoxGeometry(1.5, 1.02, 1.0), 0.25, 0.25, 0.1, 0.1), deskDark, -2.35, -0.79, -0.9);
+    part(grained(new BoxGeometry(1.38, 0.4, 0.04), 0.2, 0.09, 0.4, 0.2), deskTop, -2.35, -0.55, -0.39);
+    part(grained(new BoxGeometry(1.38, 0.4, 0.04), 0.2, 0.09, 0.4, 0.6), deskTop, -2.35, -1.01, -0.39);
+    part(new BoxGeometry(0.5, 0.035, 0.03), brass, -2.35, -0.44, -0.365);
+    part(new BoxGeometry(0.5, 0.035, 0.03), brass, -2.35, -0.9, -0.365);
     // (the worn bookshelf that stood here read as a junk-room prop; the wall
     // of document binders below does the same job in an office register)
 
     // — wall unit of document binders behind the desk —
-    const shelfBoard = new MeshStandardMaterial({ color: '#202634', roughness: 0.5 });
+    const shelfBoard = new MeshStandardMaterial({
+      map: walnut.map, normalMap: walnut.normalMap, roughnessMap: walnut.roughnessMap, roughness: 1, color: '#9a8470',
+    });
     this.disposables.push(shelfBoard);
     // ONE material for every book on the wall. Detail comes from the spine
     // atlas instead of from colour: each book's box UVs are remapped into one
@@ -533,9 +603,9 @@ export class Desk {
       roughness: 0.18,
       metalness: 0.95,
     });
-    const cradleBase = new MeshStandardMaterial({ color: '#1b1f2b', roughness: 0.4 });
+    const cradleBase = deskDark;
     const cordMat = new MeshStandardMaterial({ color: '#8d94a6', roughness: 0.6 });
-    this.disposables.push(cradleSteel, cradleBase, cordMat);
+    this.disposables.push(cradleSteel, cordMat);
     this.cradle.position.set(2.95, -0.1, 0.42);
     this.cradle.rotation.y = -0.5;
     this.cradle.scale.setScalar(1.45);
@@ -579,14 +649,14 @@ export class Desk {
     const CX = 4.9;
     const CY = -1.28;
     const CZ = -3.15;
-    part(new BoxGeometry(2.6, 0.78, 0.62), deskDark, CX, CY + 0.52, CZ);
-    part(new BoxGeometry(2.68, 0.05, 0.68), deskTop, CX, CY + 0.935, CZ);
+    part(grained(new BoxGeometry(2.6, 0.78, 0.62), 0.37, 0.2, 0.1, 0.5), deskDark, CX, CY + 0.52, CZ);
+    part(grained(new BoxGeometry(2.68, 0.05, 0.68), 0.38, 0.16, 0.2, 0.7), deskTop, CX, CY + 0.935, CZ);
     for (const dx of [-0.65, 0.65]) {
-      part(new BoxGeometry(1.16, 0.62, 0.03), deskTop, CX + dx, CY + 0.52, CZ + 0.32);
-      part(new BoxGeometry(0.42, 0.03, 0.025), deskSteel, CX + dx, CY + 0.75, CZ + 0.35);
+      part(grained(new BoxGeometry(1.16, 0.62, 0.03), 0.17, 0.14, dx > 0 ? 0.6 : 0.3, 0.4), deskTop, CX + dx, CY + 0.52, CZ + 0.32);
+      part(new BoxGeometry(0.42, 0.03, 0.025), brass, CX + dx, CY + 0.75, CZ + 0.35);
     }
     for (const dx of [-1.15, 1.15]) {
-      part(new BoxGeometry(0.05, 0.14, 0.5), deskSteel, CX + dx, CY + 0.07, CZ);
+      part(new BoxGeometry(0.05, 0.14, 0.5), brass, CX + dx, CY + 0.07, CZ);
     }
 
     // modern task chair pulled up to the desk (its own group so the whole
@@ -595,7 +665,12 @@ export class Desk {
     chair.position.set(-2.3, -1.28, 2.5);
     chair.rotation.y = -2.45;
     this.group.add(chair);
-    const seatFabric = new MeshStandardMaterial({ color: '#2f3646', roughness: 0.85 });
+    const leather = leatherMaps([104, 62, 38], 31);
+    this.disposables.push(leather.map, leather.normalMap, leather.roughnessMap!);
+    const seatFabric = new MeshStandardMaterial({
+      map: leather.map, normalMap: leather.normalMap, roughnessMap: leather.roughnessMap, roughness: 1,
+      normalScale: new Vector2(0.9, 0.9),
+    });
     this.disposables.push(seatFabric);
     const chairParts = new Map<MeshStandardMaterial, BufferGeometry[]>();
     const chairPart = (
@@ -622,7 +697,7 @@ export class Desk {
         Math.cos(a) * 0.17, 0.1, Math.sin(a) * 0.17, [0, -a, 0],
       );
       chairPart(
-        new CylinderGeometry(0.045, 0.045, 0.04, 8), deskDark,
+        new CylinderGeometry(0.045, 0.045, 0.04, 8), rubber,
         Math.cos(a) * 0.33, 0.05, Math.sin(a) * 0.33, [0, 0, Math.PI / 2],
       );
     }
@@ -640,22 +715,31 @@ export class Desk {
       this.group.add(new Mesh(merged, material));
       this.disposables.push(merged);
     }
-    // slim ceiling LED panel over the desk — the modern room's key light
-    const panelFrame = new MeshStandardMaterial({ color: '#242936', roughness: 0.4, metalness: 0.5 });
-    const panelFace = new MeshStandardMaterial({
-      color: '#eef2fa',
-      emissive: '#e8eefb',
-      emissiveIntensity: 1.7,
+    // pendant over the desk: a green enamel dome on a cord, a bare warm bulb inside
+    const enamel = new MeshStandardMaterial({
+      color: '#27503f', roughness: 0.32, metalness: 0.35, side: DoubleSide, envMapIntensity: 1.2,
     });
-    const ledFrame = new Mesh(new BoxGeometry(2.4, 0.06, 1.3), panelFrame);
-    ledFrame.position.set(0.9, 4.52, -0.3);
-    const ledFace = new Mesh(new BoxGeometry(2.2, 0.02, 1.1), panelFace);
-    ledFace.position.set(0.9, 4.485, -0.3);
-    this.group.add(ledFrame, ledFace);
-    this.disposables.push(ledFrame.geometry, ledFace.geometry, panelFrame, panelFace);
-    const panelLight = new PointLight('#eef3ff', 9, 12, 1.6);
-    panelLight.position.set(0.9, 3.7, -0.3);
+    const bulbGlow = new MeshStandardMaterial({
+      color: '#fff1d6', emissive: '#ffd49a', emissiveIntensity: 1.5,
+    });
+    this.disposables.push(enamel, bulbGlow);
+    const PX = 0.9;
+    const PZ = -0.3;
+    const cord = new Mesh(new CylinderGeometry(0.012, 0.012, 1.0, 6), ink);
+    cord.position.set(PX, 4.66, PZ);
+    const dome = new Mesh(new SphereGeometry(0.5, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), enamel);
+    dome.position.set(PX, 4.04, PZ);
+    const cap = new Mesh(new CylinderGeometry(0.05, 0.07, 0.1, 12), brass);
+    cap.position.set(PX, 4.55, PZ);
+    const pendantBulb = new Mesh(new SphereGeometry(0.11, 16, 12), bulbGlow);
+    pendantBulb.position.set(PX, 4.0, PZ);
+    this.group.add(cord, dome, cap, pendantBulb);
+    this.disposables.push(cord.geometry, dome.geometry, cap.geometry, pendantBulb.geometry);
+    // its light, and the warm bounce that fills the ceiling and walls around it
+    const panelLight = new PointLight('#ffd3a0', 9, 14, 1.6);
+    panelLight.position.set(PX, 3.7, PZ);
     this.group.add(panelLight);
+    this.group.add(new HemisphereLight('#ffe3c2', '#5c3d27', 0.5));
 
     // flowers rising from the vase mouth — stems + heads + a leaf each
     const flowers = new Group();
@@ -756,36 +840,84 @@ export class Desk {
     this.group.add(pen);
     this.disposables.push(pen.geometry, penMaterial);
 
-    // modern LED task lamp: matte-black post + horizontal light bar with a
-    // white emissive underside — the pool that frames the letter is white now
-    const metal = new MeshStandardMaterial({ color: '#1c202b', roughness: 0.4, metalness: 0.6 });
-    const lampBase = new Mesh(new CylinderGeometry(0.16, 0.18, 0.04, 16), metal);
-    lampBase.position.set(1.75, -0.08, -1.85);
-    const post = new Mesh(new CylinderGeometry(0.025, 0.025, 1.05, 8), metal);
-    post.position.set(1.75, 0.44, -1.85);
-    const arm = new Mesh(new BoxGeometry(0.78, 0.045, 0.07), metal);
-    arm.position.set(1.42, 0.97, -1.8);
-    this.group.add(lampBase, post, arm);
-    this.disposables.push(lampBase.geometry, post.geometry, arm.geometry, metal);
+    // the desk lamp: a brass-jointed arm with a green enamel shade, bulb inside. It is
+    // the key light of the room, and on HIGH the only one that casts shadows
+    const rod3 = (a: Vector3, b: Vector3, r: number, m: MeshStandardMaterial): void => {
+      const len = a.distanceTo(b);
+      const mesh = new Mesh(new CylinderGeometry(r, r, len, 10), m);
+      mesh.position.copy(a).add(b).multiplyScalar(0.5);
+      mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      this.group.add(mesh);
+      this.disposables.push(mesh.geometry);
+    };
+    const joint = (at: Vector3, r: number): void => {
+      const mesh = new Mesh(new SphereGeometry(r, 12, 10), brass);
+      mesh.position.copy(at);
+      this.group.add(mesh);
+      this.disposables.push(mesh.geometry);
+    };
+    const lampBase = new Mesh(new CylinderGeometry(0.17, 0.2, 0.05, 28), brass);
+    lampBase.position.set(1.8, -0.075, -1.85);
+    this.group.add(lampBase);
+    this.disposables.push(lampBase.geometry);
+    const J0 = new Vector3(1.8, -0.05, -1.85);
+    const J1 = new Vector3(1.62, 0.64, -1.8);
+    const J2 = new Vector3(1.22, 0.95, -1.48);
+    rod3(J0, J1, 0.022, brass);
+    rod3(J1, J2, 0.02, brass);
+    joint(J1, 0.045);
+    joint(J2, 0.05);
+    // aimed at the middle of the desk where the letter and the paper plane's first fold will lie
+    const aim = new Vector3(1.0, -0.1, -0.7);
+    const toAim = aim.clone().sub(J2).normalize();
+    const shade = new Mesh(new CylinderGeometry(0.075, 0.27, 0.34, 32, 1, true), enamel);
+    shade.position.copy(J2).addScaledVector(toAim, 0.17);
+    shade.quaternion.setFromUnitVectors(new Vector3(0, -1, 0), toAim);
+    const lampBulb = new Mesh(new SphereGeometry(0.075, 16, 12), bulbGlow);
+    lampBulb.position.copy(J2).addScaledVector(toAim, 0.2);
+    // the bulb must neither merge nor cast: the lamp's own light sits inside it
+    lampBulb.userData.glow = true;
+    this.group.add(shade, lampBulb);
+    this.disposables.push(shade.geometry, lampBulb.geometry);
 
-    // lamp hangs ahead-left of the flight start so its pool frames the letter
-    this.lamp = new PointLight('#f2f5ff', 18, 16, 1.8);
-    this.lamp.position.set(1.1, 0.9, -1.7);
-    this.group.add(this.lamp);
+    this.lamp = new SpotLight('#ffcc8f', 10, 0, 0.82, 0.6, 1.5);
+    this.lamp.position.copy(lampBulb.position);
+    this.lamp.target.position.copy(aim);
+    this.group.add(this.lamp, this.lamp.target);
+    if (this.shadows) {
+      this.lamp.castShadow = true;
+      this.lamp.shadow.mapSize.set(1024, 1024);
+      this.lamp.shadow.camera.near = 0.2;
+      this.lamp.shadow.camera.far = 9;
+      this.lamp.shadow.bias = -0.0004;
+      this.lamp.shadow.normalBias = 0.012;
+      this.lamp.shadow.radius = 5;
+    }
 
-    // visible LED strip on the bar's underside so the lamp itself blooms
-    const bulbMaterial = new MeshStandardMaterial({
-      color: '#f4f7ff',
-      emissive: '#f0f4ff',
-      emissiveIntensity: 3.0,
+    // a lamp on the credenza too: a ceramic body under a cream linen shade
+    const ceramic = new MeshStandardMaterial({ color: '#d9d2c2', roughness: 0.28 });
+    const linen = new MeshStandardMaterial({
+      color: '#f1dfbd', emissive: '#ffc98a', emissiveIntensity: 0.85, roughness: 0.9, side: DoubleSide,
     });
-    const bulb = new Mesh(new BoxGeometry(0.68, 0.015, 0.05), bulbMaterial);
-    bulb.position.set(1.42, 0.944, -1.8);
-    this.group.add(bulb);
-    this.disposables.push(bulb.geometry, bulbMaterial);
+    this.disposables.push(ceramic, linen);
+    const TLX = 4.3;
+    const TLZ = -3.1;
+    const TLY = -0.3; // credenza top
+    const tlBody = new Mesh(new SphereGeometry(0.2, 18, 14), ceramic);
+    tlBody.scale.y = 1.25;
+    tlBody.position.set(TLX, TLY + 0.25, TLZ);
+    const tlNeck = new Mesh(new CylinderGeometry(0.035, 0.05, 0.28, 10), brass);
+    tlNeck.position.set(TLX, TLY + 0.57, TLZ);
+    const tlShade = new Mesh(new CylinderGeometry(0.2, 0.32, 0.36, 28, 1, true), linen);
+    tlShade.position.set(TLX, TLY + 0.8, TLZ);
+    this.group.add(tlBody, tlNeck, tlShade);
+    this.disposables.push(tlBody.geometry, tlNeck.geometry, tlShade.geometry);
+    const tableLight = new PointLight('#ffc98a', 2.6, 9, 1.7);
+    tableLight.position.set(TLX, TLY + 0.8, TLZ + 0.15);
+    this.group.add(tableLight);
 
-    // cool moon fill from the window side keeps the room readable
-    const moon = new PointLight('#8fa8cc', 4, 20, 1.6);
+    // cool moonlight from the window side: the counterpoint to all that tungsten
+    const moon = new PointLight('#86a2d6', 3.4, 22, 1.6);
     moon.position.set(3.5, 2.6, 2.5);
     this.group.add(moon);
 
@@ -829,7 +961,7 @@ export class Desk {
     const drop: Mesh[] = [];
     this.group.traverse((o) => {
       const mesh = o as Mesh;
-      if (!mesh.isMesh || (mesh as unknown as InstancedMesh).isInstancedMesh) return;
+      if (!mesh.isMesh || (mesh as unknown as InstancedMesh).isInstancedMesh || mesh.userData.glow) return;
       // anything under a moving parent must keep its own transform
       for (let p: Object3D | null = mesh; p; p = p.parent) if (p === this.cradle) return;
       const material = mesh.material;
@@ -852,11 +984,23 @@ export class Desk {
       this.group.add(new Mesh(merged, material));
       this.disposables.push(merged);
     }
+    this.lit(this.group);
+  }
+
+  /** On HIGH the lamp's shadows fall on everything in the room, and everything in it throws them. */
+  private lit(root: Object3D): void {
+    if (!this.shadows) return;
+    root.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh || mesh.userData.glow) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    });
   }
 
   update(time: number): void {
     // live-screen flicker: the send is happening right now
-    this.screenLight.intensity = 2.5 + Math.sin(time * 2.6) * 0.6;
+    this.screenLight.intensity = 1.1 + Math.sin(time * 2.6) * 0.25;
 
     // Newton's cradle: only the end balls move, and only one at a time —
     // the middle three hang dead, which is the whole reason it reads as one
