@@ -272,7 +272,7 @@ export class Engine {
     // fixed roll-out point, not a story-t sample: the flight now turns off
     // the runway into the arrival office, so sampling near t=1 would drag the
     // whole airfield along with the turn
-    this.landing = new Landing(new Vector3(270, 0.5, 0));
+    this.landing = new Landing(new Vector3(270, 0.5, 0), this.quality);
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);
@@ -800,7 +800,7 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
-    this.rooftops.update(time, this.lampLevel);
+    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
@@ -831,10 +831,16 @@ export class Engine {
     this.plane.setBeamHit(
       this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color, this.delivered),
     );
+    // dev hook for automated inspection: `window.__cam = { p: [x,y,z], l: [x,y,z] }` takes the camera
+    const hook = this.probe ? (window as unknown as { __cam?: { p: number[]; l: number[] } }).__cam : undefined;
+    if (hook) {
+      this.camera.position.set(hook.p[0]!, hook.p[1]!, hook.p[2]!);
+      this.camera.lookAt(hook.l[0]!, hook.l[1]!, hook.l[2]!);
+    }
     // the delivery readout, pinned to the lamp
     this.camera.updateMatrixWorld();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
-    this.city.update(t, time);
+    this.city.update(t, time, this.rig.planeWorldPos);
     this.copilot.update(
       this.rig.planeWorldPos,
       this.plane.group.quaternion,

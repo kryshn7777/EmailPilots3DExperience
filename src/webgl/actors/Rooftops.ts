@@ -196,9 +196,10 @@ export class Rooftops {
   }
 
   /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
-  update(time: number, night = 1): void {
+  update(time: number, night = 1, focus?: Vector3): void {
     if (!this.group.visible) return;
     this.lamps?.setLevel(night);
+    if (focus) this.lamps?.follow(focus);
     // the pools of lamplight painted on the streets fade with the lamps
     if (this.groundMaterial) this.groundMaterial.emissiveIntensity = 0.5 * night;
     this.cars?.update(time);

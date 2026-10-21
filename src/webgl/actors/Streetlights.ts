@@ -13,6 +13,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
+  PointLight,
   Points,
   PointsMaterial,
   Quaternion,
@@ -57,9 +58,16 @@ export class Streetlights {
   private lens: MeshBasicMaterial;
   private cone: ShaderMaterial | null = null;
   private halo: PointsMaterial;
+  /** a few real lights, lent to whichever lamps are nearest the flight (HIGH only) */
+  private pool: PointLight[] = [];
+  private spots: { x: number; z: number }[] = [];
+  private reach = 0;
+  private scale = 1;
+  private local = new Vector3();
   private disposables: { dispose(): void }[] = [];
 
   constructor(lamps: Lamp[], tier: Tier, scale = 1) {
+    this.scale = scale;
     const parts: BufferGeometry[] = [];
     parts.push(new CylinderGeometry(0.06, 0.075, 0.12, 8).translate(0, 0.06, 0));
     parts.push(new CylinderGeometry(0.024, 0.04, POLE, 8).translate(0, POLE / 2 + 0.1, 0));
@@ -111,6 +119,19 @@ export class Streetlights {
     this.group.add(haloPoints);
     this.disposables.push(haloGeometry, this.halo);
 
+    // the real lights, lent out by `follow`
+    if (tier === 'high') {
+      this.spots = lamps.map((l) => ({
+        x: l.x + Math.sin(l.yaw) * REACH * scale, z: l.z + Math.cos(l.yaw) * REACH * scale,
+      }));
+      this.reach = 5.2 * scale * scale;
+      for (let i = 0; i < 6; i++) {
+        const light = new PointLight('#ffbd78', this.reach, 9 * scale, 1.5);
+        this.pool.push(light);
+        this.group.add(light);
+      }
+    }
+
     // the cone of light under each head: soft at the edges, fading toward the ground
     if (tier === 'high') {
       const cone = new ConeGeometry(0.7, HEAD_Y, 20, 1, true);
@@ -156,8 +177,36 @@ export class Streetlights {
     }
   }
 
+  /**
+   * Real light from the lamps nearest `focus` (a world position): the pool's few point lights
+   * hop to the closest lamp heads each frame, so streets, cars and facades near the flight are
+   * lit by an actual lamp while the rest only glow. The lights' count never changes.
+   */
+  follow(focus: Vector3): void {
+    if (!this.pool.length) return;
+    this.group.updateWorldMatrix(true, false);
+    this.local.copy(focus);
+    this.group.worldToLocal(this.local);
+    const taken: number[] = [];
+    for (let k = 0; k < this.pool.length; k++) {
+      let best = -1;
+      let bestD = Infinity;
+      for (let i = 0; i < this.spots.length; i++) {
+        if (taken.includes(i)) continue;
+        const dx = this.spots[i]!.x - this.local.x;
+        const dz = this.spots[i]!.z - this.local.z;
+        const d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      taken.push(best);
+      const spot = this.spots[best]!;
+      this.pool[k]!.position.set(spot.x, (HEAD_Y - 0.1) * this.scale, spot.z);
+    }
+  }
+
   /** 0 in full daylight, 1 at night: the lenses, halos and cones follow it */
   setLevel(level: number): void {
+    for (const l of this.pool) l.intensity = this.reach * level;
     this.lens.color.copy(LIGHT).multiplyScalar(0.5 + 1.9 * level);
     this.halo.opacity = 0.9 * level;
     this.halo.visible = level > 0.02;

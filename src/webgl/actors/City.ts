@@ -5,7 +5,6 @@ import {
   Color,
   CylinderGeometry,
   DoubleSide,
-  DynamicDrawUsage,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -21,7 +20,6 @@ import {
   ShaderMaterial,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   CITY_EXTENT,
   CROSS_STREET_X,
@@ -32,6 +30,7 @@ import { neonSignTexture, roadTexture } from '../bake/CanvasTextures';
 import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Streetlights, type Lamp } from './Streetlights';
+import { StreetCars } from './StreetCars';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -72,7 +71,7 @@ export class City {
   private landingPos = new Vector3();
   private landingAhead = new Vector3();
   private kitCity: KitCity | null = null;
-  private streetlights: Streetlights | null = null;
+
   private color = new Color();
   private disposables: { dispose(): void }[] = [];
 
@@ -90,6 +89,7 @@ export class City {
     this.disposables.push(ground.geometry, groundMaterial);
 
     this.buildTraffic();
+    this.buildCars(quality);
     void this.init(path, quality);
   }
 
@@ -171,7 +171,7 @@ export class City {
     this.streetlights = new Streetlights(lampList, quality.tier, 0.85);
     this.group.add(this.streetlights.group);
     const poolMaterial = new MeshBasicMaterial({
-      map: glowTexture(), color: '#ffb468', transparent: true, opacity: 0.26, blending: AdditiveBlending,
+      map: glowTexture(), color: '#ffb468', transparent: true, opacity: quality.tier === 'high' ? 0.1 : 0.2, blending: AdditiveBlending,
       depthWrite: false, toneMapped: false,
     });
     const poolGeometry = new PlaneGeometry(2.3, 2.3);
@@ -280,18 +280,8 @@ export class City {
   }
 
   private trafficMaterial: ShaderMaterial | null = null;
-  private cars!: InstancedMesh;
-  private carLanes: { origin: number; z: number; dir: 1 | -1; phase: number; speed: number }[] = [];
-  private carLightGeometry = new BufferGeometry();
-  private carMatrix = new Matrix4();
-  private carQuatFwd = new Quaternion();
-  private carQuatBack = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI);
-  private carPos = new Vector3();
-  // 1.35: the district grew and the canyon road with it, which left the cars
-  // reading as specks against the block faces. Applied as instance scale so
-  // the head/taillight sprites, which are placed from the same lane formula,
-  // keep sitting on the bodies.
-  private carScale = new Vector3(1.35, 1.35, 1.35);
+  private streetCars: StreetCars | null = null;
+  private streetlights: Streetlights | null = null;
 
   private static readonly CANYON_LEN = 66;
   private static readonly CANYON_X0 = -32;
@@ -299,7 +289,8 @@ export class City {
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
   private buildTraffic(): void {
     const road = roadTexture();
-    const roadMat = new MeshStandardMaterial({ map: road, roughness: 0.95 });
+    // wet asphalt: the lamps and the neon streak in it
+    const roadMat = new MeshStandardMaterial({ map: road, roughness: 0.42, metalness: 0.1 });
     this.disposables.push(roadMat, road);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
@@ -377,105 +368,27 @@ export class City {
     this.group.add(traffic);
     this.disposables.push(g, this.trafficMaterial);
 
-    this.buildCars(rand);
   }
 
   /**
-   * Visible vehicles: instanced body+cabin boxes driving both canyon lanes,
-   * with paired head/taillight glow sprites. Simulated in JS each frame so the
-   * bodies, lights, and scroll surge all share one travel formula.
+   * The canyon's traffic: the same cars as the neighbourhood (StreetCars: six body types with
+   * interiors, lamps, spinning wheels, braking and car-following), drawn 1.35x larger so they
+   * read against the block faces, one lane each way down the canyon road.
    */
-  private buildCars(rand: () => number): void {
-    const body = new BoxGeometry(0.5, 0.14, 0.24);
-    body.translate(0, 0.1, 0);
-    const cabin = new BoxGeometry(0.26, 0.11, 0.2);
-    cabin.translate(-0.04, 0.22, 0);
-    const carGeometry = mergeGeometries([body, cabin]);
-    body.dispose();
-    cabin.dispose();
-
-    const paint = new MeshStandardMaterial({
-      color: '#ffffff',
-      roughness: 0.4,
-      metalness: 0.5,
-      emissive: '#10141f',
-      emissiveIntensity: 0.7,
+  private buildCars(quality: Quality): void {
+    const x0 = City.CANYON_X0;
+    const x1 = City.CANYON_X0 + City.CANYON_LEN;
+    const n = quality.tier === 'high' ? 9 : 5;
+    this.streetCars = new StreetCars(quality, [], {
+      scale: 1.35,
+      lanes: [
+        // z -1.1 drives -x (oncoming, headlights at the camera); z +1.1 drives +x with the flight
+        { z: -1.1, dir: -1, x0, x1, count: n },
+        { z: 1.1, dir: 1, x0, x1, count: n },
+      ],
     });
-    const PAINTS = ['#3a4356', '#565d6e', '#2c3242', '#5d3a3a', '#38504c', '#454a58'];
-
-    const CARS = 22;
-    this.cars = new InstancedMesh(carGeometry, paint, CARS);
-    this.cars.instanceMatrix.setUsage(DynamicDrawUsage);
-    for (let i = 0; i < CARS; i++) {
-      // z −1.1 lane drives −x (oncoming, headlights at the camera);
-      // z +1.1 lane drives +x with the flight (taillights)
-      const oncoming = i % 2 === 0;
-      this.carLanes.push({
-        origin: City.CANYON_X0,
-        z: oncoming ? -1.1 : 1.1,
-        dir: oncoming ? -1 : 1,
-        phase: rand(),
-        speed: 2.6 + rand() * 1.4,
-      });
-      this.cars.setColorAt(i, this.color.set(PAINTS[Math.floor(rand() * PAINTS.length)]!));
-    }
-    if (this.cars.instanceColor) this.cars.instanceColor.needsUpdate = true;
-    this.group.add(this.cars);
-    this.disposables.push(carGeometry, paint, this.cars);
-
-    // 4 glow sprites per car, positions rewritten from the simulation
-    const lightPos = new Float32Array(CARS * 4 * 3);
-    const lightHue = new Float32Array(CARS * 4);
-    for (let i = 0; i < CARS; i++) {
-      lightHue[i * 4] = 0;
-      lightHue[i * 4 + 1] = 0;
-      lightHue[i * 4 + 2] = 1;
-      lightHue[i * 4 + 3] = 1;
-    }
-    const lightAttr = new Float32BufferAttribute(lightPos, 3);
-    lightAttr.setUsage(DynamicDrawUsage);
-    this.carLightGeometry.setAttribute('position', lightAttr);
-    this.carLightGeometry.setAttribute('aHue', new Float32BufferAttribute(lightHue, 1));
-    const glowMaterial = new ShaderMaterial({
-      vertexShader: carGlowVert,
-      fragmentShader: carFrag,
-      uniforms: { uIntensity: { value: 2.6 } },
-      transparent: true,
-      depthWrite: false,
-      blending: AdditiveBlending,
-    });
-    const glows = new Points(this.carLightGeometry, glowMaterial);
-    glows.frustumCulled = false;
-    this.group.add(glows);
-    this.disposables.push(this.carLightGeometry, glowMaterial);
-  }
-
-  private updateCars(surgedTime: number): void {
-    const posAttr = this.carLightGeometry.attributes.position!;
-    const arr = posAttr.array as Float32Array;
-    for (let i = 0; i < this.carLanes.length; i++) {
-      const lane = this.carLanes[i]!;
-      const travel =
-        (lane.phase * City.CANYON_LEN + surgedTime * lane.speed) % City.CANYON_LEN;
-      const x = lane.origin + (lane.dir === 1 ? travel : City.CANYON_LEN - travel);
-      this.carPos.set(x, 0.02, lane.z);
-      this.carMatrix.compose(
-        this.carPos,
-        lane.dir === 1 ? this.carQuatFwd : this.carQuatBack,
-        this.carScale,
-      );
-      this.cars.setMatrixAt(i, this.carMatrix);
-      // lights: white pair at the nose (travel direction), red pair at the tail
-      const nose = x + lane.dir * 0.26;
-      const tail = x - lane.dir * 0.26;
-      const o = i * 12;
-      arr[o] = nose; arr[o + 1] = 0.12; arr[o + 2] = lane.z - 0.08;
-      arr[o + 3] = nose; arr[o + 4] = 0.12; arr[o + 5] = lane.z + 0.08;
-      arr[o + 6] = tail; arr[o + 7] = 0.14; arr[o + 8] = lane.z - 0.08;
-      arr[o + 9] = tail; arr[o + 10] = 0.14; arr[o + 11] = lane.z + 0.08;
-    }
-    this.cars.instanceMatrix.needsUpdate = true;
-    posAttr.needsUpdate = true;
+    this.group.add(this.streetCars.group);
+    this.disposables.push(this.streetCars);
   }
 
   private buildWindows(rows: [Building, { hx: number; hz: number }][]): void {
@@ -662,12 +575,14 @@ export class City {
     }
   }
 
-  update(t: number, time = 0): void {
+  update(t: number, time = 0, focus?: Vector3): void {
     if (!this.group.visible) return;
+    this.streetlights?.setLevel(1);
+    if (focus) this.streetlights?.follow(focus);
     // traffic loops on absolute time only — the scene lives on its own, with
     // or without scroll (scroll-coupled surge removed by request)
     if (this.trafficMaterial) this.trafficMaterial.uniforms.uTime!.value = time;
-    if (this.cars) this.updateCars(time);
+    this.streetCars?.update(time);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
     let colorsDirty = false;

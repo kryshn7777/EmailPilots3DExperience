@@ -71,7 +71,17 @@ interface Driver extends Car {
 interface Lane {
   z: number;
   dir: 1 | -1;
+  /** the stretch of road the lane covers, along x */
+  x0: number;
+  x1: number;
   drivers: Driver[];
+}
+
+/** Where traffic runs, when it is not the neighbourhood's own streets. */
+export interface CarOptions {
+  lanes: { z: number; dir: 1 | -1; x0: number; x1: number; count: number }[];
+  /** uniform scale of every car, speed and spacing (the night city draws its cars larger) */
+  scale?: number;
 }
 
 /** One set of instanced meshes for a vehicle type: the lean tier, or the close-up one. */
@@ -171,6 +181,8 @@ export class StreetCars {
   private last = -1;
   private disposables: { dispose(): void }[] = [];
   private ready = false;
+  /** uniform scale of the whole fleet (1 in the neighbourhood) */
+  private k = 1;
 
   // the camera, seen by the last frame that drew these cars (see `init`)
   private eye = new Vector3();
@@ -193,8 +205,11 @@ export class StreetCars {
     private quality: Quality,
     /** parked-car spots: x, z, heading in radians */
     private parked: { x: number; z: number; yaw: number }[],
+    /** lanes of its own (the night city's canyon); absent means the neighbourhood's streets */
+    private options?: CarOptions,
   ) {
     this.qFlip.setFromAxisAngle(this.Y, Math.PI);
+    this.k = options?.scale ?? 1;
     void this.init();
   }
 
@@ -239,22 +254,28 @@ export class StreetCars {
     const car = (type: number, x: number, z: number, yaw: number): Car => ({
       idx: this.cars.length, type, tint: paintFor(type), x, z, yaw, scale: 1, odo: rand() * 40, brake: 0, near: false,
     });
-    for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
-      const zc = iz * d + lotD + street / 2;
-      for (const dir of [1, -1] as const) {
-        const lane: Lane = { z: zc + dir * LANE_OFFSET, dir, drivers: [] };
-        const length = X1 - X0;
-        for (let k = 0; k < perLane; k++) {
-          const s = ((k + rand() * 0.6) / perLane) * length;
-          const type = pick(TRAFFIC);
-          const driver: Driver = {
-            ...car(type, 0, lane.z, dir > 0 ? 0 : Math.PI), s,
-            v: 2.1 + rand() * 0.8, vMax: 2.1 + rand() * 0.8,
-          };
-          this.cars.push(driver);
-          lane.drivers.push(driver);
-        }
-        this.lanes.push(lane);
+    const k0 = this.k;
+    const addLane = (z: number, dir: 1 | -1, x0: number, x1: number, count: number): void => {
+      const lane: Lane = { z, dir, x0, x1, drivers: [] };
+      const length = x1 - x0;
+      for (let k = 0; k < count; k++) {
+        const s = ((k + rand() * 0.6) / count) * length;
+        const type = pick(TRAFFIC);
+        const driver: Driver = {
+          ...car(type, 0, lane.z, dir > 0 ? 0 : Math.PI), s,
+          v: (2.1 + rand() * 0.8) * k0, vMax: (2.1 + rand() * 0.8) * k0,
+        };
+        this.cars.push(driver);
+        lane.drivers.push(driver);
+      }
+      this.lanes.push(lane);
+    };
+    if (this.options) {
+      for (const l of this.options.lanes) addLane(l.z, l.dir, l.x0, l.x1, l.count);
+    } else {
+      for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+        const zc = iz * d + lotD + street / 2;
+        for (const dir of [1, -1] as const) addLane(zc + dir * LANE_OFFSET, dir, X0, X1, perLane);
       }
     }
     this.moving = this.cars.length;
@@ -380,20 +401,21 @@ export class StreetCars {
     }
     const dt = this.last < 0 ? 0.016 : MathUtils.clamp(time - this.last, 0, 0.1);
     this.last = time;
-    const length = X1 - X0;
+    const k = this.k;
 
     for (const lane of this.lanes) {
+      const length = lane.x1 - lane.x0;
       const ds = lane.drivers;
       // order along the lane, so each car knows who is directly ahead
       ds.sort((a, b) => a.s - b.s);
       for (let i = 0; i < ds.length; i++) {
         const car = ds[i]!;
         const ahead = ds[(i + 1) % ds.length]!;
-        const len = this.types[car.type]!.length;
-        let gap = ahead.s - car.s - (this.types[ahead.type]!.length + len) / 2;
+        const len = this.types[car.type]!.length * k;
+        let gap = ahead.s - car.s - (this.types[ahead.type]!.length * k + len) / 2;
         if (ds.length > 1 && i === ds.length - 1) gap += length;
         // roll to a stop short of the car in front, ease back to cruising speed
-        const want = car.vMax * MathUtils.clamp((gap - 0.35) / 1.4, 0, 1);
+        const want = car.vMax * MathUtils.clamp((gap - 0.35 * k) / (1.4 * k), 0, 1);
         // the brake lamps light while the car is shedding speed, and while it waits
         const braking = want < car.v - 0.12 || car.v < 0.2;
         car.brake += ((braking ? 1 : 0) - car.brake) * Math.min(1, dt * (braking ? 14 : 6));
@@ -402,9 +424,9 @@ export class StreetCars {
         car.odo += car.v * dt;
         if (car.s >= length) car.s -= length;
 
-        car.x = lane.dir > 0 ? X0 + car.s : X1 - car.s;
+        car.x = lane.dir > 0 ? lane.x0 + car.s : lane.x1 - car.s;
         const fade = MathUtils.smoothstep(car.s, 0, FADE) * (1 - MathUtils.smoothstep(car.s, length - FADE, length));
-        car.scale = Math.max(fade, 0.001);
+        car.scale = Math.max(fade, 0.001) * k;
       }
     }
     this.draw(force);
@@ -471,7 +493,7 @@ export class StreetCars {
         }
         // headlight pool ahead of the car
         this.pools.setMatrixAt(
-          car.idx, this.m4.compose(this.p.set(x + fwd * (type.length / 2 + 1.1 * scale), 0.035, z), this.q,
+          car.idx, this.m4.compose(this.p.set(x + fwd * (type.length / 2 + 1.1) * scale, 0.035, z), this.q,
             this.sc.set(2.6 * scale, 1, 1.5 * scale)),
         );
       }
@@ -518,7 +540,7 @@ export class StreetCars {
    */
   private writeWheels(tier: Tier, type: CarType, k: number, car: Car): void {
     const offsets = type.wheelOffsets!;
-    const spin = (car.odo / type.wheelRadius!) % (Math.PI * 2);
+    const spin = (car.odo / (type.wheelRadius! * this.k)) % (Math.PI * 2);
     for (let w = 0; w < 4; w++) {
       const off = offsets[w]!;
       const right = off[2]! > 0;

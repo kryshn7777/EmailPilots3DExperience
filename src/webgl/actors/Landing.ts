@@ -27,6 +27,8 @@ import {
 } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
+import { AIRLINER, Airliner } from './Airliner';
+import type { Quality } from '../quality';
 
 /**
  * CH10: a real dawn airfield. Marked runway with edge/threshold lights, an
@@ -53,9 +55,14 @@ export class Landing {
   private screenMaterial: MeshStandardMaterial | null = null;
   private screenLight: PointLight | null = null;
   private officeBuilt = false;
+  /** the departure: lined up on the runway, rolls and climbs out as the dart comes in behind it */
+  private departing = new Airliner();
+  /** one parked at the apron */
+  private parked = new Airliner();
+  private rolled = 0;
   private disposables: { dispose(): void }[] = [];
 
-  constructor(runwayEnd: Vector3) {
+  constructor(runwayEnd: Vector3, quality: Quality) {
     const cx = runwayEnd.x;
     const cz = runwayEnd.z;
     const RUNWAY_LEN = 64;
@@ -71,6 +78,7 @@ export class Landing {
     field.rotation.x = -Math.PI / 2;
     field.position.set(cx - 14, -0.02, cz);
     this.group.add(field);
+    field.receiveShadow = quality.tier === 'high';
     this.disposables.push(field.geometry, grass);
 
     // runway strip (texture long-axis = V → rotate so V runs along X)
@@ -80,6 +88,7 @@ export class Landing {
     strip.rotation.z = Math.PI / 2;
     strip.position.set(startX + RUNWAY_LEN / 2 - 6, 0.01, cz);
     this.group.add(strip);
+    strip.receiveShadow = quality.tier === 'high';
     this.disposables.push(strip.geometry, asphalt);
 
     // taxiway + apron slab by the hangar
@@ -91,7 +100,15 @@ export class Landing {
     apron.rotation.x = -Math.PI / 2;
     apron.position.set(cx - 6, 0.006, cz + 21);
     this.group.add(taxiway, apron);
+    taxiway.receiveShadow = apron.receiveShadow = quality.tier === 'high';
     this.disposables.push(taxiway.geometry, apron.geometry, taxi);
+
+    // traffic: a jet lined up to depart (animated in update) and one parked at the apron
+    this.group.add(this.departing.group, this.parked.group);
+    this.parked.group.position.set(cx - 5.3, 0.006, cz + 21);
+    this.parked.body.position.y = AIRLINER.wheelDrop;
+    this.parked.group.rotation.y = 0.12;
+    this.disposables.push(this.departing, this.parked);
 
     // runway edge lights (warm) + threshold bars (green near / red far)
     this.edgeLightMaterial = new MeshStandardMaterial({
@@ -506,6 +523,40 @@ export class Landing {
     });
   }
 
+  /**
+   * The jet ahead of the dart: it holds on the centreline, rolls with constant acceleration,
+   * rotates and leaves the ground at the far end of the runway while the dart comes down
+   * behind it. A pure function of t, so it scrubs both ways.
+   */
+  private flyDeparture(t: number, time: number): void {
+    const T0 = 0.885; // brakes off
+    const TL = 0.92; // lift-off
+    const ROLL = 26; // units of runway used
+    const X0 = 250;
+    const u = MathUtils.clamp((t - T0) / (TL - T0), 0, 1);
+    let x = X0 + ROLL * u * u;
+    let height = 0;
+    const after = Math.max(0, t - TL);
+    if (after > 0) {
+      x = X0 + ROLL + ((2 * ROLL) / (TL - T0)) * after * 0.9;
+      height = 62 * Math.pow(MathUtils.clamp(after / 0.07, 0, 1.4), 1.5);
+    }
+    // nose up through the rotation, a steady climb attitude after
+    const pitch = 0.23 * MathUtils.smoothstep(t, 0.911, 0.924);
+    const sin = Math.sin(pitch);
+    const cos = Math.cos(pitch);
+    const g = AIRLINER.mainGearX;
+    const w = AIRLINER.wheelDrop;
+    // pitch about the main gear: keep the tyres' contact point at this group's origin
+    this.departing.body.rotation.z = pitch;
+    this.departing.body.position.set(-(g * cos + w * sin), -(g * sin - w * cos), 0);
+    this.departing.group.position.set(x, 0.012 + height, this.group.position.z);
+    this.rolled = ROLL * u * u;
+    this.departing.rollAndGear(this.rolled, MathUtils.smoothstep(t, 0.93, 0.945));
+    this.departing.blink(time);
+    this.parked.blink(time + 0.4);
+  }
+
   private ensureOffice(): void {
     if (this.officeBuilt) return;
     this.officeBuilt = true;
@@ -526,6 +577,7 @@ export class Landing {
     }
 
     this.windsock.rotation.y = Math.sin(time * 0.7) * 0.4;
+    this.flyDeparture(t, time);
 
     // the mail lands: the screen wakes as the dart reaches it, then holds
     const arrive = MathUtils.smoothstep(t, 0.978, 0.995);
