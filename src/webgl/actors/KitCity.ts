@@ -30,8 +30,10 @@ export interface KitLot {
 }
 export interface KitRingSet {
   near: number[]; mid: number[]; far: number[];
-  /** lots inside `mid` that swap to their `detail` module (HIGH only; trees) */
+  /** lots inside `mid` that swap to their `detail` module (trees; HIGH and LOW) */
   detail?: number[];
+  /** lots inside `mid`, beyond `detail`, that swap to their `lite` module (trees; HIGH and LOW) */
+  lite?: number[];
 }
 export interface KitModule {
   id: string; kind: string; lod0: string; footprint: [number, number]; height: number;
@@ -39,8 +41,8 @@ export interface KitModule {
   sheet?: string;
   /** set on a hero/detail module: the lean module it replaces */
   lean?: string;
-  /** 'hero' replaces `lean` in the near ring, 'detail' in the detail ring */
-  lod?: 'hero' | 'detail';
+  /** 'hero' replaces `lean` in the near ring (HIGH), 'detail' in the detail ring, 'lite' in the lite ring */
+  lod?: 'hero' | 'detail' | 'lite';
 }
 /** One atlas: what is present depends on the sheet (hero trees have no normals or glow). */
 export interface SheetAtlas {
@@ -242,15 +244,19 @@ export class KitCity {
     // real kit modules, streamed in, one draw per module type. A lot in the NEAR
     // ring swaps to its hero (close-up) module when the set has one and the tier
     // can afford it; everything else, and every phone, gets the lean module.
-    const swaps = { hero: new Map<string, string>(), detail: new Map<string, string>() };
-    if (tier === 'high') for (const m of modules) if (m.lean) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
+    // the hero tier is for HIGH; detail and lite trees serve both tiers (phones read the half-size
+    // atlases), so a phone's trees are real branches and leaves, not 40-triangle blobs
+    const swaps = { hero: new Map<string, string>(), detail: new Map<string, string>(), lite: new Map<string, string>() };
+    for (const m of modules) if (m.lean && (tier === 'high' || m.lod !== 'hero')) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
     const nearSet = new Set(rings.near);
     const detailSet = new Set(rings.detail ?? []);
+    const liteSet = new Set(rings.lite ?? []);
     const byModule = new Map<string, number[]>();
     for (const i of modelled) {
       const lean = lots[i]!.moduleId;
-      const id = nearSet.has(i) ? swaps.hero.get(lean) ?? lean
-        : detailSet.has(i) ? swaps.detail.get(lean) ?? lean : lean;
+      const id = nearSet.has(i) ? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
+        : detailSet.has(i) ? swaps.detail.get(lean) ?? lean
+        : liteSet.has(i) ? swaps.lite.get(lean) ?? lean : lean;
       const arr = byModule.get(id) ?? [];
       arr.push(i);
       byModule.set(id, arr);
