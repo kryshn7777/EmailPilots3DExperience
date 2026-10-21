@@ -1,6 +1,6 @@
 # Low-poly building system: kit-instanced cities with baked LODs
 
-**Date:** 2026-08-09 · **Status:** approved (Approach 1 of 3) · **Applies to:** Rooftops (window city) + City (CH8 dive)
+**Date:** 2026-08-09 · **Status:** approved (Approach 1 of 3) — **kit source superseded 2026-10-20, see `2026-10-20-blender-buildings-design.md`** · **Applies to:** Rooftops (window city) + City (CH8 dive)
 
 ## Goal
 

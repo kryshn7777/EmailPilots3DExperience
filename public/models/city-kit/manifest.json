@@ -1,115 +1,172 @@
 {
+  "dir": "city-kit",
+  "atlas": {
+    "color": "atlas-color.webp",
+    "orm": "atlas-orm.webp",
+    "low": {
+      "color": "atlas-color-low.webp",
+      "orm": "atlas-orm-low.webp",
+      "emissive": "atlas-emissive-low.webp"
+    },
+    "normal": "atlas-normal.webp",
+    "emissive": "atlas-emissive.webp"
+  },
   "modules": [
     {
-      "id": "building-a",
-      "file": "src/building-a.glb",
+      "id": "skyscraper-glass-a",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-glass-a.lod0.glb",
       "footprint": [
-        0.884,
-        0.94
+        0.519,
+        0.427
       ],
-      "height": 1.293,
-      "tris0": 1252,
-      "lod0": "building-a.lod0.glb"
+      "height": 2.9,
+      "tris0": 98,
+      "density": 5.21
     },
     {
-      "id": "building-c",
-      "file": "src/building-c.glb",
+      "id": "skyscraper-glass-b",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-glass-b.lod0.glb",
       "footprint": [
-        0.884,
-        1.09
+        0.523,
+        0.393
       ],
-      "height": 0.893,
-      "tris0": 1195,
-      "lod0": "building-c.lod0.glb"
+      "height": 2.8,
+      "tris0": 78,
+      "density": 4.81
     },
     {
-      "id": "building-e",
-      "file": "src/building-e.glb",
+      "id": "skyscraper-deco",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-deco.lod0.glb",
       "footprint": [
-        1.64,
-        1.008
+        0.539,
+        0.436
       ],
-      "height": 0.893,
-      "tris0": 1509,
-      "lod0": "building-e.lod0.glb"
+      "height": 2.9,
+      "tris0": 86,
+      "density": 4.67
     },
     {
-      "id": "building-g",
-      "file": "src/building-g.glb",
+      "id": "skyscraper-stone",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-stone.lod0.glb",
       "footprint": [
-        0.97,
-        0.922
+        0.61,
+        0.61
       ],
-      "height": 1.693,
-      "tris0": 2006,
-      "lod0": "building-g.lod0.glb"
+      "height": 2.6,
+      "tris0": 136,
+      "density": 6.02
     },
     {
-      "id": "building-i",
-      "file": "src/building-i.glb",
+      "id": "skyscraper-twin",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-twin.lod0.glb",
       "footprint": [
-        1.24,
-        1.302
+        0.667,
+        0.445
       ],
-      "height": 1.68,
-      "tris0": 2544,
-      "lod0": "building-i.lod0.glb"
+      "height": 2.7,
+      "tris0": 64,
+      "density": 5.0
     },
     {
-      "id": "building-k",
-      "file": "src/building-k.glb",
+      "id": "skyscraper-slab",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-slab.lod0.glb",
       "footprint": [
-        2.084,
-        0.942
+        1.15,
+        0.66
       ],
-      "height": 1.47,
-      "tris0": 2960,
-      "lod0": "building-k.lod0.glb"
+      "height": 2.3,
+      "tris0": 86,
+      "density": 5.5
     },
     {
-      "id": "building-skyscraper-a",
-      "file": "src/building-skyscraper-a.glb",
+      "id": "skyscraper-needle",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-needle.lod0.glb",
       "footprint": [
-        1.36,
-        1.36
+        0.31,
+        0.31
       ],
-      "height": 2.88,
-      "tris0": 1292,
-      "lod0": "building-skyscraper-a.lod0.glb"
+      "height": 2.9,
+      "tris0": 92,
+      "density": 5.12
     },
     {
-      "id": "building-skyscraper-b",
-      "file": "src/building-skyscraper-b.glb",
+      "id": "skyscraper-crown",
+      "kind": "tower",
+      "sheet": "main",
+      "lod0": "skyscraper-crown.lod0.glb",
       "footprint": [
-        1.36,
-        1.36
+        0.506,
+        0.506
       ],
-      "height": 4.48,
-      "tris0": 1592,
-      "lod0": "building-skyscraper-b.lod0.glb"
+      "height": 2.7,
+      "tris0": 36,
+      "density": 5.07
     },
     {
-      "id": "building-skyscraper-c",
-      "file": "src/building-skyscraper-c.glb",
+      "id": "block-brick",
+      "kind": "block",
+      "sheet": "main",
+      "lod0": "block-brick.lod0.glb",
       "footprint": [
-        1.28,
-        1.388
+        0.816,
+        0.612
       ],
-      "height": 4.08,
-      "tris0": 1704,
-      "lod0": "building-skyscraper-c.lod0.glb"
+      "height": 1.35,
+      "tris0": 76,
+      "density": 8.03
     },
     {
-      "id": "building-skyscraper-d",
-      "file": "src/building-skyscraper-d.glb",
+      "id": "block-podium",
+      "kind": "block",
+      "sheet": "main",
+      "lod0": "block-podium.lod0.glb",
       "footprint": [
-        1.28,
-        1.388
+        1.03,
+        0.773
       ],
-      "height": 5.47,
-      "tris0": 1892,
-      "lod0": "building-skyscraper-d.lod0.glb"
+      "height": 1.7,
+      "tris0": 42,
+      "density": 5.9
+    },
+    {
+      "id": "block-loft",
+      "kind": "block",
+      "sheet": "main",
+      "lod0": "block-loft.lod0.glb",
+      "footprint": [
+        0.721,
+        0.577
+      ],
+      "height": 1.25,
+      "tris0": 60,
+      "density": 8.92
+    },
+    {
+      "id": "block-mansard",
+      "kind": "block",
+      "sheet": "main",
+      "lod0": "block-mansard.lod0.glb",
+      "footprint": [
+        0.894,
+        0.543
+      ],
+      "height": 1.15,
+      "tris0": 48,
+      "density": 9.47
     }
-  ],
-  "colormap": "colormap.png"
+  ]
 }

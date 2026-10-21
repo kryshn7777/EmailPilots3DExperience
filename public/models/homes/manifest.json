@@ -1,0 +1,541 @@
+{
+  "dir": "homes",
+  "atlas": {
+    "color": "atlas-color.webp",
+    "orm": "atlas-orm.webp",
+    "low": {
+      "color": "atlas-color-low.webp",
+      "orm": "atlas-orm-low.webp",
+      "emissive": "atlas-emissive-low.webp"
+    },
+    "normal": "atlas-normal.webp",
+    "emissive": "atlas-emissive.webp"
+  },
+  "modules": [
+    {
+      "id": "home-cottage",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-cottage.lod0.glb",
+      "footprint": [
+        3.036,
+        2.772
+      ],
+      "height": 1.997,
+      "tris0": 62,
+      "density": 13.88
+    },
+    {
+      "id": "home-colonial",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-colonial.lod0.glb",
+      "footprint": [
+        4.224,
+        3.679
+      ],
+      "height": 2.879,
+      "tris0": 72,
+      "density": 7.53
+    },
+    {
+      "id": "home-ranch",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-ranch.lod0.glb",
+      "footprint": [
+        5.841,
+        3.036
+      ],
+      "height": 1.894,
+      "tris0": 38,
+      "density": 10.25
+    },
+    {
+      "id": "home-farmhouse",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-farmhouse.lod0.glb",
+      "footprint": [
+        3.465,
+        4.95
+      ],
+      "height": 3.16,
+      "tris0": 106,
+      "density": 8.95
+    },
+    {
+      "id": "home-craftsman",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-craftsman.lod0.glb",
+      "footprint": [
+        4.472,
+        3.96
+      ],
+      "height": 2.095,
+      "tris0": 83,
+      "density": 11.29
+    },
+    {
+      "id": "home-victorian",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-victorian.lod0.glb",
+      "footprint": [
+        4.669,
+        3.349
+      ],
+      "height": 3.642,
+      "tris0": 86,
+      "density": 8.59
+    },
+    {
+      "id": "home-terrace",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-terrace.lod0.glb",
+      "footprint": [
+        6.6,
+        2.97
+      ],
+      "height": 2.871,
+      "tris0": 10,
+      "density": 8.0
+    },
+    {
+      "id": "home-modern",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-modern.lod0.glb",
+      "footprint": [
+        4.62,
+        3.465
+      ],
+      "height": 2.046,
+      "tris0": 20,
+      "density": 8.89
+    },
+    {
+      "id": "home-bungalow",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-bungalow.lod0.glb",
+      "footprint": [
+        3.3,
+        3.267
+      ],
+      "height": 2.062,
+      "tris0": 82,
+      "density": 12.71
+    },
+    {
+      "id": "home-suburban",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-suburban.lod0.glb",
+      "footprint": [
+        5.676,
+        3.465
+      ],
+      "height": 2.739,
+      "tris0": 76,
+      "density": 8.92
+    },
+    {
+      "id": "home-tudor",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-tudor.lod0.glb",
+      "footprint": [
+        3.762,
+        3.003
+      ],
+      "height": 3.762,
+      "tris0": 24,
+      "density": 9.44
+    },
+    {
+      "id": "home-duplex",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-duplex.lod0.glb",
+      "footprint": [
+        4.29,
+        3.135
+      ],
+      "height": 2.739,
+      "tris0": 34,
+      "density": 10.31
+    },
+    {
+      "id": "tree-oak",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-oak.lod0.glb",
+      "footprint": [
+        3.069,
+        2.753
+      ],
+      "height": 3.519,
+      "tris0": 92,
+      "density": 7.32
+    },
+    {
+      "id": "tree-maple",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-maple.lod0.glb",
+      "footprint": [
+        2.433,
+        2.532
+      ],
+      "height": 3.432,
+      "tris0": 92,
+      "density": 9.07
+    },
+    {
+      "id": "tree-pine",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-pine.lod0.glb",
+      "footprint": [
+        1.782,
+        1.782
+      ],
+      "height": 3.498,
+      "tris0": 36,
+      "density": 12.29
+    },
+    {
+      "id": "tree-poplar",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-poplar.lod0.glb",
+      "footprint": [
+        1.354,
+        1.358
+      ],
+      "height": 4.584,
+      "tris0": 92,
+      "density": 11.36
+    },
+    {
+      "id": "home-cottage-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-cottage",
+      "lod": "hero",
+      "lod0": "home-cottage-hero.lod0.glb",
+      "footprint": [
+        3.036,
+        2.772
+      ],
+      "height": 1.997,
+      "tris0": 2906,
+      "density": 29.0
+    },
+    {
+      "id": "home-colonial-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-colonial",
+      "lod": "hero",
+      "lod0": "home-colonial-hero.lod0.glb",
+      "footprint": [
+        4.224,
+        3.679
+      ],
+      "height": 2.879,
+      "tris0": 4964,
+      "density": 20.29
+    },
+    {
+      "id": "home-ranch-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-ranch",
+      "lod": "hero",
+      "lod0": "home-ranch-hero.lod0.glb",
+      "footprint": [
+        5.841,
+        3.036
+      ],
+      "height": 1.894,
+      "tris0": 3204,
+      "density": 22.5
+    },
+    {
+      "id": "home-farmhouse-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-farmhouse",
+      "lod": "hero",
+      "lod0": "home-farmhouse-hero.lod0.glb",
+      "footprint": [
+        3.465,
+        4.95
+      ],
+      "height": 3.16,
+      "tris0": 5144,
+      "density": 19.64
+    },
+    {
+      "id": "home-craftsman-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-craftsman",
+      "lod": "hero",
+      "lod0": "home-craftsman-hero.lod0.glb",
+      "footprint": [
+        4.472,
+        3.96
+      ],
+      "height": 2.095,
+      "tris0": 3439,
+      "density": 23.48
+    },
+    {
+      "id": "home-victorian-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-victorian",
+      "lod": "hero",
+      "lod0": "home-victorian-hero.lod0.glb",
+      "footprint": [
+        4.669,
+        3.349
+      ],
+      "height": 3.642,
+      "tris0": 5646,
+      "density": 18.3
+    },
+    {
+      "id": "home-terrace-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-terrace",
+      "lod": "hero",
+      "lod0": "home-terrace-hero.lod0.glb",
+      "footprint": [
+        6.6,
+        2.97
+      ],
+      "height": 2.871,
+      "tris0": 5872,
+      "density": 16.6
+    },
+    {
+      "id": "home-modern-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-modern",
+      "lod": "hero",
+      "lod0": "home-modern-hero.lod0.glb",
+      "footprint": [
+        4.62,
+        3.465
+      ],
+      "height": 2.046,
+      "tris0": 1880,
+      "density": 19.5
+    },
+    {
+      "id": "home-bungalow-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-bungalow",
+      "lod": "hero",
+      "lod0": "home-bungalow-hero.lod0.glb",
+      "footprint": [
+        3.3,
+        3.267
+      ],
+      "height": 2.062,
+      "tris0": 2702,
+      "density": 27.05
+    },
+    {
+      "id": "home-suburban-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-suburban",
+      "lod": "hero",
+      "lod0": "home-suburban-hero.lod0.glb",
+      "footprint": [
+        5.676,
+        3.465
+      ],
+      "height": 2.739,
+      "tris0": 4976,
+      "density": 19.5
+    },
+    {
+      "id": "home-tudor-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-tudor",
+      "lod": "hero",
+      "lod0": "home-tudor-hero.lod0.glb",
+      "footprint": [
+        3.762,
+        3.003
+      ],
+      "height": 3.762,
+      "tris0": 1978,
+      "density": 20.66
+    },
+    {
+      "id": "home-duplex-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-duplex",
+      "lod": "hero",
+      "lod0": "home-duplex-hero.lod0.glb",
+      "footprint": [
+        4.29,
+        3.135
+      ],
+      "height": 2.739,
+      "tris0": 2428,
+      "density": 21.38
+    },
+    {
+      "id": "tree-oak-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-oak",
+      "lod": "hero",
+      "lod0": "tree-oak-hero.lod0.glb",
+      "footprint": [
+        3.402,
+        3.358
+      ],
+      "height": 3.946,
+      "tris0": 10028
+    },
+    {
+      "id": "tree-maple-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-maple",
+      "lod": "hero",
+      "lod0": "tree-maple-hero.lod0.glb",
+      "footprint": [
+        2.832,
+        2.792
+      ],
+      "height": 3.642,
+      "tris0": 8756
+    },
+    {
+      "id": "tree-pine-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-pine",
+      "lod": "hero",
+      "lod0": "tree-pine-hero.lod0.glb",
+      "footprint": [
+        2.218,
+        2.237
+      ],
+      "height": 3.697,
+      "tris0": 8932
+    },
+    {
+      "id": "tree-poplar-hero",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-poplar",
+      "lod": "hero",
+      "lod0": "tree-poplar-hero.lod0.glb",
+      "footprint": [
+        1.561,
+        1.554
+      ],
+      "height": 4.844,
+      "tris0": 8670
+    },
+    {
+      "id": "tree-oak-detail",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-oak",
+      "lod": "detail",
+      "lod0": "tree-oak-detail.lod0.glb",
+      "footprint": [
+        3.483,
+        3.55
+      ],
+      "height": 4.004,
+      "tris0": 2176
+    },
+    {
+      "id": "tree-maple-detail",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-maple",
+      "lod": "detail",
+      "lod0": "tree-maple-detail.lod0.glb",
+      "footprint": [
+        3.03,
+        2.98
+      ],
+      "height": 3.631,
+      "tris0": 2010
+    },
+    {
+      "id": "tree-pine-detail",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-pine",
+      "lod": "detail",
+      "lod0": "tree-pine-detail.lod0.glb",
+      "footprint": [
+        2.214,
+        2.272
+      ],
+      "height": 3.697,
+      "tris0": 3444
+    },
+    {
+      "id": "tree-poplar-detail",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-poplar",
+      "lod": "detail",
+      "lod0": "tree-poplar-detail.lod0.glb",
+      "footprint": [
+        1.717,
+        1.793
+      ],
+      "height": 4.897,
+      "tris0": 2118
+    }
+  ],
+  "sheets": {
+    "hero-trees": {
+      "atlas": {
+        "color": "atlas-hero-trees-color.webp",
+        "orm": "atlas-hero-trees-orm.webp",
+        "low": {
+          "color": "atlas-hero-trees-color-low.webp",
+          "orm": "atlas-hero-trees-orm-low.webp"
+        },
+        "alpha": true
+      }
+    },
+    "hero-houses": {
+      "atlas": {
+        "color": "atlas-hero-houses-color.webp",
+        "orm": "atlas-hero-houses-orm.webp",
+        "low": {
+          "color": "atlas-hero-houses-color-low.webp",
+          "orm": "atlas-hero-houses-orm-low.webp",
+          "emissive": "atlas-hero-houses-emissive-low.webp"
+        },
+        "emissive": "atlas-hero-houses-emissive.webp"
+      }
+    }
+  }
+}

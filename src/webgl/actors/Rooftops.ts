@@ -1,142 +1,289 @@
 import {
   AdditiveBlending,
   BufferGeometry,
-  DoubleSide,
+  CatmullRomCurve3,
   Float32BufferAttribute,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   Points,
   PointsMaterial,
+  Quaternion,
+  RepeatWrapping,
+  SRGBColorSpace,
+  TextureLoader,
+  Vector3,
 } from 'three';
-import { ROOFTOP_BASE_Y, ROOFTOP_DECK_Y, rooftopLots } from '../bake/cityGen.mjs';
-import { cityGridTexture, cloudDeckTexture, glowTexture } from '../bake/CanvasTextures';
-import { KitCity, type KitLot, type KitRingSet } from './KitCity';
+import {
+  HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, fenceRuns, homeLots,
+} from '../bake/cityGen.mjs';
+import { PATH_POINTS } from '../rig/pathPoints.mjs';
+import { glowTexture, meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
+import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
+import { Fences } from './Fences';
+import { StreetCars } from './StreetCars';
+import { Yards } from './Yards';
+import { mulberry32 } from '../util';
+import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
 import type { Quality } from '../quality';
 
 /**
- * CH2–3: the district outside the study window. The study is a high floor of
- * an office tower, so this is neighbouring towers seen at altitude, standing
- * in an overcast deck that hides every base — there is no ground in this
- * chapter, only weather. Buildings are kit-instanced on the shared baked LOD
- * rings (near field = real modules, far district = emissive impostors).
+ * Streetlamp positions inside one ground cell, in cell units. Mirrors LAMPS in
+ * blender/make_ground.py, which paints the matching pools of light.
+ */
+const LAMPS: [number, number][] = [3.5, 17.5].flatMap((x) =>
+  [HOME_CELL.lotD + 0.55, HOME_CELL.lotD + HOME_CELL.street - 0.55].map((z): [number, number] => [x, z]),
+);
+
+/**
+ * CH2–3: the neighbourhood outside the study window. The study is a high floor
+ * of an office tower, so what lies below is a residential district seen from
+ * altitude: streets, lawns, houses and trees on a regular grid, with thin
+ * cloud drifting between it and the plane. Houses and trees are Blender models
+ * (blender/make_buildings.py --set homes) instanced on the shared lot rings:
+ * real geometry up close, simple stand-ins past the far ring.
  */
 export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
-  private deck: Mesh[] = [];
+  private fences: Fences | null = null;
+  private cars: StreetCars | null = null;
+  private yards: Yards | null = null;
+  private path: Vector3[] | null = null;
   private disposables: { dispose(): void }[] = [];
 
   constructor(rand: () => number, quality: Quality) {
-    // the city floor: streets, blocks and traffic, far below the window
-    const gridMap = cityGridTexture();
-    gridMap.repeat.set(22, 18);
-    const groundMaterial = new MeshStandardMaterial({
-      map: gridMap,
-      roughness: 0.82,
-      metalness: 0.05,
-      emissive: '#20293f',
-      emissiveMap: gridMap,
-      emissiveIntensity: 0.55, // street light and traffic read at altitude
+    void rand;
+    this.buildGround();
+
+    this.buildLamps();
+    this.buildFences(quality);
+    void this.init(quality);
+  }
+
+  /**
+   * The ground: one painted cell of streets, sidewalks and lawn repeated 28 x
+   * 27 times. The plane is sized to a whole number of cells with its corner on
+   * a cell boundary, so texture repeats line up with the lot grid the houses
+   * are placed on and no offset maths is needed.
+   */
+  private buildGround(): void {
+    const { w, d } = HOME_CELL;
+    const cellsX = HOME_CELLS.x[1] - HOME_CELLS.x[0];
+    const cellsZ = HOME_CELLS.z[1] - HOME_CELLS.z[0];
+    const loader = new TextureLoader();
+    const load = (file: string): ReturnType<TextureLoader['load']> => {
+      const t = loader.load(asset(`/models/homes/${file}`));
+      t.colorSpace = SRGBColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      t.repeat.set(cellsX, cellsZ);
+      return t;
+    };
+    const color = load('ground-color.webp');
+    const glow = load('ground-glow.webp');
+    const material = new MeshStandardMaterial({
+      map: color,
+      roughness: 0.95,
+      metalness: 0,
+      // lamp pools on the streets: warm light you can read from altitude
+      emissive: '#ffffff',
+      emissiveMap: glow,
+      emissiveIntensity: 0.5,
     });
-    const ground = new Mesh(new PlaneGeometry(900, 700), groundMaterial);
+    // exactly the cells the houses occupy, corners on cell boundaries so the texture
+    // repeats line up with the lot grid; the country beyond is a different surface
+    const ground = new Mesh(new PlaneGeometry(w * cellsX, d * cellsZ), material);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(60, ROOFTOP_BASE_Y + 0.05, 0);
+    ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
-    this.disposables.push(ground.geometry, groundMaterial, gridMap);
 
-    // two offset cloud sheets drifting over it — broken, not a lid, so the
-    // grid below stays readable through the gaps
-    const deckMap = cloudDeckTexture();
-    this.disposables.push(deckMap);
-    // repeat counts are high on purpose: the sheets are 900 units across, and
-    // at the old 4.5–7 a single cloud tile smeared over most of the frame as
-    // soon as the flight climbed — giant marbled slabs, not weather
-    for (const [y, repeat, opacity, scale] of [
-      [ROOFTOP_DECK_Y - 3.5, 20, 0.62, 1],
-      [ROOFTOP_DECK_Y, 13, 0.5, 0.82],
-    ] as const) {
-      const material = new MeshBasicMaterial({
-        map: deckMap,
-        transparent: true,
-        opacity,
-        depthWrite: false,
-        side: DoubleSide,
-        fog: true,
-      });
-      material.map = deckMap.clone();
-      material.map.needsUpdate = true;
-      material.map.repeat.set(repeat, repeat);
-      const sheet = new Mesh(new PlaneGeometry(900 * scale, 760 * scale), material);
-      sheet.rotation.x = -Math.PI / 2;
-      sheet.position.set(60, y, 0);
-      sheet.renderOrder = -2; // always behind the towers standing in it
-      this.group.add(sheet);
-      this.deck.push(sheet);
-      this.disposables.push(sheet.geometry, material, material.map);
-    }
+    // the meadow and fields under the woodland, out past the edge of town
+    const meadow = meadowTexture();
+    meadow.repeat.set(30, 30);
+    const meadowMaterial = new MeshStandardMaterial({ map: meadow, roughness: 1, metalness: 0 });
+    const outskirts = new Mesh(new PlaneGeometry(1500, 1500), meadowMaterial);
+    outskirts.rotation.x = -Math.PI / 2;
+    outskirts.position.set(80, ROOFTOP_BASE_Y - 0.06, -26);
+    this.group.add(outskirts);
+    this.disposables.push(ground.geometry, material, color, glow, outskirts.geometry, meadowMaterial, meadow);
+  }
 
-    // aircraft-warning reds and lit crowns scattered across the district
-    const warm: number[] = [];
-    for (let i = 0; i < 130; i++) {
-      warm.push(11 + rand() * 70, ROOFTOP_BASE_Y + 12 + rand() * 26, -40 + rand() * 80);
+  /** Warm lamp sprites over every streetlamp in every cell. */
+  private buildLamps(): void {
+    const { w, d } = HOME_CELL;
+    const positions: number[] = [];
+    for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+      for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+        for (const [lx, lz] of LAMPS) positions.push(ix * w + lx, ROOFTOP_BASE_Y + 1.7, iz * d + lz);
+      }
     }
     const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(warm, 3));
-    const lights = new Points(
+    g.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    const lamps = new Points(
       g,
       new PointsMaterial({
         map: glowTexture(),
         color: '#ffc98a',
-        size: 0.5,
+        size: 0.9,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.9,
         depthWrite: false,
         blending: AdditiveBlending,
         sizeAttenuation: true,
       }),
     );
-    lights.frustumCulled = false;
-    this.group.add(lights);
-    this.disposables.push(g, lights.material as PointsMaterial);
-
-    void this.init(quality);
+    lamps.frustumCulled = false;
+    this.group.add(lamps);
+    this.disposables.push(g, lamps.material as PointsMaterial);
   }
 
-  /** Drifts the two sheets against each other — the deck is never static. */
+  /**
+   * Fences along the lot lines. Cut-out cards everywhere; on HIGH, the runs the
+   * flight passes within a few units of become real posts, rails and boards.
+   */
+  /** the flight path sampled densely: what "near the flight" means for fences and parked cars */
+  private pathSamples(): Vector3[] {
+    this.path ??= new CatmullRomCurve3(PATH_POINTS.map((p) => new Vector3(...p)), false, 'centripetal')
+      .getSpacedPoints(400);
+    return this.path;
+  }
+
+  private buildFences(quality: Quality): void {
+    const runs = fenceRuns();
+    let isNear = (_run: FenceRun): boolean => false;
+    if (quality.tier === 'high') {
+      const path = this.pathSamples();
+      const mid = new Vector3();
+      isNear = (run) => {
+        mid.set((run.x0 + run.x1) / 2, ROOFTOP_BASE_Y + 0.2, (run.z0 + run.z1) / 2);
+        for (const c of path) if (c.distanceToSquared(mid) < 13 * 13) return true;
+        return false;
+      };
+    }
+    this.fences = new Fences(runs, isNear);
+    this.fences.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.fences.group);
+  }
+
+  /** Soft contact shadows under every house and tree: grounds them on the lawn. */
+  private buildShadows(lots: KitLot[], kinds: Map<string, string>): void {
+    const map = softShadowTexture();
+    const material = new MeshBasicMaterial({
+      map, color: '#000000', transparent: true, opacity: 0.55, depthWrite: false, fog: true,
+    });
+    const geometry = new PlaneGeometry(1, 1);
+    geometry.rotateX(-Math.PI / 2);
+    lots = lots.filter((lot) => !lot.forest);
+    const inst = new InstancedMesh(geometry, material, lots.length);
+    const m4 = new Matrix4();
+    const q = new Quaternion();
+    const p = new Vector3();
+    const s = new Vector3();
+    const Y = new Vector3(0, 1, 0);
+    lots.forEach((lot, k) => {
+      const tree = kinds.get(lot.moduleId) === 'tree';
+      const grow = tree ? 1.25 : 1.5;
+      q.setFromAxisAngle(Y, lot.yaw);
+      inst.setMatrixAt(k, m4.compose(p.set(lot.x, 0.04, lot.z), q, s.set(lot.w * grow, 1, lot.d * grow)));
+    });
+    inst.renderOrder = -1;
+    this.kitCity?.group.add(inst);
+    this.disposables.push(map, material, geometry, inst);
+  }
+
+  /** Per-frame work: traffic and the firepits' flicker. */
   update(time: number): void {
     if (!this.group.visible) return;
-    for (let i = 0; i < this.deck.length; i++) {
-      const map = (this.deck[i]!.material as MeshBasicMaterial).map;
-      if (map) map.offset.x = time * (i === 0 ? 0.0016 : 0.0029);
-    }
+    this.cars?.update(time);
+    this.yards?.update(time);
   }
 
   private async init(quality: Quality): Promise<void> {
     // no-cache: lots and rings MUST come from the same bake — a stale cached
     // rings file indexes past the end of a freshly generated lot list
     const [manifest, allRings] = await Promise.all([
-      fetch(asset('/models/city-kit/manifest.json'), { cache: 'no-cache' }).then((r) => r.json()),
+      fetch(asset('/models/homes/manifest.json'), { cache: 'no-cache' }).then(
+        (r) => r.json() as Promise<KitManifest>,
+      ),
       fetch(asset('/models/city-rings.json'), { cache: 'no-cache' }).then((r) => r.json()),
     ]);
     const rings = allRings.rooftops[quality.tier] as KitRingSet;
-    const { lots } = rooftopLots(manifest.modules);
-    // dressWindows: unlike City this actor has no dressing pass of its own,
-    // so its blocks read as unlit massing through the study window
-    // glow 1.5: this district sits 20–100 units out in a chapter whose fog is
-    // tuned for a dark room, which crushed every tower to a black cut-out
-    this.kitCity = new KitCity(lots as KitLot[], rings, manifest.modules, quality.tier, true, 1.5);
-    // the district stands far below the window; only its top third clears
-    // the deck, so no tower ever shows a base
+    const { lots } = homeLots(manifest.modules);
+    // glow: the baked lit windows. This district sits 20–100 units out in a
+    // chapter whose fog is tuned for a dark room, so its windows run a little
+    // hotter than the city's. cloudEnv: homes in a cloud sea take their light
+    // and reflections from the baked cloud environment.
+    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, {
+      tier: quality.tier, glow: 1.2, cloudEnv: true,
+    });
+    // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.kitCity.group);
+    const kinds = new Map(manifest.modules.map((m) => [m.id, m.kind]));
+    this.buildShadows(lots as KitLot[], kinds);
+    this.buildCars(lots as KitLot[], kinds, quality);
+  }
+
+  /**
+   * Traffic on every street, plus a car in the front yard of about half the houses
+   * the flight passes over (the ones far from it would be invisible, and cost).
+   */
+  private buildCars(lots: KitLot[], kinds: Map<string, string>, quality: Quality): void {
+    const rand = mulberry32(5521);
+    const path = this.pathSamples();
+    const reach = quality.tier === 'high' ? 70 : 40;
+    const spots: { x: number; z: number; yaw: number }[] = [];
+    const at = new Vector3();
+    for (const lot of lots) {
+      if (kinds.get(lot.moduleId) !== 'house' || rand() > 0.55) continue;
+      at.set(lot.x, ROOFTOP_BASE_Y, lot.z);
+      let near = false;
+      for (const c of path) if (c.distanceToSquared(at) < reach * reach) { near = true; break; }
+      if (!near) continue;
+      const toStreet = Math.cos(lot.yaw) > 0 ? 1 : -1;
+      const side = rand() < 0.5 ? -1 : 1;
+      // nose to the street or to the house, half and half; yaw turns +x onto the z axis
+      const nose = rand() < 0.5 ? toStreet : -toStreet;
+      spots.push({
+        x: lot.x + side * (lot.w / 2 + 0.55),
+        z: lot.z + toStreet * (lot.d / 2 + 0.85),
+        yaw: nose > 0 ? -Math.PI / 2 : Math.PI / 2,
+      });
+    }
+    this.cars = new StreetCars(quality, spots);
+    this.cars.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.cars.group);
+
+    // Yard details for every house the flight passes over: beds, patios, pools,
+    // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
+    const yardReach = quality.tier === 'high' ? 90 : 50;
+    const at2 = new Vector3();
+    this.yards = new Yards(
+      lots,
+      kinds,
+      spots,
+      (lot) => {
+        at2.set(lot.x, ROOFTOP_BASE_Y, lot.z);
+        for (const c of path) if (c.distanceToSquared(at2) < yardReach * yardReach) return true;
+        return false;
+      },
+      quality.tier,
+    );
+    this.yards.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.yards.group);
   }
 
   dispose(): void {
     this.kitCity?.dispose();
+    this.fences?.dispose();
+    this.cars?.dispose();
+    this.yards?.dispose();
     for (const d of this.disposables) d.dispose();
   }
 }

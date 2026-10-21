@@ -698,120 +698,6 @@ export function laptopKeysTexture(): CanvasTexture {
 }
 
 /**
- * The city floor seen from altitude: a seamless street grid with lane
- * markings, crossings, per-block rooftop massing and traffic. Roads sit on
- * the tile edges and at its midpoints, so the pattern wraps in both axes and
- * one bake covers the whole district.
- *
- * Baked rather than downloaded: the CC0 libraries carry road MATERIALS
- * (asphalt, kerbs, lane tiles), not top-down city blocks, and a tileable
- * grid has to know where its own roads meet the edge.
- */
-export function cityGridTexture(): CanvasTexture {
-  const S = 1024;
-  const [canvas, ctx] = makeCanvas(S);
-  let seed = 977;
-  const rand = (): number => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  const CELL = S / 4; // four blocks per tile edge
-  const ROAD = 34;
-
-  ctx.fillStyle = '#171b24';
-  ctx.fillRect(0, 0, S, S);
-
-  // rooftops: each block broken into a few slabs of slightly different grey,
-  // with a courtyard well, so the ground never reads as flat paint
-  for (let bx = 0; bx < 4; bx++) {
-    for (let bz = 0; bz < 4; bz++) {
-      const x0 = bx * CELL + ROAD / 2;
-      const z0 = bz * CELL + ROAD / 2;
-      const w = CELL - ROAD;
-      const splitX = 0.35 + rand() * 0.3;
-      const splitZ = 0.35 + rand() * 0.3;
-      const parts: [number, number, number, number][] = [
-        [x0, z0, w * splitX, w * splitZ],
-        [x0 + w * splitX, z0, w * (1 - splitX), w * splitZ],
-        [x0, z0 + w * splitZ, w * splitX, w * (1 - splitZ)],
-        [x0 + w * splitX, z0 + w * splitZ, w * (1 - splitX), w * (1 - splitZ)],
-      ];
-      for (const [px, pz, pw, ph] of parts) {
-        const v = 34 + Math.floor(rand() * 26);
-        ctx.fillStyle = `rgb(${v}, ${v + 3}, ${v + 9})`;
-        ctx.fillRect(px + 1.5, pz + 1.5, pw - 3, ph - 3);
-        // roof clutter specks + the odd lit skylight
-        for (let i = 0; i < 5; i++) {
-          const lit = rand() < 0.18;
-          ctx.fillStyle = lit ? 'rgba(255, 201, 138, 0.75)' : `rgba(${v - 12}, ${v - 10}, ${v - 4}, 1)`;
-          const cw = 3 + rand() * 9;
-          ctx.fillRect(px + 4 + rand() * Math.max(1, pw - cw - 8), pz + 4 + rand() * Math.max(1, ph - cw - 8), cw, cw * 0.7);
-        }
-      }
-    }
-  }
-
-  // asphalt: full-width bands on every cell boundary, wrapping at the edges
-  ctx.fillStyle = '#0d1017';
-  for (let i = 0; i < 4; i++) {
-    const p = i * CELL - ROAD / 2;
-    ctx.fillRect(p, 0, ROAD, S);
-    ctx.fillRect(0, p, S, ROAD);
-    if (i === 0) {
-      ctx.fillRect(S - ROAD / 2, 0, ROAD / 2, S);
-      ctx.fillRect(0, S - ROAD / 2, S, ROAD / 2);
-    }
-  }
-  // lane dashes down the middle of every road
-  ctx.fillStyle = 'rgba(226, 220, 200, 0.5)';
-  for (let i = 0; i < 4; i++) {
-    const c = i * CELL;
-    for (let d = 6; d < S; d += 34) {
-      ctx.fillRect(c - 1.5, d, 3, 16);
-      ctx.fillRect(d, c - 1.5, 16, 3);
-    }
-  }
-  // crossings at the intersections
-  ctx.fillStyle = 'rgba(226, 220, 200, 0.42)';
-  for (let bx = 0; bx < 4; bx++) {
-    for (let bz = 0; bz < 4; bz++) {
-      const cx = bx * CELL;
-      const cz = bz * CELL;
-      for (let s = -14; s <= 14; s += 7) {
-        ctx.fillRect(cx + s, cz - ROAD / 2 - 12, 4, 10);
-        ctx.fillRect(cx + s, cz + ROAD / 2 + 2, 4, 10);
-        ctx.fillRect(cx - ROAD / 2 - 12, cz + s, 10, 4);
-        ctx.fillRect(cx + ROAD / 2 + 2, cz + s, 10, 4);
-      }
-    }
-  }
-  // traffic: headlight whites one way, tail reds the other
-  for (let i = 0; i < 230; i++) {
-    const along = rand() * S;
-    const lane = Math.floor(rand() * 4) * CELL + (rand() < 0.5 ? -7 : 7);
-    const red = rand() < 0.5;
-    ctx.fillStyle = red ? 'rgba(255, 96, 84, 0.95)' : 'rgba(255, 246, 214, 0.95)';
-    if (rand() < 0.5) ctx.fillRect(lane - 1.5, along, 3, 6);
-    else ctx.fillRect(along, lane - 1.5, 6, 3);
-  }
-  // street lamps beading the kerbs
-  ctx.fillStyle = 'rgba(255, 201, 138, 0.55)';
-  for (let i = 0; i < 4; i++) {
-    const c = i * CELL;
-    for (let d = 16; d < S; d += 46) {
-      ctx.fillRect(c - ROAD / 2 - 3, d, 2.5, 2.5);
-      ctx.fillRect(d, c - ROAD / 2 - 3, 2.5, 2.5);
-    }
-  }
-
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  texture.wrapS = texture.wrapT = RepeatWrapping;
-  texture.anisotropy = 8;
-  return texture;
-}
-
-/**
  * Overcast deck seen from above: soft billowed cloud tops, drawn as stacked
  * radial blobs so the layer reads as weather rather than a painted plane.
  * Alpha falls off inside each blob, so two offset copies parallax into a
@@ -903,4 +789,72 @@ export function glowTexture(): CanvasTexture {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
   return new CanvasTexture(canvas);
+}
+
+/** Soft round blob, black in the middle and clear at the edge: a contact shadow decal. */
+export function softShadowTexture(): CanvasTexture {
+  const [canvas, ctx] = makeCanvas(128);
+  const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  g.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
+  g.addColorStop(0.55, 'rgba(0, 0, 0, 0.45)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new CanvasTexture(canvas);
+}
+
+/**
+ * Meadow and field for the country past the town: greens and straw, mown stripes, a
+ * few plough-brown patches. Tileable (everything is drawn with wrap-around), meant to
+ * be repeated many times and seen from altitude through fog.
+ */
+export function meadowTexture(): CanvasTexture {
+  const S = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2d context unavailable');
+  let seed = 7771;
+  const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  ctx.fillStyle = '#4f7a36';
+  ctx.fillRect(0, 0, S, S);
+  const blob = (x: number, y: number, r: number, color: string): void => {
+    for (const ox of [-S, 0, S]) {
+      for (const oy of [-S, 0, S]) {
+        const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+      }
+    }
+  };
+  const colours = ['rgba(120,150,60,0.5)', 'rgba(70,105,48,0.55)', 'rgba(150,150,70,0.4)', 'rgba(96,74,48,0.3)', 'rgba(90,130,70,0.5)'];
+  for (let i = 0; i < 70; i++) blob(rnd() * S, rnd() * S, 30 + rnd() * 90, colours[Math.floor(rnd() * colours.length)]!);
+  // fields: mown bands and furrows in a few rectangles
+  for (let i = 0; i < 9; i++) {
+    const x = rnd() * S, y = rnd() * S, w = 70 + rnd() * 140, h = 50 + rnd() * 110;
+    const stripe = 6 + Math.floor(rnd() * 8);
+    const vertical = rnd() < 0.5;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    for (let k = 0; k < 40; k++) {
+      ctx.fillStyle = k % 2 ? 'rgba(255,240,170,0.08)' : 'rgba(30,50,20,0.1)';
+      if (vertical) ctx.fillRect(x + k * stripe, y, stripe, h);
+      else ctx.fillRect(x, y + k * stripe, w, stripe);
+    }
+    ctx.restore();
+  }
+  for (let i = 0; i < 5000; i++) {
+    ctx.fillStyle = `rgba(${40 + rnd() * 60},${70 + rnd() * 70},${30 + rnd() * 30},0.18)`;
+    ctx.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  texture.anisotropy = 8;
+  return texture;
 }

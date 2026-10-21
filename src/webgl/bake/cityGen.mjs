@@ -118,7 +118,7 @@ export function cityRecipes(modules, canyonZ = 0) {
     const mod = pick[Math.floor(rand() * pick.length)];
     const ls = lodScale(mod);
     /**
-     * Lot size is DERIVED from the module, exactly as rooftopLots does it.
+     * Lot size is DERIVED from the module, never chosen independently of it.
      *
      * cityLayout picks w/d/h independently (w 1.8–3.2, d 1.6–2.8, h 2–12), and
      * KitCity fits a module by min(lot.w/geomW, lot.d/geomD, lot.h/geomH) — so
@@ -158,77 +158,214 @@ export function cityRecipes(modules, canyonZ = 0) {
 }
 
 /**
- * The window city's lots (Rooftops actor). The study is a high floor of an
- * office tower, so this is a district of tall neighbours seen at altitude:
- * every lot is based at ROOFTOP_BASE_Y, far below the window, and rises past
- * the cloud deck the actor floats at ROOFTOP_DECK_Y. Nothing here has a
- * visible bottom — the streets are under the weather.
+ * The neighbourhood outside the study window (Rooftops actor): streets, houses
+ * and trees on a regular grid of cells, seen from altitude.
+ *
+ * The cell layout is shared with the ground texture (neighbourhoodTexture in
+ * CanvasTextures.ts), which paints one cell and repeats it, so every constant
+ * here is also a measurement on that canvas. All in site units, z grows toward
+ * the south edge of a cell:
+ *
+ *   z 0 ........ lotD            north row of lots, fronts face +z
+ *   lotD ..... lotD + street     the street
+ *   then lotD                    south row of lots, fronts face -z
+ *   x: `lots` lots of `lotW`, then a cross street `cross` wide
  */
-export const ROOFTOP_BASE_Y = -14;
-export const ROOFTOP_DECK_Y = -7;
+export const HOME_CELL = { w: 32, d: 26, lotW: 7, lots: 4, lotD: 10, street: 6, cross: 4 };
+/** cells covered, [from, to) on each axis; sized to what the climb ever sees */
+export const HOME_CELLS = { x: [-2, 7], z: [-6, 4] };
 
-export function rooftopLots(modules) {
-  const rand = mulberry32(CITY_SEED + 31);
+/**
+ * The ground of the neighbourhood. Only a few units under the window sill, so
+ * the plane leaves the window just above the rooftops and climbs away over
+ * them. Houses stand ~3 units tall: with the old tower district's ground at
+ * -14 they sat 17 units under a camera that looks along the flight line, and
+ * were lost to fog and cloud before they were ever in frame.
+ */
+export const ROOFTOP_BASE_Y = -3.2;
+/** the upper cloud sheet; the lower one hangs 3.5 under it. Both float just over the roofs. */
+export const ROOFTOP_DECK_Y = 4.1;
+
+const HOUSE_TINTS = ['#ffffff', '#f6efe2', '#e6ecf4', '#eef3e6', '#f3e6e6'];
+const TREE_TINTS = ['#ffffff', '#f2f6ea', '#eaf1e2'];
+
+/**
+ * Houses and trees resolved to module lots. `modules` is manifest.modules of
+ * the homes set, each with a `kind` of 'house' or 'tree'.
+ *
+ * Unlike the towers, nothing here is sized by lot: a module is already at its
+ * true size in site units (blender/bld/homes.py exports at a fixed scale), so
+ * a lot only nudges it by a few percent and keeps it inside its plot.
+ */
+export function homeLots(modules) {
+  const rand = mulberry32(CITY_SEED + 53);
+  // lots are placed with the lean modules; a module that carries `lean` is a
+  // hero/detail replacement the rings swap in, never a lot of its own
+  const houses = modules.filter((m) => m.kind === 'house' && !m.lean);
+  const trees = modules.filter((m) => m.kind === 'tree' && !m.lean);
+  const { w, d, lotW, lots: perRow, lotD, street } = HOME_CELL;
+  const lots_ = perRow;
   const lots = [];
-  const pool = modules.filter((m) => /sky/i.test(m.id));
-  const pick = pool.length ? pool : modules;
-  /**
-   * Lot dimensions are DERIVED from the module and one uniform scale, never
-   * chosen independently: KitCity fits the footprint uniformly but matches
-   * height exactly, so an authored 30-unit lot on a 5-unit module stretched
-   * the facade 4x and shredded it into vertical streaks. Deriving w/d/h from
-   * (footprint, height) x s makes both factors equal s — zero distortion,
-   * and s alone says how big the tower is.
-   */
-  const tower = (x, z, s) => {
-    // exit corridor stays clear — 4.5 covers the camera's swing, not just
-    // the plane's line (3.2 put a facade against the lens at t≈0.125)
-    if (Math.abs(z - 1) < 4.5 && x < 24) return;
-    const mod = pick[Math.floor(rand() * pick.length)];
-    // lodScale keeps the tower the size it has always rendered at — see above
-    const ls = lodScale(mod);
-    const w = mod.footprint[0] * s * ls;
-    const d = mod.footprint[1] * s * ls;
-    // towers this size must not interpenetrate — overlapping facades read as
-    // one broken building, so a candidate that lands on a neighbour is dropped
-    // 0.34, not a full half-extent sum: a dense downtown wants towers packed
-    // shoulder to shoulder with alleys between them, and 0.52 left suburban
-    // gaps you could see the horizon through
-    // 0.55, not 0.34. Half the summed extents is the exact touching distance,
-    // so anything under 0.5 is authorising overlap — which was invisible only
-    // while modules rendered at a fraction of their lot. Now that a lot is
-    // drawn at its true size, 0.34 stood the towers inside one another. Using
-    // max(w,d) on both axes covers the 90-degree yaws.
-    for (const other of lots) {
-      const near = (Math.max(w, d) + Math.max(other.w, other.d)) * 0.55;
-      if (Math.abs(other.x - x) < near && Math.abs(other.z - z) < near) return;
-    }
+  const pick = (list) => list[Math.floor(rand() * list.length)];
+
+  const tree = (x, z, scale) => {
+    const mod = pick(trees);
+    const s = scale * (0.8 + rand() * 0.45);
     lots.push({
-      x, z, w, d,
-      h: mod.height * s * ls,
-      yaw: (Math.floor(rand() * 4) * Math.PI) / 2,
-      tint: TINTS[Math.floor(rand() * TINTS.length)],
-      moduleId: mod.id,
+      x, z, w: mod.footprint[0] * s, d: mod.footprint[1] * s, h: mod.height * s,
+      yaw: rand() * Math.PI * 2, tint: pick(TREE_TINTS), moduleId: mod.id,
     });
   };
-  // Every ring's reach is halved, and the attempt counts come down with the
-  // square of it — half the radius is a quarter of the ground, so holding
-  // the old counts would have packed the same towers into a smaller city
-  // rather than trimming it. Spacing per building is unchanged.
-  // near neighbours: crowns land around the window's eye line
-  for (let i = 0; i < 360; i++) {
-    tower(12 + rand() * 31, -19 + rand() * 38, 3.2 + rand() * 2.3);
+
+  for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+    for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+      for (const row of [0, 1]) {
+        for (let k = 0; k < perRow; k++) {
+          const cx = ix * w + k * lotW + lotW / 2;
+          const zRow = iz * d + (row === 0 ? 0 : lotD + street);
+          // the street-side edge of the lot, and which way a house faces from it
+          const front = row === 0 ? zRow + lotD : zRow;
+          const toStreet = row === 0 ? 1 : -1;
+          const rear = front - toStreet * lotD;
+
+          if (rand() < 0.07) {
+            // an empty lot: a little copse instead of a house
+            const n = 2 + Math.floor(rand() * 2);
+            for (let i = 0; i < n; i++) {
+              tree(cx + (rand() - 0.5) * (lotW - 1.2), rear + toStreet * (1 + rand() * (lotD - 2)), 1);
+            }
+            continue;
+          }
+          const mod = pick(houses);
+          const s = Math.min(0.94 + rand() * 0.14, (lotW - 0.5) / mod.footprint[0]);
+          const hw = mod.footprint[0] * s;
+          const hd = mod.footprint[1] * s;
+          const setback = 1.5 + rand() * 1.3;
+          lots.push({
+            x: cx, z: front - toStreet * (setback + hd / 2), w: hw, d: hd, h: mod.height * s,
+            yaw: row === 0 ? 0 : Math.PI, tint: pick(HOUSE_TINTS), moduleId: mod.id,
+          });
+          // backyard tree behind the house, most of the time
+          if (rand() < 0.85) {
+            tree(cx + (rand() - 0.5) * (lotW - 1.6), rear + toStreet * (0.9 + rand() * 1.4), 1);
+          }
+          // and sometimes one in the front yard, off to a corner
+          if (rand() < 0.4) {
+            const side = rand() < 0.5 ? -1 : 1;
+            tree(cx + side * (lotW / 2 - 1.0), front - toStreet * (0.8 + rand() * 0.8), 0.85);
+          }
+        }
+      }
+    }
   }
-  // the district beyond: taller, closing the horizon in every direction
-  for (let i = 0; i < 360; i++) {
-    tower(54 + rand() * 75, -52 + rand() * 105, 4.5 + rand() * 3.5);
+  // — more green, from a stream of its own so no house or tree above ever moves.
+  // Street trees stand on the verge along every street (small, `street: true`, so the
+  // rings never give them the close-up tier), and a windbreak of poplars and pines
+  // backs some rear fences.
+  const extra = mulberry32(CITY_SEED + 97);
+  const planted = (x, z, scale, opts = {}) => {
+    const mod = trees[Math.floor(extra() * trees.length)];
+    const s = scale * (0.85 + extra() * 0.35);
+    lots.push({
+      x, z, w: mod.footprint[0] * s, d: mod.footprint[1] * s, h: mod.height * s,
+      yaw: extra() * Math.PI * 2, tint: TREE_TINTS[Math.floor(extra() * TREE_TINTS.length)],
+      moduleId: mod.id, ...opts,
+    });
+  };
+  const { cross } = HOME_CELL;
+  for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+    for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+      const x0 = ix * w;
+      for (const zv of [iz * d + lotD + 0.35, iz * d + lotD + street - 0.35]) {
+        for (let x = x0 + 1.4; x < x0 + lots_ * lotW - 1.0; x += 5.2 + extra() * 1.2) {
+          if (extra() < 0.78) planted(x + (extra() - 0.5) * 1.0, zv, 0.5, { street: true });
+        }
+      }
+      // corner trees on the cross streets
+      if (extra() < 0.6) planted(x0 + lots_ * lotW + cross * 0.5, iz * d + lotD + 0.35, 0.55, { street: true });
+      // windbreak behind some rear fences
+      for (const rz of [iz * d + 0.55, iz * d + d - 0.55]) {
+        for (let x = x0 + 1; x < x0 + lots_ * lotW; x += 3.5 + extra() * 2) {
+          if (extra() < 0.17) planted(x, rz, 0.8);
+        }
+      }
+    }
   }
-  // the rest of the city, out to the horizon. Every one of these falls in
-  // the FAR ring, so they cost one instanced box each and carry their
-  // windows in the impostor texture — this is where density is cheap.
-  for (let i = 0; i < 1250; i++) {
-    tower(-20 + rand() * 230, -130 + rand() * 260, 4 + rand() * 5);
+  // — the country beyond the town: groves and woodland in patches with meadow between,
+  // so the town ends in trees rather than in an empty street grid. Far-ring stand-ins
+  // only (`forest: true`), never real modules.
+  const sm = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+  const hash2 = (ix, iz) => {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const vnoise = (x, z) => {
+    const ix = Math.floor(x), iz = Math.floor(z);
+    const fx = x - ix, fz = z - iz;
+    const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), e = hash2(ix + 1, iz + 1);
+    const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + e * u) * v;
+  };
+  const townX0 = HOME_CELLS.x[0] * w - 7, townX1 = HOME_CELLS.x[1] * w + 7;
+  const townZ0 = HOME_CELLS.z[0] * d - 7, townZ1 = HOME_CELLS.z[1] * d + 7;
+  for (let gx = -340; gx < 470; gx += 9) {
+    for (let gz = -340; gz < 310; gz += 9) {
+      const x = gx + (extra() - 0.5) * 8, z = gz + (extra() - 0.5) * 8;
+      if (x > townX0 && x < townX1 && z > townZ0 && z < townZ1) continue;
+      const density = sm(0.4, 0.62, vnoise(x / 75 + 3.1, z / 75 - 1.7)) * 0.85 + 0.04;
+      if (extra() > density) continue;
+      planted(x, z, 1.0 + extra() * 0.7, { forest: true });
+    }
   }
   return { lots };
 }
 
+/**
+ * Fence lines of the neighbourhood, one entry per straight run between two
+ * points (site units, same frame as homeLots). Side lines run from the rear to
+ * just past the front of the house, rear lines close the back, and low pickets
+ * sometimes edge the front lawn with a gap for the walkway. Side lines are shared
+ * by two neighbours, so each is generated once per boundary, not once per lot.
+ * Independent of homeLots' random stream, so adding a style here never moves a
+ * house.
+ */
+export const FENCE_STYLES = ['picket', 'privacy', 'rail'];
+
+export function fenceRuns() {
+  const rand = mulberry32(CITY_SEED + 211);
+  const { w, d, lotW, lots: perRow, lotD, street } = HOME_CELL;
+  const runs = [];
+  const style = () => FENCE_STYLES[Math.floor(rand() * FENCE_STYLES.length)];
+  const add = (x0, z0, x1, z1, st, kind) => runs.push({ x0, z0, x1, z1, style: st, kind });
+
+  for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+    for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+      for (const row of [0, 1]) {
+        const zRow = iz * d + (row === 0 ? 0 : lotD + street);
+        const front = row === 0 ? zRow + lotD : zRow;
+        const toStreet = row === 0 ? 1 : -1;
+        const rear = front - toStreet * lotD;
+        // side lines stop short of the street, at roughly the front of the house
+        const sideEnd = front - toStreet * 3.4;
+        for (let k = 0; k <= perRow; k++) {
+          const x = ix * w + k * lotW;
+          const edge = k === 0 || k === perRow;
+          if (rand() < (edge ? 0.45 : 0.78)) add(x, rear, x, sideEnd, style(), 'side');
+        }
+        for (let k = 0; k < perRow; k++) {
+          const x0 = ix * w + k * lotW;
+          if (rand() < 0.72) add(x0, rear, x0 + lotW, rear, style(), 'rear');
+          if (rand() < 0.38) {
+            // a low picket along the front lawn, open at the walkway
+            const zf = front - toStreet * 0.45;
+            const cx = x0 + lotW / 2;
+            add(x0 + 0.1, zf, cx - 0.6, zf, 'picket', 'front');
+            add(cx + 0.6, zf, x0 + lotW - 0.1, zf, 'picket', 'front');
+          }
+        }
+      }
+    }
+  }
+  return runs;
+}

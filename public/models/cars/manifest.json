@@ -1,0 +1,96 @@
+{
+ "types": [
+  {
+   "id": "sedan",
+   "file": "sedan.glb",
+   "tris": 1472,
+   "length": 1.551,
+   "width": 0.601,
+   "height": 0.482,
+   "wheelbase": 0.908,
+   "nose": 0.776,
+   "tail": -0.776,
+   "lamp": {
+    "head": [
+     0.759,
+     0.21,
+     0.222
+    ],
+    "tail": [
+     -0.759,
+     0.222,
+     0.265
+    ]
+   }
+  },
+  {
+   "id": "hatch",
+   "file": "hatch.glb",
+   "tris": 1424,
+   "length": 1.304,
+   "width": 0.574,
+   "height": 0.488,
+   "wheelbase": 0.809,
+   "nose": 0.652,
+   "tail": -0.652,
+   "lamp": {
+    "head": [
+     0.635,
+     0.201,
+     0.216
+    ],
+    "tail": [
+     -0.635,
+     0.212,
+     0.264
+    ]
+   }
+  },
+  {
+   "id": "suv",
+   "file": "suv.glb",
+   "tris": 1424,
+   "length": 1.584,
+   "width": 0.634,
+   "height": 0.568,
+   "wheelbase": 0.941,
+   "nose": 0.792,
+   "tail": -0.792,
+   "lamp": {
+    "head": [
+     0.776,
+     0.222,
+     0.273
+    ],
+    "tail": [
+     -0.776,
+     0.234,
+     0.432
+    ]
+   }
+  },
+  {
+   "id": "pickup",
+   "file": "pickup.glb",
+   "tris": 1472,
+   "length": 1.749,
+   "width": 0.647,
+   "height": 0.574,
+   "wheelbase": 1.073,
+   "nose": 0.875,
+   "tail": -0.875,
+   "lamp": {
+    "head": [
+     0.858,
+     0.226,
+     0.283
+    ],
+    "tail": [
+     -0.858,
+     0.239,
+     0.267
+    ]
+   }
+  }
+ ]
+}

@@ -79,13 +79,27 @@ export class Desk {
       envMapIntensity: 1.5,
     });
     this.disposables.push(wall, floorMat, wallMap, floorMap);
+    // The room runs from the side wall (local x -10) to the window wall's outer
+    // face (6.72). These planes used to run on to x = 16, 9 units out into the open
+    // air past the window: a ghost wall, ceiling trim and floor standing in the sky
+    // that the checklist board (and anything else out there) collided with.
+    const ROOM_X0 = -10;
+    const ROOM_X1 = 6.72;
+    const roomW = ROOM_X1 - ROOM_X0;
+    const roomX = (ROOM_X0 + ROOM_X1) / 2;
+    /** shortens a plane's U range so a texture keeps its density when the plane is narrowed */
+    const narrowed = (g: PlaneGeometry, keep: number): PlaneGeometry => {
+      const uv = g.attributes.uv!;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * keep);
+      return g;
+    };
     floorMap.repeat.set(5, 3.5);
-    const floor = new Mesh(new PlaneGeometry(26, 18), floorMat);
+    const floor = new Mesh(narrowed(new PlaneGeometry(roomW, 18), roomW / 26), floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(3, -1.28, 0);
+    floor.position.set(roomX, -1.28, 0);
     wallMap.repeat.set(5, 1.3);
-    const backWall = new Mesh(new PlaneGeometry(26, 6.5), wall);
-    backWall.position.set(3, 1.9, -3.7);
+    const backWall = new Mesh(narrowed(new PlaneGeometry(roomW, 6.5), roomW / 26), wall);
+    backWall.position.set(roomX, 1.9, -3.7);
     const sideWall = new Mesh(new PlaneGeometry(18, 6.5), wall);
     sideWall.rotation.y = Math.PI / 2;
     sideWall.position.set(-4.6, 1.9, 0.6);
@@ -109,8 +123,8 @@ export class Desk {
 
     // baseboards ground the walls
     const boardMaterial = new MeshStandardMaterial({ color: '#0e1420', roughness: 0.7 });
-    const backBoard = new Mesh(new BoxGeometry(26, 0.28, 0.07), boardMaterial);
-    backBoard.position.set(3, -1.15, -3.67);
+    const backBoard = new Mesh(new BoxGeometry(roomW, 0.28, 0.07), boardMaterial);
+    backBoard.position.set(roomX, -1.15, -3.67);
     const sideBoard = new Mesh(new BoxGeometry(0.07, 0.28, 18), boardMaterial);
     sideBoard.position.set(-4.57, -1.15, 0.6);
     this.group.add(backBoard, sideBoard);
@@ -121,8 +135,8 @@ export class Desk {
     // keeps only the horizontal lines, in cool white)
     const trimMaterial = new MeshStandardMaterial({ color: '#e6eaf2', roughness: 0.5 });
     this.disposables.push(trimMaterial);
-    const crownBack = new Mesh(new BoxGeometry(26, 0.22, 0.12), trimMaterial);
-    crownBack.position.set(3, 5.05, -3.66);
+    const crownBack = new Mesh(new BoxGeometry(roomW, 0.22, 0.12), trimMaterial);
+    crownBack.position.set(roomX, 5.05, -3.66);
     const crownSide = new Mesh(new BoxGeometry(0.12, 0.22, 18), trimMaterial);
     crownSide.position.set(-4.56, 5.05, 0.6);
     // no chair rail — a mid-wall moulding line is the most period-reading
@@ -135,8 +149,8 @@ export class Desk {
       emissive: '#cfe0ff',
       emissiveIntensity: 0.9,
     });
-    const coveBack = new Mesh(new BoxGeometry(26, 0.05, 0.03), coveMaterial);
-    coveBack.position.set(3, 2.9, -3.63);
+    const coveBack = new Mesh(new BoxGeometry(roomW, 0.05, 0.03), coveMaterial);
+    coveBack.position.set(roomX, 2.9, -3.63);
     const coveSide = new Mesh(new BoxGeometry(0.03, 0.05, 18), coveMaterial);
     coveSide.position.set(-4.55, 2.9, 0.6);
     this.group.add(coveBack, coveSide);

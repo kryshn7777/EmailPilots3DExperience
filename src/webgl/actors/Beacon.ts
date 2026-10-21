@@ -4,14 +4,12 @@ import {
   BufferGeometry,
   Camera,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   DoubleSide,
   DynamicDrawUsage,
   ExtrudeGeometry,
   Float32BufferAttribute,
   Group,
-  IcosahedronGeometry,
   InstancedMesh,
   MathUtils,
   Mesh,
@@ -20,20 +18,27 @@ import {
   PlaneGeometry,
   Points,
   PointsMaterial,
+  RepeatWrapping,
   RingGeometry,
   ShaderMaterial,
   Shape,
   SphereGeometry,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
-  TorusGeometry,
+  type Texture,
+  TextureLoader,
   Vector2,
   Vector3,
 } from 'three';
 import type { Quality } from '../quality';
+import type { SkyDome } from '../materials/SkyDome';
+import { asset } from '../asset';
+import { fogHeight } from '../fog';
 import type { Raycast } from '../interact/Raycast';
 import type { Tooltip } from '../interact/Tooltip';
-import { glowTexture, lighthouseTexture } from '../bake/CanvasTextures';
+import { glowTexture } from '../bake/CanvasTextures';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import beamVert from '../shaders/beam.vert.glsl';
 import beamFrag from '../shaders/beam.frag.glsl';
 import oceanVert from '../shaders/ocean.vert.glsl';
@@ -116,202 +121,11 @@ export class Beacon {
     this.tower.scale.setScalar(TOWER_SCALE);
     this.group.add(this.tower);
 
-    // — the tower: banded hull on a splayed stone base, corbelled gallery
-    // with a real balustrade, glazed lantern room around a Fresnel drum,
-    // domed roof and lightning rod. Poly Haven has no CC0 lighthouse, so the
-    // detail is procedural; every part shares one of four materials so the
-    // whole tower is still only a handful of draw calls.
-    const hullMap = lighthouseTexture();
-    const hullMaterial = new MeshStandardMaterial({ map: hullMap, roughness: 0.55 });
-    const trim = new MeshStandardMaterial({ color: '#232a36', roughness: 0.5, metalness: 0.4 });
-    const stone = new MeshStandardMaterial({ color: '#5d5b57', roughness: 0.9 });
-    const lanternGlass = new MeshStandardMaterial({
-      color: '#0d3a38',
-      emissive: '#7fe8d8',
-      emissiveIntensity: 2.4,
-      roughness: 0.3,
-    });
-    this.disposables.push(hullMaterial, hullMap, trim, stone, lanternGlass);
-
-    /** places a part on the tower centreline and tracks its geometry */
-    const part = (g: BufferGeometry, m: MeshStandardMaterial, y: number): Mesh => {
-      const mesh = new Mesh(g, m);
-      mesh.position.y = y;
-      this.tower.add(mesh);
-      this.disposables.push(g);
-      return mesh;
-    };
-    /** one draw call for a ring of identical small parts */
-    const ring = (
-      g: BufferGeometry,
-      m: MeshStandardMaterial,
-      count: number,
-      radius: number,
-      y: number,
-      faceOut = false,
-    ): void => {
-      const inst = new InstancedMesh(g, m, count);
-      const dummy = new Object3D();
-      for (let i = 0; i < count; i++) {
-        const a = (i / count) * Math.PI * 2;
-        dummy.position.set(Math.cos(a) * radius, y, Math.sin(a) * radius);
-        dummy.rotation.y = faceOut ? -a : 0;
-        dummy.updateMatrix();
-        inst.setMatrixAt(i, dummy.matrix);
-      }
-      inst.instanceMatrix.needsUpdate = true;
-      this.tower.add(inst);
-      this.disposables.push(g, inst);
-    };
-
-    part(new CylinderGeometry(1.5, 1.78, 0.3, 20), stone, 0.12); // plinth
-    part(new CylinderGeometry(1.02, 1.32, 0.85, 20), stone, 0.5); // base course
-    part(new CylinderGeometry(0.55, 0.95, 11.2, 20), hullMaterial, 6); // banded hull
-    part(new CylinderGeometry(1.06, 0.6, 0.5, 20), trim, 11.35); // corbel flare
-    part(new CylinderGeometry(1.12, 1.12, 0.12, 20), trim, 11.66); // gallery deck
-
-    // balustrade: hand rail, mid rail, and posts between them
-    const railTube = (y: number): void => {
-      const r = new Mesh(new TorusGeometry(1.08, 0.032, 6, 28), trim);
-      r.rotation.x = Math.PI / 2;
-      r.position.y = y;
-      this.tower.add(r);
-      this.disposables.push(r.geometry);
-    };
-    railTube(12.06);
-    railTube(11.9);
-    ring(new BoxGeometry(0.05, 0.36, 0.05), trim, 18, 1.08, 11.9);
-
-    // lantern room: glazing drum, astragal rings top and bottom, vertical
-    // mullions, and the stepped Fresnel lens burning inside it
-    part(new CylinderGeometry(0.62, 0.62, 0.85, 16), lanternGlass, 12.2);
-    for (const y of [11.79, 12.61]) {
-      const band = new Mesh(new TorusGeometry(0.635, 0.035, 6, 24), trim);
-      band.rotation.x = Math.PI / 2;
-      band.position.y = y;
-      this.tower.add(band);
-      this.disposables.push(band.geometry);
-    }
-    ring(new BoxGeometry(0.05, 0.86, 0.05), trim, 8, 0.625, 12.2);
-    const lensGlass = new MeshStandardMaterial({
-      color: '#123c3a',
-      emissive: '#eafffb',
-      emissiveIntensity: 3.2,
-      roughness: 0.15,
-    });
-    part(new CylinderGeometry(0.3, 0.3, 0.46, 14), lensGlass, 12.18);
-    for (const y of [11.94, 12.42]) {
-      const step = new Mesh(new TorusGeometry(0.3, 0.045, 6, 18), lensGlass);
-      step.rotation.x = Math.PI / 2;
-      step.position.y = y;
-      this.tower.add(step);
-      this.disposables.push(step.geometry);
-    }
-    this.disposables.push(lensGlass);
-
-    // roof: cone, ventilator dome, finial, lightning rod
-    part(new ConeGeometry(0.78, 0.62, 16), trim, 12.96);
-    part(new SphereGeometry(0.13, 12, 8), trim, 13.3);
-    part(new CylinderGeometry(0.015, 0.015, 0.62, 6), trim, 13.72);
-
-    // stairwell slits winding up the hull — the tower reads as climbable
-    const slit = new MeshStandardMaterial({
-      color: '#1a1408',
-      emissive: '#ffc06a',
-      emissiveIntensity: 1.1,
-    });
-    const slitGeometry = new BoxGeometry(0.2, 0.44, 0.07);
-    const slits = new InstancedMesh(slitGeometry, slit, 6);
-    const slitDummy = new Object3D();
-    for (let i = 0; i < 6; i++) {
-      const y = 1.9 + i * 1.55;
-      const a = i * 1.9; // ~one turn every three floors
-      const r = 0.95 - 0.4 * ((y - 0.4) / 11.2) + 0.02;
-      slitDummy.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
-      slitDummy.rotation.y = -a;
-      slitDummy.updateMatrix();
-      slits.setMatrixAt(i, slitDummy.matrix);
-    }
-    slits.instanceMatrix.needsUpdate = true;
-    this.tower.add(slits);
-    this.disposables.push(slitGeometry, slit, slits);
-
-    // entry: door into the base with a small hood, reached off the walkway
-    const doorway = new Mesh(
-      new BoxGeometry(0.5, 0.95, 0.14),
-      new MeshStandardMaterial({ color: '#1b2a34', roughness: 0.6 }),
-    );
-    doorway.position.set(1.02, 0.62, 0.55);
-    doorway.rotation.y = -0.5;
-    const hood = new Mesh(new BoxGeometry(0.68, 0.08, 0.3), trim);
-    hood.position.set(1.06, 1.14, 0.58);
-    hood.rotation.y = -0.5;
-    this.tower.add(doorway, hood);
-    this.disposables.push(
-      doorway.geometry, doorway.material as MeshStandardMaterial, hood.geometry,
-    );
-
-    // walkway from the cottage to the door, so the two buildings connect
-    const walk = new Mesh(new BoxGeometry(1.9, 0.1, 0.75), stone);
-    walk.position.set(1.9, 0.28, 0.5);
-    walk.rotation.y = -0.25;
-    this.tower.add(walk);
-    this.disposables.push(walk.geometry);
-
-    // — the islet: wet rocks breaking the swell —
-    const rock = new MeshStandardMaterial({ color: '#151c26', roughness: 0.35, metalness: 0.1 });
-    this.disposables.push(rock);
-    const rockSeeds: [number, number, number, number][] = [
-      [0, 0.1, 0, 2.1], [1.6, -0.15, 0.9, 1.2], [-1.4, -0.2, 1.1, 1.0],
-      [0.9, -0.25, -1.5, 1.3], [-1.7, -0.3, -0.9, 0.9], [2.4, -0.4, -0.4, 0.7],
-    ];
-    for (const [x, y, z, s] of rockSeeds) {
-      const g = new IcosahedronGeometry(s, 0);
-      const m = new Mesh(g, rock);
-      m.position.set(x, y, z);
-      m.scale.y = 0.55;
-      m.rotation.set(x, z, x * z);
-      this.tower.add(m);
-      this.disposables.push(g);
-    }
-
-    // — keeper's cottage beside the tower: walls, pitched roof, chimney,
-    // door, and two lit windows — the islet reads inhabited, not a prop —
-    const cottageWall = new MeshStandardMaterial({ color: '#8e8578', roughness: 0.85 });
-    const cottageRoof = new MeshStandardMaterial({ color: '#2e2a33', roughness: 0.7 });
-    const cottage = new Group();
-    const walls = new Mesh(new BoxGeometry(2.3, 1.35, 1.7), cottageWall);
-    walls.position.y = 0.62;
-    const roofPrism = new Mesh(new BoxGeometry(1.62, 1.62, 1.9), cottageRoof);
-    roofPrism.rotation.z = Math.PI / 4;
-    roofPrism.scale.y = 0.62;
-    roofPrism.position.y = 1.38;
-    const chimney = new Mesh(new BoxGeometry(0.28, 0.7, 0.28), cottageWall);
-    chimney.position.set(0.7, 1.75, -0.4);
-    const door = new Mesh(
-      new PlaneGeometry(0.42, 0.78),
-      new MeshStandardMaterial({ color: '#20303c', roughness: 0.6 }),
-    );
-    door.position.set(-0.6, 0.42, 0.86);
-    const windowGlow = new MeshStandardMaterial({
-      color: '#241c10',
-      emissive: '#ffc06a',
-      emissiveIntensity: 1.6,
-    });
-    for (const wx of [0.25, 0.85]) {
-      const win = new Mesh(new PlaneGeometry(0.3, 0.34), windowGlow);
-      win.position.set(wx, 0.72, 0.86);
-      cottage.add(win);
-      this.disposables.push(win.geometry);
-    }
-    cottage.add(walls, roofPrism, chimney, door);
-    cottage.position.set(2.4, 0, 0.4);
-    cottage.rotation.y = -0.25;
-    this.tower.add(cottage);
-    this.disposables.push(
-      walls.geometry, roofPrism.geometry, chimney.geometry, door.geometry,
-      cottageWall, cottageRoof, door.material as MeshStandardMaterial, windowGlow,
-    );
+    // — the tower, its islet and the keeper's cottage: modelled in Blender
+    // (blender/make_lighthouse.py) in the old tower's units, so the lantern is still
+    // at y = 12.2 and every anchor below (beam pivot, flare, tooltip) still holds.
+    // It arrives a moment after construction; the beacon chapter is a long way off.
+    void this.loadLighthouse();
 
     // — the sea — oversized so the camera never looks past its far edge
     // into black void on the way out of the chapter. Scaled up with the
@@ -330,21 +144,44 @@ export class Beacon {
      */
     const seg = quality.tier === 'high' ? 256 : 120;
     const seaGeometry = new PlaneGeometry(640, 420, seg, Math.floor(seg / 2));
+    // Wave detail and foam come from two tileable maps generated by
+    // blender/make_ocean.py, so they are mipmapped and filtered like any texture
+    // instead of being sines of world position that alias into speckle.
+    const maps = new TextureLoader();
+    const mapOf = (file: string): ReturnType<TextureLoader['load']> => {
+      const t = maps.load(asset(`/models/ocean/${file}`));
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      return t;
+    };
+    const normalMap = mapOf('ocean-normal.webp');
+    const foamMap = mapOf('ocean-foam.webp');
+    this.disposables.push(normalMap, foamMap);
     this.oceanMaterial = new ShaderMaterial({
       vertexShader: oceanVert,
       fragmentShader: oceanFrag,
       uniforms: {
         uTime: { value: 0 },
-        uDeep: { value: new Color('#04141a') },
-        uCrest: { value: new Color('#0d3540') },
-        uFoam: { value: new Color('#9fd6cf') },
+        uNormalMap: { value: normalMap },
+        uFoamMap: { value: foamMap },
+        uDeep: { value: new Color('#031017') },
+        uShallow: { value: new Color('#0b3a46') },
+        uFoam: { value: new Color('#cfe6e2') },
+        // the sky it reflects: bound to the live sky colours by bindSky()
+        uZenith: { value: new Color('#060b12') },
+        uHorizon: { value: new Color('#0e2530') },
         uMoonDir: { value: new Vector3(-0.2, 0.7, 0.4) },
+        uMoonColor: { value: new Color('#9fe8da') },
+        uFlash: { value: 0 },
+        uLantern: { value: new Vector3() },
+        uBeamDir: { value: new Vector2(1, 0) },
+        uBeamColor: { value: new Color('#7fe8d8') },
+        uBeamPower: { value: 0 },
         uTowerXZ: { value: new Vector2(this.group.position.x, this.group.position.z) },
         uFogColor: { value: new Color('#0a1d24') },
         uFogNear: { value: 20 },
-        // pushed out with the bigger sea, so the horizon is distance rather
-        // than a wall of fog a few ship-lengths out
-        uFogFar: { value: 210 },
+        uFogFar: { value: 260 },
+        uFogHeight: fogHeight,
         uCamPos: { value: new Vector3() },
         uReveal: { value: 0 },
       },
@@ -501,6 +338,66 @@ export class Beacon {
         this.tooltip.hide();
       },
     });
+  }
+
+  /** One mesh per material, named for it: the material table lives in the model's manifest. */
+  private async loadLighthouse(): Promise<void> {
+    interface Spec {
+      map?: string; color: string; roughness: number; metalness?: number;
+      emissive?: string; emissiveIntensity?: number; vertexColors?: boolean;
+    }
+    const base = asset('/models/lighthouse');
+    const manifest = (await fetch(`${base}/manifest.json`, { cache: 'no-cache' }).then((r) => r.json())) as {
+      materials: Record<string, Spec>;
+    };
+    const loader = new TextureLoader();
+    const maps = new Map<string, { color: Texture; normal: Texture }>();
+    const mapSet = (name: string): { color: Texture; normal: Texture } => {
+      let m = maps.get(name);
+      if (!m) {
+        const color = loader.load(`${base}/${name}-color.webp`);
+        color.colorSpace = SRGBColorSpace;
+        const normal = loader.load(`${base}/${name}-normal.webp`);
+        for (const t of [color, normal]) {
+          t.wrapS = t.wrapT = RepeatWrapping;
+          t.anisotropy = 8;
+        }
+        m = { color, normal };
+        maps.set(name, m);
+        this.disposables.push(color, normal);
+      }
+      return m;
+    };
+    const materials = new Map<string, MeshStandardMaterial>();
+    for (const [name, spec] of Object.entries(manifest.materials)) {
+      const m = new MeshStandardMaterial({
+        color: spec.color,
+        roughness: spec.roughness,
+        metalness: spec.metalness ?? 0,
+        vertexColors: spec.vertexColors ?? false,
+      });
+      if (spec.map) {
+        const set = mapSet(spec.map);
+        m.map = set.color;
+        m.normalMap = set.normal;
+        m.normalScale.set(0.9, 0.9);
+      }
+      if (spec.emissive) {
+        m.emissive = new Color(spec.emissive);
+        m.emissiveIntensity = spec.emissiveIntensity ?? 1;
+      }
+      materials.set(name, m);
+      this.disposables.push(m);
+    }
+    const gltf = await new GLTFLoader().loadAsync(`${base}/lighthouse.glb`);
+    gltf.scene.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh) return;
+      const m = materials.get(mesh.name);
+      if (m) mesh.material = m;
+      this.disposables.push(mesh.geometry);
+    });
+    this.tower.add(gltf.scene);
   }
 
   /**
@@ -674,7 +571,14 @@ export class Beacon {
     this.group.add(this.ship);
   }
 
-  update(time: number, camera: Camera, t: number, planePos: Vector3): number {
+  /** Makes the sea reflect the sky the chapter is wearing, colour for colour. */
+  bindSky(sky: SkyDome): void {
+    const u = this.oceanMaterial.uniforms;
+    u.uZenith!.value = sky.zenith;
+    u.uHorizon!.value = sky.horizon;
+  }
+
+  update(time: number, camera: Camera, t: number, planePos: Vector3, flash = 0, fogColor?: Color): number {
     if (!this.group.visible) return 0;
     /**
      * The sweep is SCROLL-DRIVEN: there is no wall-clock term anywhere in the
@@ -716,6 +620,13 @@ export class Beacon {
       0.8 * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
     this.oceanMaterial.uniforms.uTime!.value = time;
     (this.oceanMaterial.uniforms.uCamPos!.value as Vector3).copy(camera.position);
+    // lightning lights the sea, the lamp's sweep rakes across it
+    const ou = this.oceanMaterial.uniforms;
+    ou.uFlash!.value = flash;
+    if (fogColor) (ou.uFogColor!.value as Color).copy(fogColor);
+    (ou.uLantern!.value as Vector3).copy(this.towerTop);
+    (ou.uBeamDir!.value as Vector2).set(Math.cos(this.beamYaw), -Math.sin(this.beamYaw));
+    ou.uBeamPower!.value = this.beamMaterial.uniforms.uIntensity!.value / 0.8;
 
     // weather intensity follows the chapter window
     const beaconness =

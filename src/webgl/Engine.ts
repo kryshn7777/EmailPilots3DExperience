@@ -51,7 +51,11 @@ import { LaunchString } from './actors/LaunchString';
 import { Panel } from './actors/Panel';
 import { PaperBurst } from './actors/PaperBurst';
 import { PaperPlane } from './actors/PaperPlane';
+import { KitCity } from './actors/KitCity';
+import { fogHeight } from './fog';
+import { ROOFTOP_BASE_Y } from './bake/cityGen.mjs';
 import { Rooftops } from './actors/Rooftops';
+import { Mountains } from './actors/Mountains';
 import { Storm } from './actors/Storm';
 import { Traffic } from './actors/Traffic';
 import { Trail } from './actors/Trail';
@@ -113,6 +117,7 @@ export class Engine {
   private panel: Panel;
   private windowFrame: WindowFrame;
   private rooftops!: Rooftops;
+  private mountains!: Mountains;
   private clouds: Clouds;
   private envelopes: Envelopes;
   private storm: Storm;
@@ -185,16 +190,34 @@ export class Engine {
     const roomEnv = pmrem.fromScene(new RoomEnvironment());
     this.scene.environment = roomEnv.texture;
     this.scene.environmentIntensity = 0.3;
+    // two probes load, so the generator is released when BOTH have settled
+    let probesLeft = 2;
+    const probeSettled = (): void => {
+      if (--probesLeft === 0) pmrem.dispose();
+    };
     new HDRLoader().load(
       asset('/hdri/sky_1k.hdr'),
       (hdr) => {
         this.scene.environment = pmrem.fromEquirectangular(hdr).texture;
         hdr.dispose();
         roomEnv.dispose();
-        pmrem.dispose();
+        probeSettled();
       },
       undefined,
-      () => pmrem.dispose(), // offline: keep the RoomEnvironment look
+      probeSettled, // offline: keep the RoomEnvironment look
+    );
+    // the buildings' own sky: a path-traced cloud sea and cumulus baked in
+    // Blender (blender/make_cloud_env.py). Light and reflections for the city
+    // only; the night probe above still serves everything else.
+    new HDRLoader().load(
+      asset('/hdri/cloud_env_1k.hdr'),
+      (hdr) => {
+        KitCity.setEnvironment(pmrem.fromEquirectangular(hdr).texture);
+        hdr.dispose();
+        probeSettled();
+      },
+      undefined,
+      probeSettled, // missing file: buildings fall back to the scene probe
     );
 
     const rand = mulberry32(919);
@@ -202,12 +225,14 @@ export class Engine {
     this.panel = new Panel(this.path.chapterAnchor(1));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
+    this.mountains = new Mountains(this.sky);
     this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer);
     this.envelopes = new Envelopes(this.raycast, this.tooltip);
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
     this.beacon = new Beacon(this.path.chapterAnchor(5), this.raycast, this.tooltip, this.quality);
+    this.beacon.bindSky(this.sky);
     this.city = new City(this.path.chapterAnchor(7), this.path, this.quality);
     this.copilot = new Copilot(this.path.chapterAnchor(8));
     // fixed roll-out point, not a story-t sample: the flight now turns off
@@ -226,6 +251,7 @@ export class Engine {
       this.flock.group,
       this.launchString.line,
       this.sky.mesh,
+      this.mountains.mesh,
       this.sun,
       this.sun.target,
       this.hemi,
@@ -461,10 +487,34 @@ export class Engine {
       .normalize();
     this.sky.sunDir.copy(this.sunDirWorld);
     this.sky.sunIntensity = sunLevel;
+    this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2;
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
+    // mist standing on the ground or the sea: blends between chapters, with the base
+    // height following whichever surface each chapter's mist stands on
+    const mistOf = (g: GradeParams): { strength: number; boost: number; scale: number; base: number } => {
+      const m = g.mist;
+      if (!m) return { strength: 0, boost: 1, scale: 8, base: 0 };
+      return {
+        strength: m.strength, boost: m.boost, scale: m.scale,
+        base: m.base === 'sea' ? this.beacon.group.position.y + 0.15 : ROOFTOP_BASE_Y,
+      };
+    };
+    const m0 = mistOf(from);
+    const m1 = mistOf(to);
+    // a chapter with no mist borrows its neighbour's shape, so only the strength fades
+    const lo = m0.strength > 0 ? m0 : { ...m1, strength: 0 };
+    const hi = m1.strength > 0 ? m1 : { ...m0, strength: 0 };
+    fogHeight.value.set(
+      MathUtils.lerp(lo.strength, hi.strength, u),
+      MathUtils.lerp(lo.base, hi.base, u),
+      MathUtils.lerp(lo.scale, hi.scale, u),
+      MathUtils.lerp(lo.boost, hi.boost, u),
+    );
     this.scene.environmentIntensity = num((g) => g.envIntensity);
+    // materials with their own envMap ignore the line above
+    KitCity.setEnvIntensity(this.scene.environmentIntensity);
   }
 
   /**
@@ -671,13 +721,23 @@ export class Engine {
       // eased back from 2/34: at that thickness the climb went to flat milk
       // and took the formation chapter's staging with it. 8/78 still loses
       // the ground and still reads as cloud, without closing the whole frame.
-      this.fog.near = MathUtils.lerp(this.fog.near, 8, deckClose);
-      this.fog.far = MathUtils.lerp(this.fog.far, 78, deckClose);
+      // 16/115 now (it was 8/78): the same cloud floor, with the sky above and
+      // the weather in it readable instead of one flat tan fog
+      this.fog.near = MathUtils.lerp(this.fog.near, 40, deckClose);
+      this.fog.far = MathUtils.lerp(this.fog.far, 240, deckClose);
+    }
+    // the district leaves the frame by thickening into the storm's weather, not by
+    // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
+    const leave = MathUtils.smoothstep(t, 0.3, 0.335);
+    if (leave > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
+      this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
     }
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
-    this.rooftops.group.visible = t > 0.06 && t < 0.33 && deckClose < 0.99;
+    this.rooftops.group.visible = t > 0.06 && t < 0.335;
     this.rooftops.update(time);
+    this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
     this.panel.update(t);
@@ -704,7 +764,9 @@ export class Engine {
       time,
     );
     this.traffic.update(t, time);
-    this.plane.setBeamHit(this.beacon.update(time, this.camera, t, this.rig.planeWorldPos));
+    this.plane.setBeamHit(
+      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color),
+    );
     this.city.update(t, time);
     this.copilot.update(
       this.rig.planeWorldPos,
@@ -783,6 +845,7 @@ export class Engine {
     this.panel.dispose();
     this.windowFrame.dispose();
     this.rooftops.dispose();
+    this.mountains.dispose();
     this.clouds.dispose();
     this.envelopes.dispose();
     this.storm.dispose();

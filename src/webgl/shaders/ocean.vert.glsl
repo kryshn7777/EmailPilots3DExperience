@@ -1,57 +1,66 @@
-// Night ocean under the beacon: three directional swells with sharpened
-// crests. Normals via finite differences (cheap at this vertex density).
+// Gerstner sea: six directional waves with real horizontal motion, so crests
+// sharpen and troughs flatten the way water does, and the folding of the surface
+// (the Jacobian) comes out of the same sum and drives where foam forms.
+//
+// The longest waves are 52 units and the shortest 12, against 2.5-unit quads, so
+// every one is sampled at least 4.8 times. Everything finer than that comes from
+// the mipmapped normal maps in ocean.frag, which can be filtered; sines of world
+// position cannot, and aliased into the white speckle this shader replaces.
 uniform float uTime;
 
 varying vec3 vWorldPos;
 varying vec3 vNormal;
-varying float vCrest;
+varying float vHeight;
+varying float vFold;
 
-// Amplitudes are 1.6x the first pass and the whole field runs ~30% faster:
-// this is weather, not a harbour on a calm night. The consumers of vCrest in
-// the fragment shader have their thresholds scaled with it (by ~1.4, so foam
-// coverage grows too), and Beacon lifts the freighter to match — a bigger sea
-// under an unmoved hull is how the ship ends up looking swamped.
-float swell(vec2 p, float t) {
-  float h = 0.0;
-  // four directions: long storm swells + shorter wind chop
-  h += 0.74 * sin(dot(p, vec2(0.14, 0.06)) + t * 1.3);
-  h += 0.48 * sin(dot(p, vec2(-0.09, 0.17)) + t * 1.8);
-  h += 0.29 * sin(dot(p, vec2(0.23, -0.19)) + t * 2.4);
-  h += 0.14 * sin(dot(p, vec2(0.4, 0.33)) + t * 3.2);
-  /**
-   * The two high-frequency chop terms that used to sit here are GONE.
-   *
-   * They had wavelengths of 5.7 and 5.1 units against 5-unit quads — about one
-   * sample per wave, which is genuinely undersampled and worth removing on its
-   * own merits at these amplitudes. Their detail now comes from the
-   * per-fragment ripple field in ocean.frag, which has no sampling rate to
-   * violate.
-   *
-   * They were NOT, however, the fish-scale lattice they were removed chasing.
-   * That was the rain shader shearing its drop field by height (rain.vert),
-   * and it outlived this edit by two more wrong guesses.
-   */
-  // sharpen crests, keep troughs broad
-  return h + 0.3 * pow(abs(sin(dot(p, vec2(0.11, 0.13)) + t * 1.2)), 4.0);
-}
+const int N = 6;
 
 void main() {
-  vec3 p = position; // plane is rotated -90° around X: local xy → world xz
-  float t = uTime;
-  vec2 xz = (modelMatrix * vec4(p, 1.0)).xz;
+  vec3 base = (modelMatrix * vec4(position, 1.0)).xyz;
+  vec2 p = base.xz;
 
-  float h = swell(xz, t);
-  float hx = swell(xz + vec2(0.35, 0.0), t);
-  float hz = swell(xz + vec2(0.0, 0.35), t);
-  p.z += h; // local z = world y before the mesh rotation
+  //                      direction (deg)  wavelength  amplitude  steepness
+  const vec4 W0 = vec4(33.0, 52.0, 0.92, 0.80);
+  const vec4 W1 = vec4(12.0, 34.0, 0.62, 0.78);
+  const vec4 W2 = vec4(58.0, 22.0, 0.40, 0.74);
+  const vec4 W3 = vec4(-14.0, 15.5, 0.28, 0.70);
+  const vec4 W4 = vec4(82.0, 12.5, 0.20, 0.66);
+  const vec4 W5 = vec4(40.0, 12.0, 0.15, 0.60);
 
-  // 0.45, not 0.6: a smaller up component tilts the normals harder for the
-  // same slope, so the bigger swells actually catch and lose the moon instead
-  // of staying evenly lit across a face
-  vNormal = normalize(vec3(h - hx, 0.45, h - hz));
-  vCrest = h;
+  vec3 disp = vec3(0.0);
+  float nx = 0.0, nz = 0.0, ny = 0.0;
+  float jxx = 0.0, jzz = 0.0, jxz = 0.0;
 
-  vec4 world = modelMatrix * vec4(p, 1.0);
-  vWorldPos = world.xyz;
-  gl_Position = projectionMatrix * viewMatrix * world;
+  for (int i = 0; i < N; i++) {
+    vec4 w = i == 0 ? W0 : i == 1 ? W1 : i == 2 ? W2 : i == 3 ? W3 : i == 4 ? W4 : W5;
+    float a = radians(w.x);
+    vec2 d = vec2(cos(a), sin(a));
+    float k = 6.28318530718 / w.y;
+    // deep-water dispersion, slowed for the camera: longer waves travel faster
+    float omega = 0.6 * sqrt(6.5 * k);
+    float phase = k * dot(d, p) - omega * uTime + float(i) * 1.7;
+    float s = sin(phase), c = cos(phase);
+    float A = w.z, Q = w.w;
+
+    disp.x += Q * A * d.x * c;
+    disp.z += Q * A * d.y * c;
+    disp.y += A * s;
+
+    nx -= d.x * k * A * c;
+    nz -= d.y * k * A * c;
+    ny += Q * k * A * s;
+
+    jxx += Q * k * A * d.x * d.x * s;
+    jzz += Q * k * A * d.y * d.y * s;
+    jxz += Q * k * A * d.x * d.y * s;
+  }
+
+  vNormal = normalize(vec3(nx, 1.0 - ny, nz));
+  // how much the surface is folding over on itself: < 0 is a breaking crest
+  vFold = (1.0 - jxx) * (1.0 - jzz) - jxz * jxz;
+  vHeight = disp.y;
+
+  vec3 world = base + disp;
+  vWorldPos = world;
+  gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }

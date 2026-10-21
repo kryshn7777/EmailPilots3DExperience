@@ -1,0 +1,108 @@
+{
+ "materials": {
+  "granite": {
+   "map": "stone",
+   "color": "#8c8881",
+   "roughness": 0.9
+  },
+  "white": {
+   "map": "stone",
+   "color": "#f0ece2",
+   "roughness": 0.8
+  },
+  "red": {
+   "map": "stone",
+   "color": "#c8412f",
+   "roughness": 0.78
+  },
+  "rock": {
+   "map": "rock",
+   "color": "#ffffff",
+   "roughness": 0.55,
+   "vertexColors": true
+  },
+  "iron": {
+   "color": "#1c2229",
+   "roughness": 0.45,
+   "metalness": 0.75
+  },
+  "copper": {
+   "color": "#58a58f",
+   "roughness": 0.5,
+   "metalness": 0.55
+  },
+  "brass": {
+   "color": "#b68c3e",
+   "roughness": 0.35,
+   "metalness": 0.9
+  },
+  "slate": {
+   "map": "slate",
+   "color": "#ffffff",
+   "roughness": 0.75
+  },
+  "wood": {
+   "map": "wood",
+   "color": "#b08a62",
+   "roughness": 0.85
+  },
+  "plaster": {
+   "map": "plaster",
+   "color": "#ffffff",
+   "roughness": 0.9
+  },
+  "brick": {
+   "map": "brick",
+   "color": "#ffffff",
+   "roughness": 0.9
+  },
+  "glass_warm": {
+   "color": "#241a0c",
+   "roughness": 0.3,
+   "emissive": "#ffc06a",
+   "emissiveIntensity": 1.5
+  },
+  "glass_lantern": {
+   "color": "#0d3a38",
+   "roughness": 0.2,
+   "emissive": "#7fe8d8",
+   "emissiveIntensity": 2.2
+  },
+  "lens": {
+   "color": "#123c3a",
+   "roughness": 0.15,
+   "emissive": "#eafffb",
+   "emissiveIntensity": 3.4
+  },
+  "misc": {
+   "color": "#ffffff",
+   "roughness": 0.8,
+   "vertexColors": true
+  }
+ },
+ "tris": {
+  "granite": 4736,
+  "white": 1920,
+  "red": 1280,
+  "iron": 5508,
+  "copper": 830,
+  "brass": 500,
+  "slate": 48,
+  "wood": 348,
+  "plaster": 96,
+  "brick": 76,
+  "glass_warm": 300,
+  "glass_lantern": 48,
+  "lens": 1264,
+  "rock": 10890,
+  "misc": 1102
+ },
+ "maps": [
+  "brick",
+  "plaster",
+  "rock",
+  "slate",
+  "stone",
+  "wood"
+ ]
+}
