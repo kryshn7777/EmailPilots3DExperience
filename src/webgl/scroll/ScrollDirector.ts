@@ -49,7 +49,16 @@ export class ScrollDirector {
 
     this.trigger = ScrollTrigger.create({
       start: 0,
-      end: () => document.documentElement.scrollHeight - window.innerHeight,
+      // The flight lasts as long as the experience stage (`#experience`, Experience.astro): from the
+      // top of the page to the moment its last chapter has scrolled through. Content placed after
+      // it (the landing section) does not stretch the story. On pages without a stage the whole
+      // document is the timeline, as before.
+      end: () => {
+        const stage = document.getElementById('experience');
+        if (!stage) return document.documentElement.scrollHeight - window.innerHeight;
+        const bottom = stage.getBoundingClientRect().bottom + window.scrollY;
+        return Math.max(bottom - window.innerHeight, 1);
+      },
       scrub: true,
       onUpdate: (self) => options.onProgress(self.progress),
     });
