@@ -84,6 +84,16 @@ per module `sheet`, `lean` (hero -> the module it replaces), `kind`, `footprint`
 - **Streetlights** (`Streetlights.ts`): a pole, raked arm and cobra-head luminaire at every
   lamp position, one instanced body, lens and (HIGH) soft light cone each, plus a halo
   layer; they burn at night and go out as the sun comes up (`lampLevel` in the Engine).
+- **Interiors** (the study in `Desk.ts`, the arrival office in `Landing.ts`): warm, lived-in
+  rooms drawn from procedural PBR surfaces (`bake/RoomTextures.ts`: oak, walnut, plaster,
+  raised-panel wainscot, leather, a wool rug, a glass curtain wall; each with a normal and
+  roughness map taken from the same drawing). One tungsten lamp is the key light (a shadow-
+  casting spot on HIGH), a warm ceiling bounce fills the walls, and cool light from the window
+  and the laptop is the counterpoint. The arrival office is built when the page is idle.
+- **Lighthouse delivery**: the CH6 path runs through the lantern room (the tower is pinned at
+  `BEACON_ANCHOR`), the camera holds outside for the pass (`CameraRig.shot`), the dart dissolves
+  into the lamp and re-forms on the far side, and a cyber HUD card (`DeliveryPopup.ts`, styled
+  in `global.css`) is pinned to the lantern.
 - **Life**: ~1,700 fence runs (cards, real boards near the flight), cars driving every street
   with car-following and parked in yards, and per-lot yards (`Yards.ts`) with decals, props,
   tufts and lights from a seeded stream.
