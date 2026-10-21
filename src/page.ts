@@ -11,8 +11,12 @@ let chromeBound = false;
 const CHAPTER_NAMES = ['THE DESK', 'PREFLIGHT', 'TAKEOFF', 'FORMATION', 'THE STORM', 'THE BEACON', 'THE NO-FLY LIST', 'CITY OF INBOXES', 'THE COPILOT', 'THE LANDING'];
 const CHAPTER_T = [0, 0.09, 0.17, 0.26, 0.36, 0.48, 0.58, 0.66, 0.78, 0.88, 1];
 
+let stageObserver: IntersectionObserver | null = null;
+let stageScroll: (() => void) | null = null;
+
 export function bindPage(): void {
   document.body.dataset.route = location.pathname.replace(/\/+$/, '') || '/';
+  bindStage();
   /**
    * Canvas-only by default: every DOM overlay — copy, HUD, nav, footer,
    * progress bar — is hidden so the flight is seen unobstructed. `?copy=1`
@@ -31,6 +35,47 @@ export function bindPage(): void {
   bindChromeOnce();
 }
 
+/**
+ * The experience stage (`#experience`, Experience.astro) and what comes after it. The engine only
+ * needs to render while the stage is on screen: once it has scrolled out of view the landing
+ * content covers the canvas completely, so rendering behind it is wasted battery. Pages without a
+ * stage (the sub-pages) keep the engine running for their idle orbit. The replay button sends the
+ * visitor back to the start of the flight.
+ */
+function bindStage(): void {
+  stageObserver?.disconnect();
+  stageObserver = null;
+  if (stageScroll) window.removeEventListener('scroll', stageScroll);
+  stageScroll = null;
+  const stage = document.getElementById('experience');
+  if (!stage) {
+    document.body.classList.remove('is-landing');
+    window.dispatchEvent(new CustomEvent('experience:visible', { detail: true }));
+    return;
+  }
+  stageObserver = new IntersectionObserver(
+    ([entry]) => {
+      window.dispatchEvent(new CustomEvent('experience:visible', { detail: entry?.isIntersecting ?? true }));
+    },
+    { threshold: 0 },
+  );
+  stageObserver.observe(stage);
+  // The experience is finished when the bottom of its stage has come up into view: that is the end of
+  // the story (ScrollDirector ends the timeline at exactly that scroll position). The site's own
+  // chrome (the nav) comes back then. Read off the scroll position, not the eased story value: the
+  // engine stops updating once it has paused behind the landing.
+  const update = (): void => {
+    const finished = stage.getBoundingClientRect().bottom <= window.innerHeight + 2;
+    if (finished !== document.body.classList.contains('is-landing')) document.body.classList.toggle('is-landing', finished);
+  };
+  update();
+  window.addEventListener('scroll', update, { passive: true });
+  stageScroll = update;
+  for (const button of document.querySelectorAll('[data-replay]')) {
+    button.addEventListener('click', () => window.dispatchEvent(new CustomEvent('flight:replay')));
+  }
+}
+
 /** One-time chrome: HUD/progress feed, preloader dismissal, custom cursor. */
 function bindChromeOnce(): void {
   if (chromeBound) return;
@@ -44,6 +89,7 @@ function bindChromeOnce(): void {
   window.addEventListener('flight:t', (e) => {
     const t = (e as CustomEvent<number>).detail;
     if (bar) bar.style.transform = `scaleX(${t.toFixed(4)})`;
+
     if (hudChapter && hudAlt) {
       let i = 0;
       while (i < 9 && t >= CHAPTER_T[i + 1]!) i++;

@@ -886,9 +886,27 @@ export class Engine {
 
   private loop = (): void => {
     if (this.disposed) return;
-    this.renderFrame();
+    if (this.active) this.renderFrame();
     this.rafId = requestAnimationFrame(this.loop);
   };
+
+  private active = true;
+
+  /**
+   * Stops and starts rendering without tearing anything down. The page pauses the engine once the
+   * experience has scrolled out of view and the landing content covers the canvas completely.
+   */
+  setActive(active: boolean): void {
+    if (active === this.active) return;
+    this.active = active;
+    // the first frame back must not read the whole pause as one slow frame (the resolution governor)
+    if (active) this.lastTime = performance.now();
+  }
+
+  /** Back to the start of the flight (the landing page's replay button). */
+  replay(): void {
+    this.director?.scrollTop();
+  }
 
   /**
    * Dynamic resolution (LOW only): the pixel ratio is scaled by `resolution`, which a frame-time

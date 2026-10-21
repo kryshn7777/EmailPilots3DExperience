@@ -26,6 +26,10 @@ export function boot(): void {
     engine.start();
     engine.setRoute(location.pathname);
 
+    // the page tells the engine when the experience is on screen and when to replay it
+    window.addEventListener('experience:visible', (e) => engine.setActive((e as CustomEvent<boolean>).detail));
+    window.addEventListener('flight:replay', () => engine.replay());
+
     const { initSwupChoreo } = await import('./transitions/SwupChoreo');
     initSwupChoreo(engine);
 

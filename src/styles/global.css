@@ -810,12 +810,27 @@ body.has-cursor #cursor.is-active { scale: 1.6; border-color: var(--beacon-beam)
 /* Canvas only, no wordings — the default; `?copy=1` opts back in.
    visibility, NOT display: the document must keep its full height because
    scroll height is what drives the flight. */
-body.is-clean .site-header,
+body.is-clean .experience,
 body.is-clean #hud,
-body.is-clean #scroll-progress,
-body.is-clean main,
-body.is-clean footer {
+body.is-clean #scroll-progress {
   visibility: hidden !important;
+}
+
+/* On the home page the nav waits for the flight to finish (body.is-landing, set by page.ts when the
+   story reaches its end) and fades in with the landing content. Everything else on the site, the
+   landing section, the footer and the sub-pages, is ordinary page content and is always shown. */
+body.is-clean[data-route='/'] .site-header {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 400ms ease, visibility 0s linear 400ms, background 300ms ease, backdrop-filter 300ms ease;
+}
+
+body.is-clean[data-route='/'].is-landing .site-header {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 500ms ease, visibility 0s, background 300ms ease, backdrop-filter 300ms ease;
 }
 
 /* The lighthouse delivery card: a cyber HUD readout pinned to the lantern (DeliveryPopup.ts).
@@ -1384,4 +1399,135 @@ body.is-clean footer {
   .batch__meter i {
     transition: none;
   }
+}
+
+
+/* ---- The landing: the site, after the flight (Landing.astro) ------------------------------
+   It scrolls up over the fixed canvas once the experience stage has finished, so it is opaque;
+   a short gradient above its top edge softens the hand-over from the last frame of the flight. */
+.landing {
+  position: relative;
+  z-index: 2;
+  background: var(--void);
+}
+
+.landing::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 32vh;
+  background: linear-gradient(to top, var(--void), transparent);
+  pointer-events: none;
+}
+
+.landing__inner {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: clamp(5rem, 14vh, 9rem) clamp(1rem, 6vw, 5rem) 3rem;
+}
+
+.landing h2 {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+
+.landing__hero h2 {
+  font-size: var(--step-3);
+  margin: 0.5rem 0 1rem;
+}
+
+.landing__section {
+  margin-top: clamp(4rem, 12vh, 8rem);
+}
+
+.landing__section > h2 {
+  font-size: var(--step-2);
+  margin: 0.5rem 0 1.75rem;
+}
+
+.landing__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+}
+
+.landing__card {
+  padding: 1.5rem 1.5rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--predawn) 38%, var(--void));
+}
+
+.landing__card-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.landing__card h3 {
+  margin: 0.5rem 0 0.9rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+.landing__card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+
+.landing__card li {
+  position: relative;
+  padding: 0.25rem 0 0.25rem 1.1rem;
+}
+
+.landing__card li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  color: var(--beacon-beam);
+}
+
+.landing__pricing .pricing-card {
+  margin-top: 0;
+}
+
+.landing .faq {
+  margin-top: clamp(4rem, 12vh, 8rem);
+}
+
+.landing__closing {
+  margin-top: clamp(4rem, 12vh, 8rem);
+  padding: clamp(2rem, 7vw, 4.5rem);
+  border-radius: 1.5rem;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--predawn) 85%, var(--void)),
+    color-mix(in srgb, var(--storm-violet) 70%, var(--void))
+  );
+}
+
+.landing__closing h2 {
+  font-size: var(--step-2);
+  margin: 0 0 1rem;
+}
+
+button.btn {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: inherit;
+  line-height: inherit;
 }
