@@ -25,6 +25,8 @@ import { Fences } from './Fences';
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { Yards } from './Yards';
+import { Pools } from './Pools';
+import { TownLight } from './TownLight';
 import { mulberry32 } from '../util';
 import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
@@ -56,6 +58,8 @@ export class Rooftops {
   private fences: Fences | null = null;
   private cars: StreetCars | null = null;
   private yards: Yards | null = null;
+  private pools: Pools | null = null;
+  private townLight: TownLight | null = null;
   private lamps: Streetlights | null = null;
   private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
@@ -202,7 +206,7 @@ export class Rooftops {
   }
 
   /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
-  update(time: number, night = 1, focus?: Vector3): void {
+  update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
@@ -210,6 +214,8 @@ export class Rooftops {
     if (this.groundMaterial) this.groundMaterial.emissiveIntensity = 0.5 * night;
     this.cars?.update(time);
     this.yards?.update(time);
+    this.pools?.update(time, night);
+    if (eye) this.townLight?.update(night, eye);
   }
 
   private async init(quality: Quality): Promise<void> {
@@ -243,6 +249,18 @@ export class Rooftops {
     };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
     this.buildCars(lots as KitLot[], kinds, quality);
+    // the wet-night look: lamps doubled in the road, puddles that mirror the sky, window light on the
+    // lawns (HIGH tier)
+    if (quality.tier === 'high' && this.lamps && this.sites) {
+      const path = this.pathSamples();
+      const near = (x: number, z: number, reach: number): boolean => {
+        for (const c of path) if ((c.x - x) ** 2 + (c.z - z) ** 2 < reach * reach) return true;
+        return false;
+      };
+      this.townLight = new TownLight(this.lamps.tips, this.sites.houses, near);
+      this.townLight.group.position.y = ROOFTOP_BASE_Y;
+      this.group.add(this.townLight.group);
+    }
   }
 
   /**
@@ -292,6 +310,12 @@ export class Rooftops {
     );
     this.yards.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.yards.group);
+    // the swimming pools, as real pools (HIGH tier; phones keep the painted decal)
+    if (quality.tier === 'high' && this.yards.poolSites.length) {
+      this.pools = new Pools(this.yards.poolSites);
+      this.pools.group.position.y = ROOFTOP_BASE_Y;
+      this.group.add(this.pools.group);
+    }
   }
 
   dispose(): void {
@@ -299,6 +323,8 @@ export class Rooftops {
     this.fences?.dispose();
     this.cars?.dispose();
     this.yards?.dispose();
+    this.pools?.dispose();
+    this.townLight?.dispose();
     this.lamps?.dispose();
     for (const d of this.disposables) d.dispose();
   }

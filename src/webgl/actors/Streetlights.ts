@@ -66,6 +66,11 @@ export class Streetlights {
   private local = new Vector3();
   private disposables: { dispose(): void }[] = [];
 
+  /** where each lamp's head hangs, as world x/z (HIGH tier only): for the road reflections */
+  get tips(): { x: number; z: number }[] {
+    return this.spots;
+  }
+
   constructor(lamps: Lamp[], tier: Tier, scale = 1) {
     this.scale = scale;
     const parts: BufferGeometry[] = [];
