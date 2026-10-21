@@ -665,10 +665,24 @@ const OLDER: Mail[] = [
   { from: 'Priya N.', subject: 'Copilot notes from the storm', preview: 'Logged the turbulence at the second gate. Nothing alarming, but the…', time: 'Tue', hue: 10 },
 ];
 
-const RECEIVED: Mail = {
-  from: 'The Overnight Flight', subject: 'Re: Delivered, on time, in one piece',
-  preview: 'Your email landed safely in the inbox. SPF pass, DKIM pass, DMARC aligned…', time: 'now', unread: true, tag: 'NEW', hue: 175,
+/** The mail the dart delivers: the top row once it is inside, selected and open in the reading pane. */
+const DELIVERED: Mail = {
+  from: 'Email Pilots Delivery', subject: 'Delivered: your launch hit 12,408 inboxes',
+  preview: 'SPF, DKIM and DMARC all passed. Not one bounce, not one spam flag…', time: 'now', unread: true, tag: 'NEW', hue: 168,
 };
+/** and the note from the flight itself, now second in the list */
+const FLIGHT_NOTE: Mail = {
+  from: 'The Overnight Flight', subject: 'Re: On time, in one piece',
+  preview: 'Wheels down at 9:41 PM. The runway lights were on and the tower…', time: '9:41 PM', unread: true, hue: 215,
+};
+
+/** Cuts `text` with an ellipsis so it fits `maxW` pixels in the context's current font. */
+function fit(ctx: Ctx, text: string, maxW: number): string {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  return t.trimEnd() + '…';
+}
 
 function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', rand: () => number): void {
   const received = state === 'received';
@@ -690,7 +704,7 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
   ctx.fillText('Inbox', 126, 27);
   ctx.fillStyle = '#58698a';
   ctx.font = `400 20px ${SANS}`;
-  ctx.fillText(received ? '129 messages · 4 unread' : '128 messages · 3 unread', 196, 27);
+  ctx.fillText(received ? '130 messages · 5 unread' : '128 messages · 3 unread', 196, 27);
   // search box
   ctx.fillStyle = '#0b1019';
   rr(ctx, W - 330, 12, 300, 30, 15);
@@ -710,7 +724,7 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
   ctx.font = `600 20px ${SANS}`;
   ctx.fillText('+  Compose', 40, 94);
   const folders: [string, string][] = [
-    ['Inbox', received ? '4' : '3'], ['Starred', ''], ['Sent', ''], ['Drafts', '2'], ['Archive', ''], ['Spam', ''],
+    ['Inbox', received ? '5' : '3'], ['Starred', ''], ['Sent', ''], ['Drafts', '2'], ['Archive', ''], ['Spam', ''],
   ];
   folders.forEach(([name, count], i) => {
     const y = 140 + i * 46;
@@ -751,8 +765,8 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
   ctx.fillRect(LX, 54, LW, H - 54);
   ctx.fillStyle = '#1b2539';
   ctx.fillRect(LX + LW - 1, 54, 1, H - 54);
-  const list = received ? [RECEIVED, ...OLDER] : OLDER;
-  const ROW = 88;
+  const list = received ? [DELIVERED, FLIGHT_NOTE, ...OLDER] : OLDER;
+  const ROW = 84;
   list.slice(0, 7).forEach((m, i) => {
     const y = 54 + i * ROW;
     const selected = received && i === 0;
@@ -774,16 +788,16 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
     ctx.textAlign = 'center';
     ctx.fillText(m.from[0]!, LX + 44, y + 37);
     ctx.textAlign = 'left';
-    const unread = m.unread || (!received && i < 3) || (received && i > 0 && i < 4);
+    const unread = m.unread || (!received && i < 3) || (received && i > 1 && i < 4);
     ctx.fillStyle = unread ? '#f2f6ff' : '#9fb1cc';
     ctx.font = `${unread ? 700 : 500} 20px ${SANS}`;
     ctx.fillText(m.from, LX + 84, y + 26);
     ctx.fillStyle = unread ? '#c4d4f2' : '#7e8fae';
     ctx.font = `${unread ? 600 : 400} 18px ${SANS}`;
-    ctx.fillText(m.subject.length > 31 ? m.subject.slice(0, 30) + '…' : m.subject, LX + 84, y + 52);
+    ctx.fillText(fit(ctx, m.subject, LW - 84 - 22), LX + 84, y + 52);
     ctx.fillStyle = '#58698a';
     ctx.font = `400 16px ${SANS}`;
-    ctx.fillText(m.preview.slice(0, 40) + '…', LX + 84, y + 74);
+    ctx.fillText(fit(ctx, m.preview, LW - 84 - (m.tag ? 76 : 22)), LX + 84, y + 74);
     ctx.textAlign = 'right';
     ctx.fillStyle = unread ? '#8fb6ff' : '#58698a';
     ctx.font = `500 16px ${SANS}`;
@@ -791,12 +805,12 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
     ctx.textAlign = 'left';
     if (m.tag) {
       ctx.fillStyle = '#19c8a7';
-      rr(ctx, LX + LW - 64, y + 40, 46, 22, 6);
+      rr(ctx, LX + LW - 64, y + 56, 46, 22, 6);
       ctx.fill();
       ctx.fillStyle = '#04221c';
       ctx.font = `800 13px ${SANS}`;
       ctx.textAlign = 'center';
-      ctx.fillText(m.tag, LX + LW - 41, y + 52);
+      ctx.fillText(m.tag, LX + LW - 41, y + 68);
       ctx.textAlign = 'left';
     }
     if (unread && !m.tag) {
@@ -823,32 +837,32 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
     ctx.textAlign = 'left';
   } else {
     ctx.fillStyle = '#eaf1ff';
-    ctx.font = `700 28px ${SANS}`;
-    ctx.fillText('Re: Delivered, on time, in one piece', PX + 32, 108);
-    ctx.fillStyle = `hsl(175 55% 42%)`;
+    ctx.font = `700 26px ${SANS}`;
+    ctx.fillText(fit(ctx, DELIVERED.subject, PW - 64), PX + 32, 108);
+    ctx.fillStyle = `hsl(${DELIVERED.hue} 55% 42%)`;
     ctx.beginPath();
     ctx.arc(PX + 52, 168, 22, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.font = `700 22px ${SANS}`;
     ctx.textAlign = 'center';
-    ctx.fillText('T', PX + 52, 169);
+    ctx.fillText('E', PX + 52, 169);
     ctx.textAlign = 'left';
     ctx.fillStyle = '#d4e0f8';
     ctx.font = `600 20px ${SANS}`;
-    ctx.fillText('The Overnight Flight', PX + 88, 160);
+    ctx.fillText(DELIVERED.from, PX + 88, 160);
     ctx.fillStyle = '#6b7c9c';
     ctx.font = `400 17px ${SANS}`;
     ctx.fillText('to me  ·  just now', PX + 88, 184);
     // the body: real words, then lines of grey for the rest
     ctx.fillStyle = '#b8c7e4';
     ctx.font = `400 21px ${SANS}`;
-    ctx.fillText('Hi,', PX + 32, 244);
-    ctx.fillText('Your email flew through the night and landed', PX + 32, 278);
-    ctx.fillText('in the inbox, right on time.', PX + 32, 306);
-    for (let i = 0; i < 5; i++) {
+    ctx.fillText('Hi Captain,', PX + 32, 244);
+    ctx.fillText('Your launch took off at 9:41 PM and landed', PX + 32, 278);
+    ctx.fillText('in 12,408 inboxes, right on time.', PX + 32, 306);
+    for (let i = 0; i < 4; i++) {
       ctx.fillStyle = '#1e2a40';
-      rr(ctx, PX + 32, 340 + i * 26, PW - 64 - (i === 4 ? 160 : rand() * 60), 12, 6);
+      rr(ctx, PX + 32, 340 + i * 26, PW - 64 - (i === 3 ? 160 : rand() * 60), 12, 6);
       ctx.fill();
     }
     // the authentication results
@@ -909,7 +923,7 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
     ctx.fillText('EMAIL RECEIVED', tx + 68, ty + 28);
     ctx.fillStyle = '#6fb9ab';
     ctx.font = `400 16px ${SANS}`;
-    ctx.fillText('The Overnight Flight · now', tx + 68, ty + 52);
+    ctx.fillText('Email Pilots Delivery · now', tx + 68, ty + 52);
   }
 }
 
