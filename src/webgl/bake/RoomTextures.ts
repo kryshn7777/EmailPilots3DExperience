@@ -456,3 +456,81 @@ export function rugMaps(seed: number): SurfaceMaps {
   maps.normalMap.wrapS = maps.normalMap.wrapT = RepeatWrapping;
   return maps;
 }
+
+/**
+ * A glass curtain wall for the tower this study belongs to: 6 bays by 8 floors per tile,
+ * dark reflective panes between metal mullions and spandrel bands, and a scatter of lit
+ * offices (warm lamps, the odd cold television) as the emissive map.
+ */
+export const CURTAIN_WALL = { bays: 6, floors: 8, bayW: 1.5, floorH: 3.2 };
+export function curtainWallMaps(seed: number): { map: CanvasTexture; emissiveMap: CanvasTexture } {
+  const W = 256;
+  const H = 512;
+  const mk = (): [HTMLCanvasElement, Ctx] => {
+    const c = document.createElement('canvas');
+    c.width = W * BAKE_SCALE;
+    c.height = H * BAKE_SCALE;
+    const ctx = c.getContext('2d')!;
+    ctx.scale(BAKE_SCALE, BAKE_SCALE);
+    return [c, ctx];
+  };
+  const [colour, cctx] = mk();
+  const [glow, gctx] = mk();
+  const rand = mulberry32(seed);
+  const cw = W / CURTAIN_WALL.bays;
+  const rh = H / CURTAIN_WALL.floors;
+  cctx.fillStyle = '#2b3550';
+  cctx.fillRect(0, 0, W, H);
+  gctx.fillStyle = '#000';
+  gctx.fillRect(0, 0, W, H);
+  const spandrel = rh * 0.22;
+  for (let r = 0; r < CURTAIN_WALL.floors; r++) {
+    for (let c = 0; c < CURTAIN_WALL.bays; c++) {
+      const x = c * cw + 3;
+      const y = r * rh + spandrel;
+      const w = cw - 6;
+      const h = rh - spandrel - 3;
+      // the pane: a deep blue glass with a diagonal reflection of the sky
+      const g = cctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, '#1a2640');
+      g.addColorStop(0.5, '#0f1830');
+      g.addColorStop(1, '#16213a');
+      cctx.fillStyle = g;
+      cctx.fillRect(x, y, w, h);
+      cctx.fillStyle = 'rgba(150, 180, 230, 0.12)';
+      cctx.beginPath();
+      cctx.moveTo(x, y + h * 0.55);
+      cctx.lineTo(x + w * 0.5, y);
+      cctx.lineTo(x + w * 0.72, y);
+      cctx.lineTo(x, y + h * 0.9);
+      cctx.fill();
+      // lit offices
+      const roll = rand();
+      if (roll < 0.2) {
+        gctx.fillStyle = `rgba(255, 196, 132, ${0.55 + rand() * 0.4})`;
+        gctx.fillRect(x, y, w, h);
+        // a blind half drawn
+        if (rand() < 0.4) { gctx.fillStyle = 'rgba(0,0,0,0.6)'; gctx.fillRect(x, y, w, h * (0.2 + rand() * 0.4)); }
+      } else if (roll < 0.3) {
+        gctx.fillStyle = 'rgba(140, 170, 255, 0.3)';
+        gctx.fillRect(x + w * 0.2, y + h * 0.3, w * 0.6, h * 0.5);
+      }
+    }
+    // the spandrel band: opaque painted metal, lighter at its lower lip
+    cctx.fillStyle = '#313c58';
+    cctx.fillRect(0, r * rh, W, spandrel);
+    cctx.fillStyle = 'rgba(190, 205, 235, 0.25)';
+    cctx.fillRect(0, r * rh + spandrel - 1.5, W, 1.5);
+  }
+  // mullions
+  cctx.fillStyle = '#4a5878';
+  for (let c = 0; c <= CURTAIN_WALL.bays; c++) cctx.fillRect(c * cw - 1.5, 0, 3, H);
+  const t = (c: HTMLCanvasElement): CanvasTexture => {
+    const tex = new CanvasTexture(c);
+    tex.colorSpace = SRGBColorSpace;
+    tex.wrapS = tex.wrapT = RepeatWrapping;
+    tex.anisotropy = 8;
+    return tex;
+  };
+  return { map: t(colour), emissiveMap: t(glow) };
+}

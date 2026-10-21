@@ -39,7 +39,8 @@ import {
   letterTexture,
 } from '../bake/CanvasTextures';
 import {
-  WAINSCOT, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
+  CURTAIN_WALL, WAINSCOT, curtainWallMaps, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps,
+  type SurfaceMaps,
 } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
@@ -123,22 +124,43 @@ export class Desk {
     this.group.add(floor, backWall, sideWall, ceiling);
     this.disposables.push(floor.geometry, backWall.geometry, sideWall.geometry, ceiling.geometry, ceilingMat);
 
-    // the tower this floor belongs to: a curtain-wall skirt dropping from
-    // the sill into the overcast. Without it the study reads as a box in
-    // the sky the moment the flight turns and looks back at it.
+    // the tower this floor belongs to: a glass curtain wall dropping from the sill into the
+    // overcast, with lit offices. Without it the study reads as a box in the sky the moment
+    // the flight turns and looks back at it. It ends at the window wall's outer face: it used
+    // to run 7 units out past it, a black shelf the camera looked down on after leaving.
+    const facade = curtainWallMaps(19);
+    this.disposables.push(facade.map, facade.emissiveMap);
     const towerSkin = new MeshStandardMaterial({
-      color: '#171d2b',
-      roughness: 0.35,
-      metalness: 0.45,
+      map: facade.map, emissive: '#ffffff', emissiveMap: facade.emissiveMap, emissiveIntensity: 0.9,
+      roughness: 0.22, metalness: 0.65, envMapIntensity: 1.3,
     });
-    const skirt = new Mesh(new BoxGeometry(23, 26, 12.6), towerSkin);
-    skirt.position.set(2.4, -14.4, 0.5);
-    const sill = new Mesh(new BoxGeometry(23.6, 0.35, 13.2), towerSkin);
-    // its top face sits just under the floor: at -1.42 it stood 0.035 proud of the boards
-    // and hid the whole floor under dark glass-coloured slab
-    sill.position.set(2.4, -1.52, 0.5);
+    const ledgeMaterial = new MeshStandardMaterial({ color: '#232a3c', roughness: 0.4, metalness: 0.6 });
+    this.disposables.push(towerSkin, ledgeMaterial);
+    /** lays the curtain-wall tile over every face of a box at its real size, so bays stay square */
+    const clad = (g: BoxGeometry, w: number, h: number, d: number): BoxGeometry => {
+      const uv = g.attributes.uv!;
+      const tw = CURTAIN_WALL.bays * CURTAIN_WALL.bayW;
+      const th = CURTAIN_WALL.floors * CURTAIN_WALL.floorH;
+      // BoxGeometry face order: +x, -x, +y, -y, +z, -z; four vertices each
+      const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+      for (let f = 0; f < 6; f++) {
+        for (let k = 0; k < 4; k++) {
+          const i = f * 4 + k;
+          uv.setXY(i, uv.getX(i) * dims[f]![0]! / tw, uv.getY(i) * dims[f]![1]! / th);
+        }
+      }
+      return g;
+    };
+    const SKIRT_X0 = -9.1;
+    const SKIRT_X1 = 6.72;
+    const skirtW = SKIRT_X1 - SKIRT_X0;
+    const skirt = new Mesh(clad(new BoxGeometry(skirtW, 26, 12.6), skirtW, 26, 12.6), towerSkin);
+    skirt.position.set((SKIRT_X0 + SKIRT_X1) / 2, -14.4, 0.5);
+    // a slim steel ledge under the window, proud of the facade by a hand
+    const sill = new Mesh(new BoxGeometry(skirtW + 0.3, 0.35, 12.9), ledgeMaterial);
+    sill.position.set((SKIRT_X0 + SKIRT_X1) / 2 + 0.15, -1.52, 0.5);
     this.group.add(skirt, sill);
-    this.disposables.push(skirt.geometry, sill.geometry, towerSkin);
+    this.disposables.push(skirt.geometry, sill.geometry);
 
     // painted raised-panel wainscot below a chair rail, with a deep baseboard
     const wainscot = wainscotMaps([222, 211, 188], 5);
@@ -283,8 +305,9 @@ export class Desk {
     // window wall at local x≈6.6 with the opening the path threads (world x≈7)
     const wallX = 6.6;
     const seg = (w: number, h: number, y: number, z: number): void => {
-      const g = new BoxGeometry(0.24, h, w);
-      const m = new Mesh(g, wall);
+      const g = clad(new BoxGeometry(0.24, h, w), 0.24, h, w);
+      // +x is the face the district sees: the glass wall; every other face is plaster
+      const m = new Mesh(g, [towerSkin, wall, wall, wall, wall, wall]);
       m.position.set(wallX, y, z);
       this.group.add(m);
       this.disposables.push(g);
