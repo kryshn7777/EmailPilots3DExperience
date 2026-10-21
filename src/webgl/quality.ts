@@ -55,8 +55,11 @@ const HIGH: Quality = {
 
 const LOW: Quality = {
   tier: 'low',
-  maxDpr: 1,
-  renderScale: 0.75,
+  // phones are 2-3x density: rendering at 0.75 CSS pixels made every texture soft. The Engine's
+  // resolution governor starts at 0.75 of this and climbs to 1 while frames stay cheap, or backs
+  // off toward 0.5 when they do not
+  maxDpr: 2,
+  renderScale: 1,
   volumetricClouds: false,
   cloudSteps: 0,
   cloudSprites: 360,

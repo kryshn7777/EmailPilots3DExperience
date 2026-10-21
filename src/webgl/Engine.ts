@@ -601,8 +601,10 @@ export class Engine {
 
   private renderFrame(): void {
     const now = performance.now();
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const rawMs = now - this.lastTime;
+    const dt = Math.min(rawMs / 1000, 0.1);
     this.lastTime = now;
+    this.govern(rawMs, now);
     const time = (now - this.startTime) / 1000;
     const target = this.idlePreset ? this.idlePreset.t : this.scrollT;
     // mass-spring scrub: the world has WEIGHT — it leans into motion,
@@ -873,9 +875,35 @@ export class Engine {
     this.rafId = requestAnimationFrame(this.loop);
   };
 
+  /**
+   * Dynamic resolution (LOW only): the pixel ratio is scaled by `resolution`, which a frame-time
+   * governor moves between 0.5 and 1. A phone that holds ~60 fps climbs to full density; one that
+   * cannot backs off a step at a time instead of stuttering at native resolution.
+   */
+  private resolution = 0.75;
+  private frameEma = 16;
+  private govAt = 0;
+
+  private govern(dtMs: number, now: number): void {
+    if (this.quality.tier !== 'low' || this.probe || this.options.reducedMotion || dtMs > 250) return;
+    this.frameEma += (dtMs - this.frameEma) * 0.06;
+    if (now - this.govAt < 1400 || now - this.startTime < 2500) return;
+    this.govAt = now;
+    let next = this.resolution;
+    if (this.frameEma > 27 && next > 0.5) next = Math.max(0.5, next * 0.85);
+    else if (this.frameEma < 17.5 && next < 1) next = Math.min(1, next * 1.1);
+    if (Math.abs(next - this.resolution) > 0.01) {
+      this.resolution = next;
+      this.resize();
+    }
+  }
+
+  private probe = new URLSearchParams(location.search).has('probe');
+
   private resize = (): void => {
     const dpr =
-      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale;
+      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale *
+      (this.quality.tier === 'low' ? this.resolution : 1);
     const { clientWidth, clientHeight } = this.canvas;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);

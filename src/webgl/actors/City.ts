@@ -31,6 +31,7 @@ import {
 import { neonSignTexture, roadTexture } from '../bake/CanvasTextures';
 import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
+import { Streetlights, type Lamp } from './Streetlights';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -71,6 +72,7 @@ export class City {
   private landingPos = new Vector3();
   private landingAhead = new Vector3();
   private kitCity: KitCity | null = null;
+  private streetlights: Streetlights | null = null;
   private color = new Color();
   private disposables: { dispose(): void }[] = [];
 
@@ -139,7 +141,7 @@ export class City {
         .map(([b, e]) => [b, e]);
     this.buildWindows(keep(nearMid));
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
-    this.buildStreetDressing(keep(nearSet));
+    this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
     this.buildPlaneLandings(path);
   }
@@ -151,44 +153,36 @@ export class City {
    * glow sprites, neon signs on the canyon-facing walls, and antennas with
    * red aircraft-warning blinkers on the tallest towers. Five draws total.
    */
-  private buildStreetDressing(rows: [Building, { hx: number; hz: number }][]): void {
+  private buildStreetDressing(rows: [Building, { hx: number; hz: number }][], quality: Quality): void {
     const rand = mulberry32(880);
 
-    // lamp posts, both canyon curbs
+    // streetlights down both canyon curbs: the same lamp as the town's (pole, raked arm,
+    // luminaire, halo, light cone), a little smaller, with a pool of light on the road below
     const poleMaterial = new MeshStandardMaterial({ color: '#232936', roughness: 0.5, metalness: 0.5 });
-    const poleGeometry = new CylinderGeometry(0.03, 0.04, 1.5, 6);
-    const positions: number[] = [];
-    const poles: Matrix4[] = [];
     const q = new Quaternion();
     const s = new Vector3(1, 1, 1);
     const p = new Vector3();
+    const lampList: Lamp[] = [];
     for (let x = -30; x <= 34; x += 6.4) {
       for (const z of [-2.05, 2.05]) {
-        p.set(x + rand() * 0.6, 0.75, z);
-        poles.push(new Matrix4().compose(p, q, s));
-        positions.push(p.x, 1.55, z);
+        lampList.push({ x: x + rand() * 0.6, z, yaw: z < 0 ? 0 : Math.PI });
       }
     }
-    const poleMesh = new InstancedMesh(poleGeometry, poleMaterial, poles.length);
-    poles.forEach((m, i) => poleMesh.setMatrixAt(i, m));
-    this.group.add(poleMesh);
-    this.disposables.push(poleGeometry, poleMaterial, poleMesh);
-
-    const lampGeometry = new BufferGeometry();
-    lampGeometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-    const lampMaterial = new PointsMaterial({
-      map: glowTexture(),
-      color: '#ffd9a0',
-      size: 0.5,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-      blending: AdditiveBlending,
+    this.streetlights = new Streetlights(lampList, quality.tier, 0.85);
+    this.group.add(this.streetlights.group);
+    const poolMaterial = new MeshBasicMaterial({
+      map: glowTexture(), color: '#ffb468', transparent: true, opacity: 0.26, blending: AdditiveBlending,
+      depthWrite: false, toneMapped: false,
     });
-    const lamps = new Points(lampGeometry, lampMaterial);
-    lamps.frustumCulled = false;
-    this.group.add(lamps);
-    this.disposables.push(lampGeometry, lampMaterial);
+    const poolGeometry = new PlaneGeometry(2.3, 2.3);
+    poolGeometry.rotateX(-Math.PI / 2);
+    const pools = new InstancedMesh(poolGeometry, poolMaterial, lampList.length);
+    lampList.forEach((l, i) => {
+      pools.setMatrixAt(i, new Matrix4().compose(p.set(l.x, 0.03, l.z * 0.55), q, s));
+    });
+    pools.frustumCulled = false;
+    this.group.add(pools);
+    this.disposables.push(poolMaterial, poolGeometry, pools, this.streetlights, poleMaterial);
 
     // neon signs on walls facing the canyon — on the ACTUAL kit walls
     const NEON = ['#ff5f8f', '#5fd0ff', '#ffd05f', '#8fff9f', '#c88fff'];
@@ -498,7 +492,14 @@ export class City {
         const y = 0.8 + f * 1.1;
         // dense + bright: sparse dim windows lost to the massing at the city
         // entry and whole blocks read as gray boxes
-        const litRoll = (): number => (rand() < 0.72 ? 0.5 + rand() * 0.85 : 0.06);
+        // The baked facade atlas already carries the lit windows; these quads are the ones
+        // the delivery envelopes and landing darts light up, so they start dark (additive, so
+        // dark means invisible, not a black square over the atlas). Same random stream as
+        // before so no slot moves.
+        const litRoll = (): number => {
+          if (rand() < 0.72) rand();
+          return 0;
+        };
         // kit towers step back near their tops — no quads above 70% height,
         // that's where they hovered in air off the old box faces
         if (y > b.h * 0.7) continue;
@@ -532,8 +533,10 @@ export class City {
       }
     }
 
-    const geometry = new PlaneGeometry(0.4, 0.55);
-    const material = new MeshBasicMaterial({ color: '#ffffff' });
+    const geometry = new PlaneGeometry(0.34, 0.46);
+    const material = new MeshBasicMaterial({
+      color: '#ffffff', transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false,
+    });
     this.windows = new InstancedMesh(geometry, material, slots.length);
     const m = new Matrix4();
     const s = new Vector3(1, 1, 1);

@@ -59,7 +59,7 @@ export class Streetlights {
   private halo: PointsMaterial;
   private disposables: { dispose(): void }[] = [];
 
-  constructor(lamps: Lamp[], tier: Tier) {
+  constructor(lamps: Lamp[], tier: Tier, scale = 1) {
     const parts: BufferGeometry[] = [];
     parts.push(new CylinderGeometry(0.06, 0.075, 0.12, 8).translate(0, 0.06, 0));
     parts.push(new CylinderGeometry(0.024, 0.04, POLE, 8).translate(0, POLE / 2 + 0.1, 0));
@@ -81,7 +81,7 @@ export class Streetlights {
     const q = new Quaternion();
     const up = new Vector3(0, 1, 0);
     const p = new Vector3();
-    const s = new Vector3(1, 1, 1);
+    const s = new Vector3(scale, scale, scale);
     const bodies = new InstancedMesh(body, bodyMaterial, lamps.length);
     const lenses = new InstancedMesh(lensGeometry, this.lens, lamps.length);
     const halos: number[] = [];
@@ -91,7 +91,9 @@ export class Streetlights {
       bodies.setMatrixAt(i, m4);
       lenses.setMatrixAt(i, m4);
       // the halo sits under the lens, out along the arm
-      halos.push(lamp.x + Math.sin(lamp.yaw) * REACH, HEAD_Y - 0.02, lamp.z + Math.cos(lamp.yaw) * REACH);
+      halos.push(
+        lamp.x + Math.sin(lamp.yaw) * REACH * scale, (HEAD_Y - 0.02) * scale, lamp.z + Math.cos(lamp.yaw) * REACH * scale,
+      );
     });
     bodies.frustumCulled = lenses.frustumCulled = false;
     bodies.castShadow = tier === 'high';
@@ -101,7 +103,7 @@ export class Streetlights {
     const haloGeometry = new BufferGeometry();
     haloGeometry.setAttribute('position', new Float32BufferAttribute(halos, 3));
     this.halo = new PointsMaterial({
-      map: glowTexture(), color: '#ffc98a', size: 0.8, transparent: true, opacity: 0.9,
+      map: glowTexture(), color: '#ffc98a', size: 0.8 * scale, transparent: true, opacity: 0.9,
       depthWrite: false, blending: AdditiveBlending, sizeAttenuation: true,
     });
     const haloPoints = new Points(haloGeometry, this.halo);
@@ -144,7 +146,7 @@ export class Streetlights {
       });
       const cones = new InstancedMesh(cone, this.cone, lamps.length);
       lamps.forEach((lamp, i) => {
-        p.set(lamp.x + Math.sin(lamp.yaw) * REACH, HEAD_Y, lamp.z + Math.cos(lamp.yaw) * REACH);
+        p.set(lamp.x + Math.sin(lamp.yaw) * REACH * scale, HEAD_Y * scale, lamp.z + Math.cos(lamp.yaw) * REACH * scale);
         cones.setMatrixAt(i, m4.compose(p, q.identity(), s));
       });
       cones.frustumCulled = false;

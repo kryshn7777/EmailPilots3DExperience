@@ -20,11 +20,11 @@ type Ctx = CanvasRenderingContext2D;
 
 // same bake scale as CanvasTextures; the contexts here are read back (normal and roughness
 // maps come from the drawing), so they ask for a software canvas, where readback is cheap
-const BAKE_SCALE = detectQuality('').tier === 'high' ? 2 : 1;
+const BAKE_SCALE = detectQuality('').tier === 'high' ? 2 : 1.5;
 
 function makeCanvas(size: number): [HTMLCanvasElement, Ctx] {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size * BAKE_SCALE;
+  canvas.width = canvas.height = Math.round(size * BAKE_SCALE);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('2d context unavailable');
   ctx.scale(BAKE_SCALE, BAKE_SCALE);
@@ -468,8 +468,8 @@ export function curtainWallMaps(seed: number): { map: CanvasTexture; emissiveMap
   const H = 512;
   const mk = (): [HTMLCanvasElement, Ctx] => {
     const c = document.createElement('canvas');
-    c.width = W * BAKE_SCALE;
-    c.height = H * BAKE_SCALE;
+    c.width = Math.round(W * BAKE_SCALE);
+    c.height = Math.round(H * BAKE_SCALE);
     const ctx = c.getContext('2d')!;
     ctx.scale(BAKE_SCALE, BAKE_SCALE);
     return [c, ctx];

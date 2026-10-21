@@ -33,6 +33,7 @@ import {
   BOOK_SPINE_CELLS,
   bookSpineTexture,
   frameArtTexture,
+  globeTexture,
   glowTexture,
   laptopKeysTexture,
   laptopScreenTexture,
@@ -551,6 +552,7 @@ export class Desk {
     // of sixteen cells, so mergeStatics still collapses the whole shelf to a
     // single draw call. Per-book materials cost ~60 calls, which is why this
     // wall used to be flat blocks of colour.
+    const shelfBrass = new MeshStandardMaterial({ color: '#c09a5e', roughness: 0.3, metalness: 1 });
     const spineMap = bookSpineTexture();
     const bookMaterial = new MeshStandardMaterial({ map: spineMap, roughness: 0.74 });
     this.disposables.push(spineMap, bookMaterial);
@@ -593,7 +595,8 @@ export class Desk {
       // books stood on their spines, leaning at the end of each run
       let x = -4.18;
       let i = 0;
-      while (x < -1.06) {
+      // the top board leaves room for objects at its right-hand end
+      while (x < (row === 2 ? -1.95 : -1.06)) {
         const wide = 0.11 + ((row * 7 + i) % 4) * 0.035;
         const tall = 0.44 + ((row * 5 + i) % 3) * 0.07;
         // depth varies too — a shelf where every fore-edge lines up perfectly
@@ -619,6 +622,39 @@ export class Desk {
         }
       }
     }
+
+    // colour on the top board too: a globe on a brass stand, three glazed jars, a leaning print
+    const topY = -0.55 + 2 * 0.78 + 0.035;
+    const globeMap = globeTexture();
+    const globe = new Mesh(new SphereGeometry(0.2, 28, 20), new MeshStandardMaterial({ map: globeMap, roughness: 0.45 }));
+    globe.position.set(-1.72, topY + 0.3, -3.3);
+    globe.rotation.set(0.4, 0.8, 0.41);
+    const globeRing = new Mesh(new TorusGeometry(0.225, 0.011, 8, 40), shelfBrass);
+    globeRing.position.copy(globe.position);
+    globeRing.rotation.set(0.4, 0.8, 0.41 + Math.PI / 2);
+    const globeFoot = new Mesh(new CylinderGeometry(0.09, 0.11, 0.03, 20), shelfBrass);
+    globeFoot.position.set(-1.72, topY + 0.015, -3.3);
+    const globePost = new Mesh(new CylinderGeometry(0.012, 0.012, 0.2, 8), shelfBrass);
+    globePost.position.set(-1.72, topY + 0.12, -3.3);
+    this.group.add(globe, globeRing, globeFoot, globePost);
+    this.disposables.push(globeMap, globe.geometry, globe.material as MeshStandardMaterial, globeRing.geometry,
+      globeFoot.geometry, globePost.geometry, shelfBrass);
+    ([[-1.32, 0.1, 0.34, '#18b5aa'], [-1.14, 0.08, 0.26, '#ee6a5b'], [-1.0, 0.065, 0.2, '#f2c23a']] as const).forEach(
+      ([jx, r, h, color]) => {
+        const glaze = new MeshStandardMaterial({ color, roughness: 0.22, metalness: 0.05 });
+        const jar = new Mesh(new CylinderGeometry(r * 0.8, r, h, 18), glaze);
+        jar.position.set(jx, topY + h / 2, -3.3);
+        const lid = new Mesh(new CylinderGeometry(r * 0.55, r * 0.8, 0.05, 18), shelfBrass);
+        lid.position.set(jx, topY + h + 0.025, -3.3);
+        this.group.add(jar, lid);
+        this.disposables.push(jar.geometry, glaze, lid.geometry);
+      },
+    );
+    const print = new Mesh(new BoxGeometry(0.3, 0.38, 0.02), new MeshStandardMaterial({ color: '#f2a93b', roughness: 0.7 }));
+    print.position.set(-1.9, topY + 0.19 + 0.0, -3.5);
+    print.rotation.set(-0.12, 0.2, 0);
+    this.group.add(print);
+    this.disposables.push(print.geometry, print.material as MeshStandardMaterial);
 
     // — Newton's cradle on the desk: frame, cords, five polished balls —
     const cradleSteel = new MeshStandardMaterial({
