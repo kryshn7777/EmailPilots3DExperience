@@ -26,6 +26,7 @@ import { HOME_CELL } from '../bake/cityGen.mjs';
 import { glowTexture } from '../bake/CanvasTextures';
 import { mulberry32 } from '../util';
 import type { KitLot } from './KitCity';
+import type { PoolSite } from './Pools';
 
 /**
  * Yard details for the houses the flight passes over: every lot gets its own
@@ -147,22 +148,61 @@ function decalAtlas(): CanvasTexture {
         }
         speckle(60, '120,118,110', 1, 3, 0.25);
         break;
-      case 'water':
-        slab(3, 'rgb(220,220,212)', 12);
-        ctx.fillStyle = 'rgb(46,150,196)';
+      case 'water': {
+        // the phone tier's pool: pale coping, a tiled basin shading from shallow to deep, ripples,
+        // the lamp's glow, a ladder and steps (HIGH draws a real pool instead, see Pools.ts)
+        slab(3, 'rgb(226,222,210)', 12);
+        ctx.strokeStyle = 'rgba(120,114,100,0.55)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.roundRect(12, 12, S - 24, S - 24, 12);
+        ctx.roundRect(11, 11, S - 22, S - 22, 12);
+        ctx.stroke();
+        const basin = ctx.createLinearGradient(12, 0, S - 12, 0);
+        basin.addColorStop(0, 'rgb(150,224,236)');
+        basin.addColorStop(0.5, 'rgb(62,170,210)');
+        basin.addColorStop(1, 'rgb(28,104,160)');
+        ctx.fillStyle = basin;
+        ctx.beginPath();
+        ctx.roundRect(13, 13, S - 26, S - 26, 11);
         ctx.fill();
-        for (let k = 0; k < 14; k++) {
-          ctx.strokeStyle = `rgba(190,235,250,${0.25 + rnd() * 0.3})`;
-          ctx.lineWidth = 1.5;
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(230,246,250,0.16)';
+        ctx.lineWidth = 1;
+        for (let k = 13; k < S - 13; k += 9) {
           ctx.beginPath();
-          const y = 20 + rnd() * (S - 40);
-          ctx.moveTo(18 + rnd() * 20, y);
-          ctx.quadraticCurveTo(S / 2, y + (rnd() - 0.5) * 14, S - 18 - rnd() * 20, y + (rnd() - 0.5) * 8);
+          ctx.moveTo(k, 13);
+          ctx.lineTo(k, S - 13);
+          ctx.moveTo(13, k);
+          ctx.lineTo(S - 13, k);
           ctx.stroke();
         }
+        const lamp = ctx.createRadialGradient(S * 0.7, S / 2, 0, S * 0.7, S / 2, S * 0.3);
+        lamp.addColorStop(0, 'rgba(190,244,255,0.55)');
+        lamp.addColorStop(1, 'rgba(190,244,255,0)');
+        ctx.fillStyle = lamp;
+        ctx.fillRect(0, 0, S, S);
+        ctx.restore();
+        for (let k = 0; k < 16; k++) {
+          ctx.strokeStyle = `rgba(210,240,250,${0.2 + rnd() * 0.3})`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          const y = 22 + rnd() * (S - 44);
+          ctx.moveTo(20 + rnd() * 24, y);
+          ctx.quadraticCurveTo(S / 2, y + (rnd() - 0.5) * 14, S - 20 - rnd() * 24, y + (rnd() - 0.5) * 8);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(250,252,252,0.95)';
+        ctx.fillRect(15, 20, 10, 20);
+        ctx.fillStyle = 'rgba(232,238,240,0.95)';
+        ctx.fillRect(15, 24, 6, 12);
+        ctx.fillStyle = 'rgb(210,220,226)';
+        ctx.beginPath();
+        ctx.arc(S - 11, S - 36, 3.2, 0, Math.PI * 2);
+        ctx.arc(S - 11, S - 48, 3.2, 0, Math.PI * 2);
+        ctx.fill();
         break;
+      }
       case 'drive':
         slab(2, 'rgb(176,173,166)', 3);
         ctx.strokeStyle = 'rgba(60,58,54,0.7)';
@@ -448,6 +488,8 @@ export class Yards {
   readonly group = new Group();
   private disposables: { dispose(): void }[] = [];
   private glow!: Points;
+  /** where the pools are (HIGH tier: each gets real geometry from `Pools`; LOW keeps the painted decal) */
+  readonly poolSites: PoolSite[] = [];
 
   /**
    * `lots` are the neighbourhood's lots; `parked` are the cars' front-yard spots, so a
@@ -605,10 +647,19 @@ export class Yards {
       if (bigRoll < 0.13) {
         // a pool, lit from below
         const w = between(1.3, 1.8), d = between(0.8, 1.1);
-        const p = place(Math.max(w, d) / 2 + 0.1, 'back', [-1.6, 1.6], [vR + 0.9, lotD - 1.2]);
+        const rich = detail === 'high';
+        // the real pool wears a paved deck, so it needs a little more room round it
+        const p = place(Math.max(w, d) / 2 + (rich ? 0.4 : 0.1), 'back', [-1.6, 1.6], [vR + 0.9, lotD - 1.2]);
         if (p) {
-          claim(p[0], p[1], Math.max(w, d) / 2);
-          decal('water', p[0], p[1], w + 0.2, d + 0.2, chance(0.5) ? 0 : Math.PI / 2, '#ffffff', 2);
+          claim(p[0], p[1], Math.max(w, d) / 2 + (rich ? 0.3 : 0));
+          const turn = chance(0.5) ? 0 : Math.PI / 2;
+          if (rich) {
+            decal('patio', p[0], p[1], w + 0.78, d + 0.78, turn, '#e8e2d6', 2);
+            const [px, pz] = world(p[0], p[1]);
+            this.poolSites.push({ x: px, z: pz, w, d, yaw: turn });
+          } else {
+            decal('water', p[0], p[1], w + 0.2, d + 0.2, turn, '#ffffff', 2);
+          }
           lights.push({ ...worldLight(world, p[0], p[1]), y: 0.02, kind: 'pool' });
         }
       } else if (bigRoll < 0.62) {

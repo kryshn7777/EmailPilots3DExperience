@@ -133,9 +133,25 @@ export class KitCity {
     KitCity.environment = texture;
     for (const m of KitCity.materials) {
       m.envMap = texture;
-      m.envMapIntensity = KitCity.envIntensity;
+      m.envMapIntensity = KitCity.envIntensity * (KitCity.envScale.get(m) ?? 1);
       m.needsUpdate = true;
     }
+  }
+
+  /** per-material multipliers on the shared environment intensity (see `adopt`) */
+  private static envScale = new WeakMap<MeshStandardMaterial, number>();
+
+  /**
+   * Opts another material (puddles, wet ground) into the cloud environment, as the buildings' are,
+   * at `scale` times the shared intensity.
+   */
+  static adopt(material: MeshStandardMaterial, scale = 1): void {
+    KitCity.materials.add(material);
+    KitCity.envScale.set(material, scale);
+    if (!KitCity.environment) return;
+    material.envMap = KitCity.environment;
+    material.envMapIntensity = KitCity.envIntensity * scale;
+    material.needsUpdate = true;
   }
 
   /**
@@ -145,7 +161,7 @@ export class KitCity {
    */
   static setEnvIntensity(value: number): void {
     KitCity.envIntensity = value;
-    for (const m of KitCity.materials) m.envMapIntensity = value;
+    for (const m of KitCity.materials) m.envMapIntensity = value * (KitCity.envScale.get(m) ?? 1);
   }
 
   private static loadMaps(manifest: KitManifest, sheet: string, tier: 'high' | 'low'): KitMaps {

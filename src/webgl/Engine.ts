@@ -807,7 +807,7 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
-    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos);
+    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
