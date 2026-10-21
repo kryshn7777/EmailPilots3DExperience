@@ -66,7 +66,7 @@ import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
-import { BEACON_ANCHOR, LANTERN } from './rig/pathPoints.mjs';
+import { BEACON_ANCHOR, CITY_ANCHOR, COPILOT_ANCHOR, LANTERN, PANEL_ANCHOR } from './rig/pathPoints.mjs';
 import { setCompiler } from './warm';
 import { Raycast } from './interact/Raycast';
 import { Tooltip } from './interact/Tooltip';
@@ -256,7 +256,7 @@ export class Engine {
 
     const rand = mulberry32(919);
     this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand, this.quality.tier === 'high');
-    this.panel = new Panel(this.path.chapterAnchor(1));
+    this.panel = new Panel(new Vector3(...PANEL_ANCHOR));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
     this.mountains = new Mountains(this.sky);
@@ -267,8 +267,8 @@ export class Engine {
     this.birds = new Birds(rand);
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
-    this.city = new City(this.path.chapterAnchor(7), this.path, this.quality);
-    this.copilot = new Copilot(this.path.chapterAnchor(8));
+    this.city = new City(new Vector3(...CITY_ANCHOR), this.path, this.quality);
+    this.copilot = new Copilot(new Vector3(...COPILOT_ANCHOR));
     // fixed roll-out point, not a story-t sample: the flight now turns off
     // the runway into the arrival office, so sampling near t=1 would drag the
     // whole airfield along with the turn
