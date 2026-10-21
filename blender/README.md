@@ -10,7 +10,7 @@ npm run build:buildings                          # towers+blocks (city); houses+
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
-python blender/make_cars.py                      # the four road vehicles
+python blender/make_cars.py                      # the six road vehicles, lean and close-up
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
 ```
@@ -74,19 +74,48 @@ hero inside `near`; trees get hero inside `treeNear`, detail out to `treeDetail`
 
 | script | writes | notes |
 | --- | --- | --- |
-| `make_cars.py` | `public/models/cars/` | four lofted vehicles (~1.4k tris): `paint` (tinted per instance) and `detail` (vertex-coloured) meshes; the runtime is `StreetCars.ts` |
+| `make_cars.py` | `public/models/cars/` | six vehicles (sedan, hatch, suv, pickup, van, taxi), each twice: `<type>.glb`, a lean lofted shell (~1.4k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius` and `wheelOffsets`; the runtime is `StreetCars.ts` |
 | `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
 | `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
 
 The lighthouse is modelled in the units of the old procedural tower (lantern centre at
 z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, tooltip) hold.
 
+## Cars (close-up tier)
+
+The lean cars are cheap on purpose. The camera sails 8 to 30 units over the streets, though,
+where a car is 100 to 200 px long, so `StreetCars.ts` swaps every car inside 28 units of the
+camera (33 on the way back, so it never flickers) to the model from `build_hi`. HIGH only.
+Four meshes per `<type>-hi.glb` (5 to 8k tris counting the four wheels):
+
+| mesh | what |
+| --- | --- |
+| `paint` | the body skin (a 24-point ring lofted along about 60 sections, wheel arches cut into the flanks), mirror housings, door handles' neighbours, tailgate and roof ribs: tinted per instance, `MeshPhysicalMaterial` with clearcoat |
+| `glass` | one sheet per window, inset 1.6 cm from the skin, drawn tinted and see-through so the interior shows (a black rubber seal lines each opening) |
+| `detail` | interior (headlined shell, dash, wheel, seats, console), lamps with bezels and lenses, grille slats, intakes, fog lamps, plates, exhaust tips, calipers, door shut lines, chrome beltline, hood and deck lines, wipers, taxi sign and checks, roof rails, pickup bed ribs and liner |
+| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z: tyre (sidewall, shoulder, tread ribs and grooves), alloy rim with 5 to 8 spokes, hub cap, brake disc |
+
+The runtime instances `wheel` four times per car (`wheelOffsets` in the manifest, the right-hand
+pair turned half way round) and sets each instance's rotation from the distance the car has
+rolled, so the wheels turn while the body instances keep one shape.
+
+`detail` and `wheel` share one material, and the vertex colour's **alpha is not opacity**: it
+holds the material class (`K_*` in `cars.py`: plastic, chrome, rubber, alloy, fabric, head lamp,
+tail lamp, plate, brake disc, indicator, gloss black, liner), which `StreetCars.ts` turns into
+roughness, metalness and emission per vertex. The tail-lamp lens also takes a per-instance
+brake level, so it burns brighter as the car brakes.
+
+Everything that sits on the skin (lamps, grille, plates, shut lines, mirrors) is fitted from the
+same `_Body.ring(x)` description the skin is lofted from, so changing a profile in `SPECS`
+(or the extras in `HI`) moves the parts with it. The close-up builds reuse `SPECS` for the
+envelope, so the lean and close-up cars of a type have the same size and silhouette.
+
 ## Layout of the code
 
 ```
 make_buildings.py   entry point: build -> UV -> bake -> export (one --set / --sheet at a time)
 make_cloud_env.py   path-traced cloud sea + cumulus -> public/hdri/cloud_env_1k.hdr
-make_ground.py      numpy/Pillow: the seamless street-and-lawn cell (no Blender)
+make_ground.py      numpy/Pillow: the seamless street-and-lawn cell: colour, normal and roughness maps (no Blender)
 bld/
   geo.py            wall-local frames, boxes, quads, cylinders, spheres
   materials.py      the material table + the bake-pass swaps (see below)
@@ -96,7 +125,7 @@ bld/
   homes.py          the twelve houses     trees.py   the four trees (lean)
   hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
   bark.py           periodic procedural bark strips
-  cars.py           lofted road vehicles
+  cars.py           road vehicles: the lean lofted shells (`build`) and the close-up models (`build_hi`)
   lighthouse.py, lh_geo.py, lh_tex.py   the lighthouse, its builders and its maps
   archetypes.py     the eight towers and four blocks
   model.py          the low/high pair, UV assignment, bake proxies

@@ -30,8 +30,15 @@ rings reach out to the horizon on HIGH instead of handing most of the city to
   materials by `KitCity.setEnvIntensity`, because a material with its own `envMap`
   ignores `scene.environmentIntensity`.
 - The night city keeps the scene's night probe: it must not mirror a daytime sky.
-- Sun and cloud shadows stay real-time (direction changes per chapter, modules are
-  instanced at four rotations). Occlusion with bounces is baked into every module.
+- Sun shadows are real-time on HIGH (direction changes per chapter, modules are
+  instanced at four rotations): a 2048 ortho shadow window of +-56 units follows the plane
+  and is snapped to whole texels so shadows do not swim; houses, trees, yard props and
+  lamp poles cast, the ground, houses and yard decals receive. Occlusion with bounces is
+  baked into every module, so shadow only has to add the cast shade.
+- A hemisphere light is tinted per chapter by the sky above and the sunlit ground below
+  (sky/ground bounce), so shade is never a flat grey. The ground is PBR on HIGH: the
+  generator writes a normal map (aggregate, slab joints, curbs, cracks) and a roughness map
+  (worn tyre lanes, paint) beside the colour map.
 
 ## Layout in the scene
 
@@ -74,6 +81,9 @@ per module `sheet`, `lean` (hero -> the module it replaces), `kind`, `footprint`
 - **Beyond the town**: a meadow surface and ~2,600 woodland trees as 20-triangle far-ring
   stand-ins; ~750 verge trees and windbreaks come from a random stream of their own so no
   house moves, and never get the close-up tier.
+- **Streetlights** (`Streetlights.ts`): a pole, raked arm and cobra-head luminaire at every
+  lamp position, one instanced body, lens and (HIGH) soft light cone each, plus a halo
+  layer; they burn at night and go out as the sun comes up (`lampLevel` in the Engine).
 - **Life**: ~1,700 fence runs (cards, real boards near the flight), cars driving every street
   with car-following and parked in yards, and per-lot yards (`Yards.ts`) with decals, props,
   tufts and lights from a seeded stream.
