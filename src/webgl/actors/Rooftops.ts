@@ -38,6 +38,10 @@ const LAMPS: [number, number][] = [3.5, 17.5].flatMap((x) =>
   [HOME_CELL.lotD + 0.55, HOME_CELL.lotD + HOME_CELL.street - 0.55].map((z): [number, number] => [x, z]),
 );
 
+/** A house or tree in the town, in world x/z: what the scout planes pick their landings from. */
+export interface TownSite { x: number; z: number; w: number; d: number; h: number; yaw: number; street?: boolean }
+export interface TownSites { houses: TownSite[]; trees: TownSite[] }
+
 /**
  * CH2–3: the neighbourhood outside the study window. The study is a high floor
  * of an office tower, so what lies below is a residential district seen from
@@ -55,6 +59,8 @@ export class Rooftops {
   private lamps: Streetlights | null = null;
   private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
+  /** every house and tree once the lots are known (null while the manifest streams in) */
+  sites: TownSites | null = null;
   private disposables: { dispose(): void }[] = [];
 
   constructor(rand: () => number, quality: Quality) {
@@ -228,6 +234,13 @@ export class Rooftops {
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.kitCity.group);
     const kinds = new Map(manifest.modules.map((m) => [m.id, m.kind]));
+    const site = (lot: KitLot): TownSite => ({
+      x: lot.x, z: lot.z, w: lot.w, d: lot.d, h: lot.h, yaw: lot.yaw, ...(lot.street ? { street: true } : {}),
+    });
+    this.sites = {
+      houses: (lots as KitLot[]).filter((l) => kinds.get(l.moduleId) === 'house').map(site),
+      trees: (lots as KitLot[]).filter((l) => kinds.get(l.moduleId) === 'tree' && !l.forest).map(site),
+    };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
     this.buildCars(lots as KitLot[], kinds, quality);
   }

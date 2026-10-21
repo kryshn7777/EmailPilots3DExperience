@@ -64,6 +64,7 @@ import { AirTrail } from './actors/AirTrail';
 import { Flock } from './actors/Flock';
 import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
+import { BatchSend, RELEASE_T } from './actors/BatchSend';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
 import { BEACON_ANCHOR, CITY_ANCHOR, COPILOT_ANCHOR, LANTERN, PANEL_ANCHOR } from './rig/pathPoints.mjs';
@@ -71,6 +72,7 @@ import { setCompiler } from './warm';
 import { Raycast } from './interact/Raycast';
 import { Tooltip } from './interact/Tooltip';
 import { DeliveryPopup } from './interact/DeliveryPopup';
+import { BatchHud } from './interact/BatchHud';
 import { SkyDome } from './materials/SkyDome';
 import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
@@ -132,6 +134,7 @@ export class Engine {
   private birds: Birds;
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
+  private batch: BatchSend;
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
   private blurLevel = 0;
@@ -144,6 +147,7 @@ export class Engine {
   private raycast = new Raycast();
   private tooltip = new Tooltip();
   private deliveryPopup = new DeliveryPopup();
+  private batchHud = new BatchHud();
   /** the lantern room's centre, where the dart is delivered (see pathPoints.mjs) */
   private lanternCentre = new Vector3(...LANTERN);
   /** 0 away from the lamp, 1 with the dart inside it: drives the flare and the dart's size */
@@ -276,6 +280,7 @@ export class Engine {
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);
+    this.batch = new BatchSend(this.path);
     this.flock = new Flock(rand);
 
     this.scene.add(
@@ -301,6 +306,7 @@ export class Engine {
       this.birds.group,
       this.beacon.group,
       this.wingPlanes.group,
+      this.batch.group,
       this.traffic.group,
       this.city.group,
       this.copilot.group,
@@ -663,7 +669,8 @@ export class Engine {
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
-    this.plane.group.visible = this.idlePreset !== null || t > 0.012;
+    // (it is the third plane of the batch: two scouts have left the laptop ahead of it)
+    this.plane.group.visible = this.idlePreset !== null || t > RELEASE_T[2];
     // the dart is swallowed by the arrival screen it flies into
     const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
     // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
@@ -801,6 +808,7 @@ export class Engine {
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos);
+    this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
@@ -840,6 +848,7 @@ export class Engine {
     // the delivery readout, pinned to the lamp
     this.camera.updateMatrixWorld();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
+    this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
     this.city.update(t, time, this.rig.planeWorldPos);
     this.copilot.update(
       this.rig.planeWorldPos,
@@ -934,6 +943,7 @@ export class Engine {
     this.raycast.dispose();
     this.tooltip.dispose();
     this.deliveryPopup.dispose();
+    this.batchHud.dispose();
     this.composer.dispose();
     this.plane.dispose();
     this.trail.dispose();
@@ -953,6 +963,7 @@ export class Engine {
     this.birds.dispose();
     this.beacon.dispose();
     this.wingPlanes.dispose();
+    this.batch.dispose();
     this.traffic.dispose();
     this.city.dispose();
     this.copilot.dispose();

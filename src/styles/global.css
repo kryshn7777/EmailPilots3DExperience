@@ -1128,3 +1128,260 @@ body.is-clean footer {
   .delivery__meter i { width: 100%; }
   .delivery__leader { stroke-dashoffset: 0; }
 }
+
+/* The batch readout (BatchHud.ts): "Email Pilots — Batch sending 3/42" across the top while the
+   planes leave the laptop, then "Email delivered successfully" when the first two have landed.
+   Same chamfered neon glass as the lighthouse card. Plus a small "delivered" tag over each house. */
+.batch {
+  --neon: #00f0ff;
+  --ok: #5dffb0;
+  position: fixed;
+  left: 50%;
+  top: max(14px, env(safe-area-inset-top, 0px) + 8px);
+  z-index: 60;
+  width: min(340px, calc(100vw - 32px));
+  padding: 10px 16px 11px;
+  translate: -50% -14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease, translate 260ms ease;
+  font-family: var(--font-mono);
+  color: #d8fbff;
+  background:
+    linear-gradient(180deg, rgb(3 16 34 / 0.86), rgb(8 8 30 / 0.78)),
+    repeating-linear-gradient(0deg, rgb(0 240 255 / 0.07) 0 1px, transparent 1px 3px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  box-shadow: 0 0 36px rgb(0 240 255 / 0.16);
+}
+
+.batch[data-visible='true'] {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+/* on wide screens it sits in the top-left corner: the middle of the frame is where the planes are */
+@media (min-width: 721px) {
+  .batch {
+    left: clamp(16px, 3vw, 44px);
+    translate: 0 -14px;
+  }
+
+  .batch[data-visible='true'] {
+    translate: 0 0;
+  }
+}
+
+.batch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  background: linear-gradient(135deg, var(--neon), rgb(0 240 255 / 0.15) 50%, #ff2bd6);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+  transition: background 300ms ease;
+}
+
+.batch[data-phase='done']::before {
+  background: linear-gradient(135deg, var(--ok), rgb(93 255 176 / 0.2) 50%, var(--neon));
+}
+
+.batch__bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(0 240 255 / 0.8);
+}
+
+.batch__live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #ff2bd6;
+  box-shadow: 0 0 8px #ff2bd6;
+  animation: delivery-blink 1s steps(2, jump-none) infinite;
+}
+
+/* the two titles share a cell and cross-fade, so the card never changes size */
+.batch__title {
+  display: grid;
+  margin: 8px 0 8px;
+  font-size: clamp(1.02rem, 0.9rem + 0.9vw, 1.3rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  color: #eaffff;
+  text-shadow: 0 0 10px var(--neon), 0 0 24px rgb(0 240 255 / 0.5);
+}
+
+.batch__sending,
+.batch__done {
+  grid-area: 1 / 1;
+  transition: opacity 280ms ease;
+}
+
+.batch__done {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  opacity: 0;
+  color: #eafff4;
+  text-shadow: 0 0 10px var(--ok), 0 0 24px rgb(93 255 176 / 0.5);
+}
+
+.batch[data-phase='done'] .batch__sending {
+  opacity: 0;
+}
+
+.batch[data-phase='done'] .batch__done {
+  opacity: 1;
+}
+
+.batch__count {
+  margin-left: 0.2em;
+  font-variant-numeric: tabular-nums;
+  color: var(--neon);
+}
+
+.batch__tick,
+.batch-chip__tick {
+  position: relative;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.batch__tick::after,
+.batch-chip__tick::after {
+  content: '';
+  position: absolute;
+  left: 32%;
+  top: 14%;
+  width: 26%;
+  height: 52%;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  rotate: 40deg;
+}
+
+.batch__tick {
+  color: var(--ok);
+}
+
+.batch__meter {
+  height: 4px;
+  background: rgb(0 240 255 / 0.14);
+}
+
+.batch__meter i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--neon), #ff2bd6);
+  box-shadow: 0 0 10px var(--neon);
+  transform: scaleX(var(--p, 0));
+  transform-origin: 0 50%;
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1), background 300ms ease;
+}
+
+.batch[data-phase='done'] .batch__meter i {
+  background: var(--ok);
+  box-shadow: 0 0 10px var(--ok);
+  transform: scaleX(1);
+}
+
+.batch__foot {
+  margin-top: 7px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(216 251 255 / 0.6);
+}
+
+/* the tag over each house a scout has landed on */
+.batch-chip {
+  --ok: #5dffb0;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 59;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 8px;
+  translate: calc(var(--x, 50vw) - 50%) calc(var(--y, 50vh) - 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ok);
+  background: rgb(3 18 24 / 0.82);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgb(93 255 176 / 0.6);
+  box-shadow: 0 0 18px rgb(93 255 176 / 0.28);
+}
+
+.batch-chip[data-visible='true'] {
+  opacity: 1;
+}
+
+.batch-chip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 14px;
+  background: linear-gradient(var(--ok), transparent);
+}
+
+.batch-chip__tick {
+  width: 13px;
+  height: 13px;
+}
+
+/* while a scout is still flying its tag is a cyan callout with a pulsing dot; it turns green on landing */
+.batch-chip[data-mode='flying'] {
+  color: #00f0ff;
+  border-color: rgb(0 240 255 / 0.55);
+  box-shadow: 0 0 16px rgb(0 240 255 / 0.25);
+  --ok: #00f0ff;
+}
+
+.batch-chip[data-mode='flying'] .batch-chip__tick {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px;
+  border: 0;
+  background: currentColor;
+  animation: delivery-blink 1s steps(2, jump-none) infinite;
+}
+
+.batch-chip[data-mode='flying'] .batch-chip__tick::after {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batch,
+  .batch__meter i {
+    transition: none;
+  }
+}

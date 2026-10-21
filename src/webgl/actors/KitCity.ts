@@ -27,6 +27,8 @@ export interface KitLot {
   yaw: number; tint: string; moduleId: string;
   /** woodland beyond the town: drawn as a stand-in, never a module */
   forest?: boolean;
+  /** a small tree on the verge of a street */
+  street?: boolean;
 }
 export interface KitRingSet {
   near: number[]; mid: number[]; far: number[];
