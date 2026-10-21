@@ -17,6 +17,13 @@ export class CameraRig {
   readonly currentTangent = new Vector3(0, 0, 1);
   readonly currentSide = new Vector3(1, 0, 0);
 
+  /**
+   * A held shot laid over the follow camera: `weight` 0 is the chase cam, 1 is `position`
+   * looking at `look`. The Engine drives it for beats that need the camera to stay outside
+   * something the dart flies through (the lighthouse lantern).
+   */
+  readonly shot = { weight: 0, position: new Vector3(), look: new Vector3() };
+
   private noise = new ImprovedNoise();
   private roll = 0;
   private lookTarget = new Vector3();
@@ -98,6 +105,7 @@ export class CameraRig {
       this.camPos.x += this.noise.noise(time * 0.6, 5.1, 0) * a * 0.2;
       this.camPos.y += this.noise.noise(0, time * 0.7 + 43.7, 0) * a * 0.2;
     }
+    if (this.shot.weight > 0) this.camPos.lerp(this.shot.position, this.shot.weight);
     this.camera.position.copy(this.camPos);
 
     const lookT = Math.min(t + rig.lookAhead, 1);
@@ -109,7 +117,12 @@ export class CameraRig {
     this.lookTarget.x = MathUtils.damp(this.lookTarget.x, this.lookAtPoint.x, 6, dt);
     this.lookTarget.y = MathUtils.damp(this.lookTarget.y, this.lookAtPoint.y, 6, dt);
     this.lookTarget.z = MathUtils.damp(this.lookTarget.z, this.lookAtPoint.z, 6, dt);
-    this.camera.lookAt(this.lookTarget);
+    if (this.shot.weight > 0) {
+      this.lookAtPoint.copy(this.lookTarget).lerp(this.shot.look, this.shot.weight);
+      this.camera.lookAt(this.lookAtPoint);
+    } else {
+      this.camera.lookAt(this.lookTarget);
+    }
 
     if (Math.abs(this.camera.fov - rig.fov) > 0.01) {
       this.camera.fov = MathUtils.damp(this.camera.fov, rig.fov, 6, dt);

@@ -817,3 +817,314 @@ body.is-clean main,
 body.is-clean footer {
   visibility: hidden !important;
 }
+
+/* The lighthouse delivery card: a cyber HUD readout pinned to the lantern (DeliveryPopup.ts).
+   Chamfered glass panel, a neon gradient edge, scanlines, a glitching title. It lives on
+   <body>, outside the `is-clean` rule, because it is part of the flight, not page copy. */
+.delivery {
+  --neon: #00f0ff;
+  --neon-2: #ff2bd6;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  translate: var(--x, 50vw) var(--y, 50vh);
+  opacity: 0;
+  transition: opacity 240ms ease;
+  font-family: var(--font-mono);
+  color: #d8fbff;
+}
+
+.delivery[data-visible='true'] {
+  opacity: 1;
+}
+
+.delivery__ring {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--neon);
+  border-radius: 50%;
+  box-shadow: 0 0 14px var(--neon), inset 0 0 8px var(--neon);
+}
+
+.delivery[data-visible='true'] .delivery__ring {
+  animation: delivery-ping 1.5s ease-out infinite;
+}
+
+.delivery__leader {
+  position: absolute;
+  left: 8px;
+  top: -42px;
+  color: var(--neon);
+  filter: drop-shadow(0 0 4px var(--neon));
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+}
+
+.delivery[data-visible='true'] .delivery__leader {
+  animation: delivery-draw 420ms 120ms ease-out forwards;
+}
+
+.delivery__panel {
+  position: absolute;
+  left: 54px;
+  bottom: 30px;
+  width: min(330px, 84vw);
+  padding: 12px 16px 12px;
+  background:
+    linear-gradient(180deg, rgb(3 16 34 / 0.88), rgb(8 8 30 / 0.8)),
+    repeating-linear-gradient(0deg, rgb(0 240 255 / 0.07) 0 1px, transparent 1px 3px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+  box-shadow: 0 0 40px rgb(0 240 255 / 0.18);
+}
+
+.delivery[data-flip='true'] .delivery__panel {
+  left: auto;
+  right: 54px;
+}
+
+.delivery[data-flip='true'] .delivery__leader {
+  left: auto;
+  right: 8px;
+  scale: -1 1;
+}
+
+.delivery[data-below='true'] .delivery__panel {
+  bottom: auto;
+  top: 30px;
+}
+
+.delivery[data-below='true'] .delivery__leader {
+  top: 0;
+  scale: 1 -1;
+}
+
+.delivery[data-below='true'][data-flip='true'] .delivery__leader {
+  scale: -1 -1;
+}
+
+/* the neon edge: a gradient ring, masked to a 1.5px border so it follows the chamfers */
+.delivery__panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  background: linear-gradient(135deg, var(--neon), rgb(0 240 255 / 0.15) 45%, var(--neon-2));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+/* a bright band sweeping down the glass, like a scan */
+.delivery__panel::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -30%;
+  height: 30%;
+  background: linear-gradient(180deg, transparent, rgb(0 240 255 / 0.16), transparent);
+  pointer-events: none;
+}
+
+.delivery[data-visible='true'] .delivery__panel {
+  animation: delivery-open 360ms steps(14, end) both;
+}
+
+.delivery[data-visible='true'] .delivery__panel::after {
+  animation: delivery-scan 2.6s linear 400ms infinite;
+}
+
+.delivery__bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: rgb(0 240 255 / 0.78);
+}
+
+.delivery__live::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--neon-2);
+  box-shadow: 0 0 8px var(--neon-2);
+  animation: delivery-blink 1s steps(2, jump-none) infinite;
+}
+
+.delivery__title {
+  position: relative;
+  margin: 10px 0 8px;
+  font-size: clamp(1.25rem, 1rem + 1.3vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: #eaffff;
+  text-shadow: 0 0 10px var(--neon), 0 0 28px rgb(0 240 255 / 0.55);
+}
+
+/* the glitch: two offset copies, cyan and magenta, sliced and jittered now and then */
+.delivery__title::before,
+.delivery__title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  text-shadow: none;
+  opacity: 0.85;
+}
+
+.delivery__title::before {
+  color: var(--neon);
+  translate: -2px 0;
+  clip-path: inset(0 0 55% 0);
+}
+
+.delivery__title::after {
+  color: var(--neon-2);
+  translate: 2px 0;
+  clip-path: inset(55% 0 0 0);
+}
+
+.delivery[data-visible='true'] .delivery__title::before {
+  animation: delivery-glitch-a 3.1s steps(1, end) 500ms infinite;
+}
+
+.delivery[data-visible='true'] .delivery__title::after {
+  animation: delivery-glitch-b 3.1s steps(1, end) 500ms infinite;
+}
+
+.delivery__log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.delivery__log li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  opacity: 0;
+}
+
+.delivery__log li span::before {
+  content: '> ';
+  color: var(--neon-2);
+}
+
+.delivery__log b {
+  font-weight: 600;
+  color: #8dffb8;
+  text-shadow: 0 0 8px rgb(141 255 184 / 0.7);
+}
+
+.delivery[data-visible='true'] .delivery__log li {
+  animation: delivery-line 200ms steps(6, end) both;
+}
+
+.delivery[data-visible='true'] .delivery__log li:nth-child(1) { animation-delay: 380ms; }
+.delivery[data-visible='true'] .delivery__log li:nth-child(2) { animation-delay: 540ms; }
+.delivery[data-visible='true'] .delivery__log li:nth-child(3) { animation-delay: 700ms; }
+.delivery[data-visible='true'] .delivery__log li:nth-child(4) { animation-delay: 860ms; }
+
+.delivery__meter {
+  margin: 10px 0 6px;
+  height: 4px;
+  background: rgb(0 240 255 / 0.14);
+}
+
+.delivery__meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--neon), var(--neon-2));
+  box-shadow: 0 0 10px var(--neon);
+}
+
+.delivery[data-visible='true'] .delivery__meter i {
+  animation: delivery-fill 700ms 450ms steps(14, end) forwards;
+}
+
+.delivery__foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: rgb(216 251 255 / 0.6);
+}
+
+@keyframes delivery-ping {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes delivery-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes delivery-open {
+  0% { clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%); opacity: 0; }
+  60% { opacity: 1; }
+  100% { clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px)); }
+}
+
+@keyframes delivery-scan {
+  to { top: 110%; }
+}
+
+@keyframes delivery-blink {
+  50% { opacity: 0.15; }
+}
+
+@keyframes delivery-line {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes delivery-fill {
+  to { width: 100%; }
+}
+
+@keyframes delivery-glitch-a {
+  0%, 100% { translate: -2px 0; clip-path: inset(0 0 55% 0); }
+  8% { translate: -6px 1px; clip-path: inset(10% 0 40% 0); }
+  10% { translate: 4px -1px; clip-path: inset(40% 0 20% 0); }
+  12% { translate: -2px 0; clip-path: inset(0 0 55% 0); }
+  62% { translate: 5px 0; clip-path: inset(20% 0 50% 0); }
+  64% { translate: -2px 0; clip-path: inset(0 0 55% 0); }
+}
+
+@keyframes delivery-glitch-b {
+  0%, 100% { translate: 2px 0; clip-path: inset(55% 0 0 0); }
+  9% { translate: 7px 0; clip-path: inset(60% 0 5% 0); }
+  11% { translate: -4px 1px; clip-path: inset(35% 0 30% 0); }
+  13% { translate: 2px 0; clip-path: inset(55% 0 0 0); }
+  63% { translate: -6px 0; clip-path: inset(70% 0 0 0); }
+  65% { translate: 2px 0; clip-path: inset(55% 0 0 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delivery *,
+  .delivery *::before,
+  .delivery *::after {
+    animation: none !important;
+  }
+
+  .delivery__log li { opacity: 1; }
+  .delivery__meter i { width: 100%; }
+  .delivery__leader { stroke-dashoffset: 0; }
+}

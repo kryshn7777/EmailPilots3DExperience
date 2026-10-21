@@ -44,9 +44,16 @@ export const PATH_POINTS = [
   [100, 19, -6],
   [106, 17, 6],
   [110, 15.5, -4],
-  // CH6 beacon — calm rising arc
+  // CH6 beacon — calm rising arc, then the delivery: the dart climbs the last
+  // stretch to the lantern, flies in through its glass (it dissolves into the lamp
+  // there, the Engine shrinks it to nothing at the lantern's centre) and comes out
+  // the far side. The three points either side of LANTERN are that pass; the
+  // lighthouse itself is pinned at BEACON_ANCHOR, not derived from this zone.
   [122, 18, 0],
   [134, 20, -4],
+  [138.8, 22.8, -5.3],
+  [143.06, 25.8, -6.46], // the lantern room's centre
+  [147.3, 26.3, -6.3],
   // CH7 no-fly — ONE easy arc around the red zones, not a slalom. The old
   // line ran z −4 → 8 → 14 → 6 → 1 across five control points: an 18-unit
   // swing out and back inside 30 units of travel, which is what made the dart
@@ -57,7 +64,7 @@ export const PATH_POINTS = [
   // pulling the middle down to +2.5 makes the whole run -4 → 0 → 2.5 → 2 → 1
   // — a drift rather than an arc. The bend around the zones is now carried by
   // where the zones sit, not by throwing the dart sideways.
-  [147, 16.5, 0],
+  [150.5, 21, -3], // leaves the lamp in a long left-hand descent to the no-fly zones
   [157, 15, 2.5],
   [167, 13.5, 2],
   // CH8 city dive — the canyon runs world z 0..2 (group z offset 1); the old
@@ -84,4 +91,12 @@ export const PATH_POINTS = [
 ];
 
 /** First control-point index of each chapter's zone (matches the blocks). */
-export const CH_START_INDEX = [0, 3, 5, 9, 12, 17, 19, 22, 26, 29];
+export const CH_START_INDEX = [0, 3, 5, 9, 12, 17, 22, 25, 29, 32];
+
+/**
+ * Where the lighthouse stands, as the anchor Beacon hangs it from (the island sits at
+ * +8, -13, -2.5 from this). It used to be the CH6 zone's midpoint; the zone now runs
+ * through the lantern, so the old value is pinned here and the tower stays put.
+ */
+export const BEACON_ANCHOR = [135.06, 19.9, -3.96];
+export const LANTERN = [143.06, 25.8, -6.46];

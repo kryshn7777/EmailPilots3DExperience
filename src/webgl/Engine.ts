@@ -66,9 +66,11 @@ import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
+import { BEACON_ANCHOR, LANTERN } from './rig/pathPoints.mjs';
 import { setCompiler } from './warm';
 import { Raycast } from './interact/Raycast';
 import { Tooltip } from './interact/Tooltip';
+import { DeliveryPopup } from './interact/DeliveryPopup';
 import { SkyDome } from './materials/SkyDome';
 import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
@@ -141,6 +143,11 @@ export class Engine {
   private confetti: PaperBurst;
   private raycast = new Raycast();
   private tooltip = new Tooltip();
+  private deliveryPopup = new DeliveryPopup();
+  /** the lantern room's centre, where the dart is delivered (see pathPoints.mjs) */
+  private lanternCentre = new Vector3(...LANTERN);
+  /** 0 away from the lamp, 1 with the dart inside it: drives the flare and the dart's size */
+  private delivered = 0;
   private director: ScrollDirector | null = null;
 
   private fog: Fog;
@@ -258,7 +265,7 @@ export class Engine {
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
-    this.beacon = new Beacon(this.path.chapterAnchor(5), this.raycast, this.tooltip, this.quality);
+    this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
     this.city = new City(this.path.chapterAnchor(7), this.path, this.quality);
     this.copilot = new Copilot(this.path.chapterAnchor(8));
@@ -644,13 +651,24 @@ export class Engine {
     }
     this.prevT = t;
 
+    // the lighthouse delivery: for the beat where the dart flies into the lantern the camera
+    // holds outside it, south-east of the tower, instead of trailing the dart through the glass
+    const shot = this.rig.shot;
+    shot.weight = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.512, 0.526) * (1 - MathUtils.smoothstep(t, 0.566, 0.58));
+    shot.position.set(147.6, 24.2, 0.9);
+    shot.look.copy(this.lanternCentre);
+
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
     this.plane.group.visible = this.idlePreset !== null || t > 0.012;
     // the dart is swallowed by the arrival screen it flies into
     const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
-    this.plane.group.scale.setScalar(1 - absorbed);
+    // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
+    const intoLamp = this.idlePreset ? 1 : MathUtils.smoothstep(this.rig.planeWorldPos.distanceTo(this.lanternCentre), 0.5, 4.2);
+    this.delivered = 1 - intoLamp;
+    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp, 1e-4));
+    if (intoLamp < 0.02) this.plane.group.visible = false;
     this.launchString.update(this.idlePreset ? 1 : t, this.path);
     this.plane.flex(time, t > CONTRAIL_FROM || this.idlePreset ? 1 : 0);
 
@@ -809,8 +827,11 @@ export class Engine {
     );
     this.traffic.update(t, time);
     this.plane.setBeamHit(
-      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color),
+      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color, this.delivered),
     );
+    // the delivery readout, pinned to the lamp
+    this.camera.updateMatrixWorld();
+    this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.city.update(t, time);
     this.copilot.update(
       this.rig.planeWorldPos,
@@ -878,6 +899,7 @@ export class Engine {
     this.director?.dispose();
     this.raycast.dispose();
     this.tooltip.dispose();
+    this.deliveryPopup.dispose();
     this.composer.dispose();
     this.plane.dispose();
     this.trail.dispose();
