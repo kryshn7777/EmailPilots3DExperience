@@ -113,10 +113,10 @@ function envelopeGeometry(): BufferGeometry {
 
 const COUNT = 5;
 const SHOW_FROM = 0.2;
-const SHOW_TO = 0.46; // escort peels away before the beacon — CH6 is the plane alone
+const SHOW_TO = 0.31; // the escort stays over the town only: the cloud sea beyond it is the plane alone
 
 /**
- * CH4: the escort — five envelopes flying V-formation off the plane's wing,
+ * The escort — five envelopes flying V-formation off the plane's wing over the town,
  * one per sequence step. Hovering one raises it and shows the HUD tooltip
  * ("Step N · waits · cancels on reply").
  */
