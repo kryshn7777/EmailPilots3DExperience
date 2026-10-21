@@ -108,6 +108,10 @@ const TINTS = ['#ffffff', '#e8ecf6', '#d5dbec', '#f2ead9', '#c9d0e4'];
 export function lodScale(mod) {
   return 2 / Math.max(mod.footprint[0], mod.footprint[1], mod.height);
 }
+/** nearest a building face may stand to the canyon's centre line: the road's half width plus a pavement */
+const CANYON_CLEAR = 2.75;
+/** and from a cross street's centre line: half its width plus a pavement */
+const CROSS_CLEAR = 1.6;
 export function cityRecipes(modules, canyonZ = 0) {
   const lots = [];
   const rand = mulberry32(CITY_SEED + 7);
@@ -147,14 +151,44 @@ export function cityRecipes(modules, canyonZ = 0) {
     // canyon the plane dives through. Re-test with the real depth and drop the
     // lot rather than fly through it.
     if (Math.abs(b.z - canyonZ) - d / 2 < 1.3) continue;
+    const quarter = Math.floor(rand() * 4);
+    const yaw = (quarter * Math.PI) / 2;
+    const tint = TINTS[Math.floor(rand() * TINTS.length)];
+    // The test above is on the lot's depth, but a quarter turn swaps width and depth: a lot
+    // turned 90 or 270 degrees stands on its WIDTH in z, which put the base of a tower out over
+    // the canyon road (4.6 wide, lamps on its edges). The random stream above is untouched, so
+    // no other lot moves; this lot steps back until its face clears the pavement.
+    const reach = quarter % 2 === 1 ? w : d;
+    const gap = Math.abs(b.z - canyonZ) - reach / 2;
+    const z = gap < CANYON_CLEAR ? b.z + Math.sign(b.z - canyonZ) * (CANYON_CLEAR - gap) : b.z;
+    // and the same for the cross streets (2.6 wide): the face steps back from the street's pavement
+    let x = b.x;
+    const reachX = (quarter % 2 === 1 ? d : w) / 2;
+    for (const sx of CROSS_STREET_X) {
+      const gx = Math.abs(x - sx) - reachX;
+      if (gx < CROSS_CLEAR) x += Math.sign(x - sx || 1) * (CROSS_CLEAR - gx);
+    }
     lots.push({
-      x: b.x, z: b.z, w, d, h: mod.height * s * ls,
-      yaw: (Math.floor(rand() * 4) * Math.PI) / 2,
-      tint: TINTS[Math.floor(rand() * TINTS.length)],
-      moduleId: mod.id,
+      x, z, w, d, h: mod.height * s * ls, yaw, tint, moduleId: mod.id,
+      ...(z !== b.z || x !== b.x ? { stepped: true } : {}),
     });
   }
-  return { lots };
+  // a lot that stepped back must not now stand inside its neighbours
+  const half = (l) => {
+    const q = Math.round(l.yaw / (Math.PI / 2)) % 2 !== 0;
+    return [(q ? l.d : l.w) / 2, (q ? l.w : l.d) / 2];
+  };
+  const kept = lots.filter((l) => {
+    if (!l.stepped) return true;
+    const [hx, hz] = half(l);
+    return !lots.some((o) => {
+      if (o === l) return false;
+      const [ox, oz] = half(o);
+      return Math.abs(o.x - l.x) < hx + ox - 0.05 && Math.abs(o.z - l.z) < hz + oz - 0.05;
+    });
+  });
+  for (const l of kept) delete l.stepped;
+  return { lots: kept };
 }
 
 /**
