@@ -88,7 +88,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'formation', t0: 0.26, t1: 0.36,
     rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2 },
     grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#dcc6a4', fogNear: 100, fogFar: 360, envIntensity: 0.6,
-      mist: { strength: 0.9, boost: 1.8, scale: 9, base: 'ground' } },
+      mist: { strength: 0.6, boost: 1.4, scale: 6, base: 'ground' } },
   },
   {
     id: 'storm', t0: 0.36, t1: 0.48,

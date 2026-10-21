@@ -139,7 +139,7 @@ export class Clouds {
       // and there is open sky overhead to climb toward.
       p.set(
         center.x - spread * 0.56 + r() * spread,
-        center.y - 16 + Math.pow(r(), 1.4) * 15.5,
+        center.y - 4 + Math.pow(r(), 1.2) * 14,
         center.z - 50 + r() * 100,
       );
       // smaller puffs than before: the deck is twice as populous now, and
@@ -213,8 +213,8 @@ export class Clouds {
       // the slab straddles the line too, so the raymarch is what the camera
       // is actually inside during the formation chapter
       const box = new Box3(
-        new Vector3(center.x - 52, center.y - 12, center.z - 30),
-        new Vector3(center.x + 46, center.y + 1, center.z + 30),
+        new Vector3(center.x - 52, center.y - 4, center.z - 30),
+        new Vector3(center.x + 46, center.y + 9, center.z + 30),
       );
       this.volumeGeometry = new BoxGeometry(
         box.max.x - box.min.x,
