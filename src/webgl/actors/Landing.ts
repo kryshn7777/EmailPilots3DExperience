@@ -21,7 +21,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
-  BOOK_SPINE_CELLS, bookSpineTexture, frameArtTexture, meadowTexture, replyTexture, runwayTexture,
+  BOOK_SPINE_CELLS, bookSpineTexture, frameArtTexture, meadowTexture, replyTexture, runwayTexture, softShadowTexture,
 } from '../bake/CanvasTextures';
 import {
   WAINSCOT, arrivalScreens, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
@@ -29,6 +29,7 @@ import {
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
 import { AIRLINER, Airliner } from './Airliner';
+import { Beanbag } from './Beanbag';
 import { createLaptop, type Laptop } from './Laptop';
 import type { Quality } from '../quality';
 
@@ -521,6 +522,21 @@ export class Landing {
     clockFace.position.set(inX0 + 0.05, 2.7, z + 0.5);
     add(clockFace);
     own(clockFace.geometry, clockFace.material as MeshStandardMaterial);
+
+    // a beanbag on the bare boards to the left of the rug: somewhere to wait with a coffee. Its
+    // seat turns toward the door and the middle of the room, and a soft dark pool under it keeps
+    // it on the floor (the room's lights cast no shadows)
+    const beanbag = new Beanbag();
+    const bx = x + 2.1;
+    const bz = z + 0.1;
+    beanbag.group.position.set(bx, 0.09, bz);
+    beanbag.group.rotation.y = Math.PI + 0.5;
+    add(beanbag.group);
+    own(beanbag);
+    const pool = new MeshBasicMaterial({ map: softShadowTexture(), color: '#000000', transparent: true, opacity: 0.6, depthWrite: false });
+    own(pool, pool.map!);
+    const poolMesh = plane(pool, 1.9, 1.7, bx, 0.095, bz, 0, -Math.PI / 2);
+    poolMesh.renderOrder = -1;
 
     // the plant is the same potted plant as the study's, streamed in after first paint
     new GLTFLoader().load(asset('/models/potted_plant_04.glb'), (gltf) => {
