@@ -16,10 +16,11 @@ import type { FlightPath } from '../rig/FlightPath';
 import rainVert from '../shaders/rain.vert.glsl';
 import rainFrag from '../shaders/rain.frag.glsl';
 
-const GATE_TS = [0.385, 0.415, 0.445] as const;
+/** one warning gate, mid-chapter (there were three on a slalom; the line is gentle now) */
+const GATE_TS = [0.415] as const;
 
 /**
- * CH5: the storm. Emissive red warning gates on the slalom line, shader-
+ * CH5: the storm. Emissive red warning gate on the flight line, shader-
  * animated rain sheet, and a lightning controller whose flash value the
  * engine feeds to the sky dome and bloom.
  */
