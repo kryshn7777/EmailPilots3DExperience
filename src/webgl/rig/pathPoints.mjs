@@ -12,24 +12,25 @@ export const PATH_POINTS = [
   // CH2 preflight taxi past the panel, through the middle of the window
   // opening (frame centred at y=2) rather than into its sill and hinge
   [8, 2.06, 1.0],
-  // hard climb the moment the window is cleared: at the old y≈2 the camera
-  // rode BELOW the rooftops, so the empty apron of the city's ground plane
-  // filled the lower frame. Higher camera pushes the frame's bottom ground
-  // hit far enough out that buildings cover it.
-  [16, 6.5, -1.0],
-  // CH3 takeoff — a long shallow cruise ACROSS the district before the climb
-  // starts; the old line was already at cloud height by x=32 and the city
-  // was behind you before you had looked at it
-  [24, 9, 2],
-  [33, 13, -2],
-  // Then the nose comes up and the district drops away for good. This climb
-  // is deliberately long and deliberately steep — four points instead of
-  // three — because the whole beat is the distance travelled between the
-  // rooftops and the weather. The old 15-unit top left the city still close
-  // underneath when the cloud arrived; the deck rides on the CH4 anchor, so
-  // taking the path this high carries the whole cloud sea up with it.
-  [42, 15, 3],
-  [50, 20, -1],
+  // The plane leaves the window and dives into the town: over the front yards, down into the
+  // street (z 10..16, the asphalt is 2.4 wide on its centre line z = 13), then it runs along it
+  // below the rooftops, between the houses and the street trees, with the lamps either side. At
+  // about x = 42 it pulls up over the street and climbs steeply into the cloud sea. (It used to
+  // climb away from the window at once: the town was something seen from above, never flown through.)
+  [14, 1.7, 4.5],
+  // over the back rows' front yards, still above the roofs and chimneys
+  [20, 0.9, 9.0],
+  // CH3 takeoff — down into the street's corridor: the lamp arms reach 0.5 out from z 10.55 and
+  // 15.45, so z 12.2..13.8 keeps clear of them, and the street trees are on the verge outside that
+  [25, -0.8, 12.3],
+  [30, -1.7, 13],
+  [35, -1.9, 13],
+  [39, -1.75, 13],
+  // pull up over the street
+  [43, -0.2, 12.5],
+  [47.5, 3.6, 11],
+  [52, 10.2, 9],
+  [56, 17.4, 6.8],
   // CH4 formation — S through the cloud sea, above the city but not in orbit
   // over it: the climb tops out at 26, having gained 17 since CH3 started at
   // 9. The first pass gained 43 and put the district so far below that it
@@ -93,7 +94,7 @@ export const PATH_POINTS = [
 ];
 
 /** First control-point index of each chapter's zone (matches the blocks). */
-export const CH_START_INDEX = [0, 3, 5, 9, 12, 17, 22, 25, 29, 32];
+export const CH_START_INDEX = [0, 3, 6, 14, 17, 22, 27, 30, 34, 37];
 
 /**
  * Where the lighthouse stands, as the anchor Beacon hangs it from (the island sits at
@@ -102,3 +103,11 @@ export const CH_START_INDEX = [0, 3, 5, 9, 12, 17, 22, 25, 29, 32];
  */
 export const BEACON_ANCHOR = [135.06, 19.9, -3.96];
 export const LANTERN = [143.06, 25.8, -6.46];
+/**
+ * Where the pre-flight checklist board stands (it used to hang off CH2's zone midpoint, which moved
+ * when the plane started flying down the street). It stays where the window shot has always had it.
+ */
+export const PANEL_ANCHOR = [15.844, 6.431, -1.008];
+/** The night city's and the copilot scene's anchors, as they were before the town flight changed the zones' midpoints (the baked rings hardcode the city's). */
+export const CITY_ANCHOR = [193.819, 1.872, 1.611];
+export const COPILOT_ANCHOR = [224.814, 23.947, 1.171];
