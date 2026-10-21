@@ -725,14 +725,14 @@ export class Yards {
       }
     }
 
-    this.buildDecals(decals);
+    this.buildDecals(decals, detail === 'high');
     this.buildProps(props, detail);
     this.buildLights(lights);
   }
 
   // -- decals: one merged mesh, one draw -------------------------------------------------
 
-  private buildDecals(decals: Decal[]): void {
+  private buildDecals(decals: Decal[], shadows: boolean): void {
     const pos: number[] = [];
     const uv: number[] = [];
     const col: number[] = [];
@@ -766,6 +766,7 @@ export class Yards {
     });
     const mesh = new Mesh(g, material);
     mesh.renderOrder = -3;
+    mesh.receiveShadow = shadows;
     mesh.matrixAutoUpdate = false;
     this.group.add(mesh);
     this.disposables.push(g, material, map);
@@ -805,6 +806,9 @@ export class Yards {
       inst.instanceMatrix.needsUpdate = true;
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
       inst.frustumCulled = false;
+      // grass tufts are too small to throw a shadow worth drawing
+      inst.castShadow = detail === 'high' && kind !== 'tuft';
+      inst.receiveShadow = detail === 'high';
       this.group.add(inst);
       this.disposables.push(geometry, inst);
     }

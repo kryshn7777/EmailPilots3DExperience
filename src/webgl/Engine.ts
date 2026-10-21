@@ -97,6 +97,10 @@ const ROUTE_PRESETS: Record<string, IdlePreset> = {
  * Phase-3 engine: CH1–5 art-complete (desk, panel, takeoff window, volumetric
  * cloud sea, storm) over the chapter grade system; CH6–10 remain blockout.
  */
+/** half-width of the sun's shadow window around the plane (site units) and its map size */
+const SUN_SHADOW_HALF = 56;
+const SUN_SHADOW_MAP = 2048;
+
 export class Engine {
   private renderer: WebGLRenderer;
   private scene = new Scene();
@@ -152,6 +156,8 @@ export class Engine {
   private prevT = 0;
   private idlePreset: IdlePreset | null = null;
   private maneuverPulse = 0;
+  /** 1 at night, 0 in daylight: how brightly the town's lamps burn */
+  private lampLevel = 1;
   private rafId = 0;
   private startTime = performance.now();
   private lastTime = this.startTime;
@@ -163,6 +169,7 @@ export class Engine {
   private sunDirWorld = new Vector3(0.6, 0.25, 0.1);
   private sunScreenDir = new Vector2(0.7, 0.3);
   private tmpV = new Vector3();
+  private tmpV2 = new Vector3();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -182,6 +189,20 @@ export class Engine {
     if (this.quality.tier === 'high') {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = PCFShadowMap;
+    }
+
+    if (this.quality.tier === 'high') {
+      // the sun's shadows over the town: an ortho window that follows the plane
+      const shadow = this.sun.shadow;
+      this.sun.castShadow = true;
+      shadow.mapSize.set(SUN_SHADOW_MAP, SUN_SHADOW_MAP);
+      shadow.camera.left = shadow.camera.bottom = -SUN_SHADOW_HALF;
+      shadow.camera.right = shadow.camera.top = SUN_SHADOW_HALF;
+      shadow.camera.near = 1;
+      shadow.camera.far = 150;
+      shadow.bias = -0.0006;
+      shadow.normalBias = 0.05;
+      shadow.radius = 2.5;
     }
 
     this.fog = new Fog('#05070f', 10, 90);
@@ -495,6 +516,13 @@ export class Engine {
     this.sky.sunIntensity = sunLevel;
     this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2;
+    // sky-and-ground bounce: shadowed surfaces take the colour of the sky from above and of
+    // the sunlit ground from below, so shade is never a flat grey and rooftops pick up warmth
+    this.hemi.color.copy(this.sky.horizon).lerp(this.sky.zenith, 0.35);
+    this.hemi.groundColor.copy(this.fog.color).lerp(this.sun.color, 0.3).multiplyScalar(0.55);
+    this.hemi.intensity = 0.3 + 0.3 * MathUtils.clamp(sunLevel / 1.6, 0, 1);
+    // lamps are lit under the window at night and go out as the sun comes up
+    this.lampLevel = 1 - MathUtils.smoothstep(sunLevel, 0.5, 1.3);
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
     // mist standing on the ground or the sea: blends between chapters, with the base
@@ -650,8 +678,18 @@ export class Engine {
     }
 
     // sun follows the plane so the directional light never runs out of range
-    this.sun.position.copy(this.rig.planeWorldPos).addScaledVector(this.sunDirWorld, 60);
     this.sun.target.position.copy(this.rig.planeWorldPos);
+    if (this.sun.castShadow) {
+      // snap the shadow window to whole shadow-map texels along the light's own axes,
+      // so shadows hold still on the ground as the plane flies instead of swimming
+      const texel = (2 * SUN_SHADOW_HALF) / SUN_SHADOW_MAP;
+      const right = this.tmpV.set(0, 1, 0).cross(this.sunDirWorld).normalize();
+      const up = this.tmpV2.copy(this.sunDirWorld).cross(right);
+      const at = this.sun.target.position;
+      const snap = (v: number): number => ((v % texel) + texel) % texel;
+      at.addScaledVector(right, -snap(at.dot(right))).addScaledVector(up, -snap(at.dot(up)));
+    }
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirWorld, 60);
 
     this.sky.followCamera(this.camera.position);
     this.sky.flash = this.storm.flash;
@@ -742,7 +780,7 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
-    this.rooftops.update(time);
+    this.rooftops.update(time, this.lampLevel);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
