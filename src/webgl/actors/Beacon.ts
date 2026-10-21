@@ -7,22 +7,19 @@ import {
   CylinderGeometry,
   DoubleSide,
   DynamicDrawUsage,
-  ExtrudeGeometry,
   Float32BufferAttribute,
   Group,
-  InstancedMesh,
+  Material,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
-  Object3D,
   PlaneGeometry,
   Points,
   PointsMaterial,
   RepeatWrapping,
   RingGeometry,
   ShaderMaterial,
-  Shape,
-  SphereGeometry,
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
@@ -38,6 +35,7 @@ import { fogHeight } from '../fog';
 import type { Raycast } from '../interact/Raycast';
 import type { Tooltip } from '../interact/Tooltip';
 import { glowTexture } from '../bake/CanvasTextures';
+import { requestCompile } from '../warm';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import beamVert from '../shaders/beam.vert.glsl';
 import beamFrag from '../shaders/beam.frag.glsl';
@@ -86,8 +84,10 @@ const SHIP_Y = 2.85;
 /** extra scroll the sea holds before it starts letting go — see `reveal` */
 const SEA_FADE_DELAY = 0.012;
 
-const SHIP_FROM = new Vector3(25, SHIP_Y, -80);
-const SHIP_TO = new Vector3(65, SHIP_Y, -40);
+/** the freighter's size and track, in the island's frame (see buildShip): it crosses ahead of the camera, left to right */
+const SHIP_SCALE = 2.8;
+const SHIP_FROM = new Vector3(34, SHIP_Y, -30);
+const SHIP_TO = new Vector3(28, SHIP_Y, 34);
 
 export class Beacon {
   readonly group = new Group();
@@ -111,6 +111,7 @@ export class Beacon {
   private flare!: Sprite;
   private ship = new Group();
   private wake!: Mesh;
+  private radar: Mesh | null = null;
   /** last computed sweep bearing — derived from t each frame, never carried */
   private beamYaw = 0;
   private disposables: { dispose(): void }[] = [];
@@ -402,154 +403,89 @@ export class Beacon {
   }
 
   /**
-   * A modern container freighter riding the swell off the islet, nav lights
-   * on. It is procedural because Poly Haven has no modern vessel to download:
-   * its entire `ships` category is four wooden colonial sailing ships from a
-   * single collection, so every downloadable option reads as a pirate ship —
-   * which is exactly what this replaces. Materials are shared per colour, so
-   * the whole freighter is about a dozen draw calls.
+   * The container freighter riding the swell off the islet, modelled in Blender
+   * (blender/make_ship.py, ~7k triangles): a lofted hull with a flared bow and bulb, a steel deck
+   * with hatch covers, stacks of corrugated containers in line colours, a five-deck
+   * accommodation block with a wide bridge, funnel, radar mast, lifeboats, vents, handrails and
+   * lit windows. It streams in after construction; the radar turns, the running lights glow and
+   * a foam wake trails it.
    */
   private buildShip(): void {
-    const hullPaint = new MeshStandardMaterial({ color: '#6d2f2a', roughness: 0.62, metalness: 0.25 });
-    const topside = new MeshStandardMaterial({ color: '#20272f', roughness: 0.7, metalness: 0.3 });
-    const deckPaint = new MeshStandardMaterial({ color: '#414956', roughness: 0.88 });
-    const superstructure = new MeshStandardMaterial({ color: '#c3c7cd', roughness: 0.6 });
-    this.disposables.push(hullPaint, topside, deckPaint, superstructure);
-
-    const piece = (
-      g: BufferGeometry,
-      m: MeshStandardMaterial,
-      x: number,
-      y: number,
-      z = 0,
-    ): Mesh => {
-      const mesh = new Mesh(g, m);
-      mesh.position.set(x, y, z);
-      this.ship.add(mesh);
-      this.disposables.push(g);
-      return mesh;
+    const mat = (extra: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial => {
+      const m = new MeshStandardMaterial({ vertexColors: true, ...extra });
+      this.disposables.push(m);
+      return m;
     };
-
-    // hull: a real ship plan — parallel midbody running out to a flared bow —
-    // extruded downward, so the silhouette is a hull and not a floating box
-    const plan = new Shape();
-    plan.moveTo(-4, -0.95);
-    plan.lineTo(2.5, -0.95);
-    plan.quadraticCurveTo(4.1, -0.66, 4.65, 0);
-    plan.quadraticCurveTo(4.1, 0.66, 2.5, 0.95);
-    plan.lineTo(-4, 0.95);
-    plan.closePath();
-    const hullGeometry = new ExtrudeGeometry(plan, { depth: 1.15, bevelEnabled: false });
-    hullGeometry.rotateX(Math.PI / 2); // plan lies in XY; stand it up as XZ
-    piece(hullGeometry, hullPaint, 0, 0.62);
-    // boot-topping stripe at the waterline + the deck itself
-    piece(new BoxGeometry(7.9, 0.12, 1.94), topside, -0.2, 0.2);
-    piece(new BoxGeometry(6.6, 0.06, 1.8), deckPaint, -0.5, 0.64);
-    // bulbous bow breaking the surface ahead of the stem
-    piece(new SphereGeometry(0.33, 12, 8), hullPaint, 4.5, 0.05);
-
-    // container stacks: one InstancedMesh per colour keeps the deck cheap
-    // (per-instance colour would mean a colour attribute, and this project
-    // does not put vertex colours on standard materials)
-    const boxGeometry = new BoxGeometry(0.6, 0.32, 0.52);
-    const stackColors = ['#8d5326', '#2f5f7d', '#7d3540', '#4a6b4f'];
-    const slots: number[][][] = stackColors.map(() => []);
-    let n = 0;
-    for (let c = 0; c < 9; c++) {
-      const x = -3.3 + c * 0.68;
-      for (const z of [-0.6, 0, 0.6]) {
-        // the stack steps down toward the bow, the way a loaded ship sits
-        const high = c < 6 ? 3 : 2;
-        for (let level = 0; level < high; level++) {
-          slots[n++ % stackColors.length]!.push([x, 0.83 + level * 0.33, z]);
-        }
-      }
-    }
-    const dummy = new Object3D();
-    for (let i = 0; i < stackColors.length; i++) {
-      const m = new MeshStandardMaterial({ color: stackColors[i]!, roughness: 0.8 });
-      const cells = slots[i]!;
-      const inst = new InstancedMesh(boxGeometry, m, cells.length);
-      for (let k = 0; k < cells.length; k++) {
-        const [x, y, z] = cells[k]!;
-        dummy.position.set(x!, y!, z!);
-        dummy.updateMatrix();
-        inst.setMatrixAt(k, dummy.matrix);
-      }
-      inst.instanceMatrix.needsUpdate = true;
-      this.ship.add(inst);
-      this.disposables.push(m, inst);
-    }
-    this.disposables.push(boxGeometry);
-
-    // deck house aft: accommodation block, bridge with a lit window band,
-    // funnel, and the radar mast above it
-    piece(new BoxGeometry(1.4, 1.35, 1.6), superstructure, -3.3, 1.32);
-    piece(new BoxGeometry(1.62, 0.32, 1.78), superstructure, -3.3, 2.14);
-    const bridgeGlass = new MeshStandardMaterial({
-      color: '#141d24',
-      emissive: '#ffd9a0',
-      emissiveIntensity: 1.5,
-    });
-    piece(new BoxGeometry(1.5, 0.17, 1.84), bridgeGlass, -3.3, 2.14);
-    this.disposables.push(bridgeGlass);
-    piece(new BoxGeometry(0.66, 0.9, 0.78), topside, -3.8, 2.58); // funnel, seated on the block
-    piece(new BoxGeometry(0.7, 0.16, 0.82), hullPaint, -3.8, 2.78); // funnel band
-    piece(new CylinderGeometry(0.022, 0.022, 1.1, 6), topside, -3.3, 2.85);
-
-    // warm portholes along the hull + red/green running lights + mast light
-    const lights: number[] = [];
-    for (let i = 0; i < 9; i++) {
-      lights.push(-3.4 + i * 0.82, 0.82, 0.97);
-      lights.push(-3.4 + i * 0.82, 0.82, -0.97);
-    }
-    const lightGeometry = new BufferGeometry();
-    lightGeometry.setAttribute('position', new Float32BufferAttribute(lights, 3));
-    const lightMaterial = new PointsMaterial({
-      map: glowTexture(),
-      color: '#ffd9a0',
-      size: 0.34,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-      blending: AdditiveBlending,
-    });
-    const portholes = new Points(lightGeometry, lightMaterial);
-    portholes.frustumCulled = false;
-    const nav = (color: string, x: number, y: number, z: number): Points => {
+    const normal = new TextureLoader().load(asset('/models/ship/container-normal.webp'));
+    normal.wrapS = normal.wrapT = RepeatWrapping;
+    normal.flipY = false;
+    normal.anisotropy = 4;
+    this.disposables.push(normal);
+    const materials: Record<string, Material> = {
+      hull: mat({ roughness: 0.55, metalness: 0.3 }),
+      deck: mat({ roughness: 0.85, metalness: 0.1 }),
+      containers: mat({ roughness: 0.62, metalness: 0.2, normalMap: normal, normalScale: new Vector2(1, 1) }),
+      upper: mat({ roughness: 0.55, metalness: 0.15 }),
+      lit: (() => {
+        const m = new MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+        this.disposables.push(m);
+        return m;
+      })(),
+    };
+    const glow = glowTexture();
+    this.disposables.push(glow);
+    const lampAt = (p: Vector3, color: string, size: number): void => {
       const g = new BufferGeometry();
-      g.setAttribute('position', new Float32BufferAttribute([x, y, z], 3));
+      g.setAttribute('position', new Float32BufferAttribute([p.x, p.y, p.z], 3));
       const m = new PointsMaterial({
-        map: glowTexture(),
-        color,
-        size: 0.5,
-        transparent: true,
-        opacity: 0.95,
-        depthWrite: false,
-        blending: AdditiveBlending,
+        map: glow, color, size, transparent: true, opacity: 0.95, depthWrite: false,
+        blending: AdditiveBlending, sizeAttenuation: true,
       });
       const point = new Points(g, m);
       point.frustumCulled = false;
+      this.ship.add(point);
       this.disposables.push(g, m);
-      return point;
     };
-    this.ship.add(
-      portholes,
-      nav('#ff6f6f', 4.1, 1.02, -0.62),
-      nav('#7fff9f', 4.1, 1.02, 0.62),
-      nav('#eafcff', -3.3, 3.42, 0),
-    );
-    this.disposables.push(lightGeometry, lightMaterial);
 
-    // Staged out to seaward on the camera's right, bow up toward the light,
-    // and big — the old hull sat dead ahead UNDER the flight line, so the
-    // camera flew over its containers and never read the ship at all. The
-    // heading is baked from the SHIP_FROM→SHIP_TO leg so the bow always
-    // points where it is actually going.
+    new GLTFLoader().load(asset('/models/ship/ship.glb'), (gltf) => {
+      const root = gltf.scene;
+      const marks: Record<string, Vector3> = {};
+      root.traverse((o) => {
+        const mesh = o as Mesh;
+        if (mesh.isMesh) {
+          mesh.material = materials[o.name] ?? materials.upper!;
+          this.disposables.push(mesh.geometry);
+        } else if (o.name.startsWith('nav_') || o.name === 'radar') {
+          marks[o.name] = o.position.clone();
+        }
+      });
+      // the nodes that only marked a place are no longer needed
+      for (const name of Object.keys(marks)) root.getObjectByName(name)?.removeFromParent();
+      this.ship.add(root);
+      lampAt(marks.nav_red!, '#ff5a5a', 0.55);
+      lampAt(marks.nav_green!, '#6dff9a', 0.55);
+      lampAt(marks.nav_mast!, '#eafcff', 0.6);
+      lampAt(marks.nav_bow!, '#eafcff', 0.5);
+      lampAt(marks.nav_stern!, '#eafcff', 0.4);
+      // deck floodlights over the stacks, so the cargo reads in the dark
+      for (const [x, z] of [[-1.6, 0], [0.4, 0], [2.4, 0]] as const) lampAt(new Vector3(x, 2.15, z), '#ffe7b8', 0.7);
+      // the radar: a bar that turns on the mast
+      const radar = new Mesh(new BoxGeometry(0.34, 0.03, 0.05), materials.upper!);
+      radar.position.copy(marks.radar!);
+      radar.position.y += 0.02;
+      this.disposables.push(radar.geometry);
+      this.ship.add(radar);
+      this.radar = radar;
+      requestCompile(root);
+    });
+
+    // Staged out in the sea ahead of the camera, crossing the shot from the left, bow toward the
+    // light: close enough to read, far enough to sit beside the tower rather than block it. The
+    // heading is baked from the SHIP_FROM→SHIP_TO leg so the bow always points where it is going.
     this.ship.position.copy(SHIP_FROM);
     const leg = SHIP_TO.clone().sub(SHIP_FROM);
     this.ship.rotation.y = Math.atan2(-leg.z, leg.x); // model's bow is +x
-    this.ship.scale.setScalar(4.4);
+    this.ship.scale.setScalar(SHIP_SCALE);
 
     // wake: a long foam wedge lying flat on the water behind the hull, kept
     // in the island's frame (not the ship's) so the swell roll never tips it
@@ -563,7 +499,7 @@ export class Beacon {
       side: DoubleSide,
       map: glowTexture(),
     });
-    const wakeGeometry = new PlaneGeometry(54, 7);
+    const wakeGeometry = new PlaneGeometry(SHIP_SCALE * 12, SHIP_SCALE * 1.6);
     this.wake = new Mesh(wakeGeometry, wakeMaterial);
     this.wake.rotation.x = -Math.PI / 2;
     this.wake.renderOrder = 1;
@@ -694,13 +630,15 @@ export class Beacon {
     this.ship.rotation.z = Math.sin(time * 0.7 + 1.3) * 0.115 + Math.sin(time * 1.31) * 0.04;
     this.ship.rotation.x = Math.sin(time * 0.55) * 0.075;
 
+    if (this.radar) this.radar.rotation.y = time * 2.4;
+
     // the wake lies flat astern, along the heading, fading with the sea
     this.wake.visible = this.ship.visible;
     if (this.wake.visible) {
       this.wake.position.set(
-        this.ship.position.x - Math.cos(this.ship.rotation.y) * 21,
+        this.ship.position.x - Math.cos(this.ship.rotation.y) * (SHIP_SCALE * 4.65 + 1),
         0.32,
-        this.ship.position.z + Math.sin(this.ship.rotation.y) * 21,
+        this.ship.position.z + Math.sin(this.ship.rotation.y) * (SHIP_SCALE * 4.65 + 1),
       );
       // a plane pitched flat by rotation.x maps its long axis to
       // (cos z, 0, −sin z), so this matches the hull's heading exactly
