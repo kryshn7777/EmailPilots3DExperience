@@ -59,10 +59,22 @@ DETAIL = {
 }
 
 
+# 'lite' is the tier for the many trees beyond that: a trunk and the main boughs and
+# about a hundred big cards (~0.5 to 0.9k triangles), still real branching and real leaves,
+# where the lean module is a 40-triangle blob.
+LITE = {
+    'oak': dict(lens=[4.6, 3.4], kids=[6], sides=(5, 4), cards=130, size=(2.0, 3.0), lobes=7),
+    'maple': dict(lens=[4.0, 2.8], kids=[5], sides=(5, 4), cards=120, size=(1.8, 2.7), lobes=7),
+    'poplar': dict(lens=[10.0, 1.9], kids=[9], sides=(5, 4), cards=110, size=(1.5, 2.3), lobes=6),
+    'pine': dict(whorl=(2.2, 1.75), branches=4, cards_per_branch=2, size=(1.9, 2.8), skirt=2),
+}
+TIERS = {'detail': DETAIL, 'lite': LITE}
+
+
 class TreeBuilder:
     def __init__(self, layout, species, seed, lod='hero'):
         self.layout, self.species = layout, species
-        self.P = {**PARAMS[species], **(DETAIL[species] if lod == 'detail' else {})}
+        self.P = {**PARAMS[species], **TIERS.get(lod, {}).get(species, {})}
         self.rng = random.Random(f'{species}/{seed}')
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new('UVMap')

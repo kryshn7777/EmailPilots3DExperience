@@ -49,7 +49,8 @@ SETS = {
 }
 
 # module id -> (species, the lean module it replaces, tier). 'hero' is for lots the
-# camera passes close to, 'detail' for the ring of trees it still sees clearly.
+# camera passes close to, 'detail' for the ring of trees it still sees clearly, 'lite'
+# for the many trees beyond that.
 HERO_TREES = {
     'tree-oak-hero': ('oak', 'tree-oak', 'hero'),
     'tree-maple-hero': ('maple', 'tree-maple', 'hero'),
@@ -59,6 +60,10 @@ HERO_TREES = {
     'tree-maple-detail': ('maple', 'tree-maple', 'detail'),
     'tree-pine-detail': ('pine', 'tree-pine', 'detail'),
     'tree-poplar-detail': ('poplar', 'tree-poplar', 'detail'),
+    'tree-oak-lite': ('oak', 'tree-oak', 'lite'),
+    'tree-maple-lite': ('maple', 'tree-maple', 'lite'),
+    'tree-pine-lite': ('pine', 'tree-pine', 'lite'),
+    'tree-poplar-lite': ('poplar', 'tree-poplar', 'lite'),
 }
 
 

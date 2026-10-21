@@ -634,3 +634,302 @@ export function plazaMaps(seed: number): Required<SurfaceMaps> {
     roughnessMap: roughnessFrom(canvas, 0.5, 1.2),
   };
 }
+
+// ------------------------------------------------------------------------------------------------
+// The arrival laptop's screen: a mail client in two states. `idle` is an inbox with nothing new,
+// waiting; `received` has the delivered mail at the top, selected, open in the reading pane, and a
+// notification toast reading EMAIL RECEIVED. Same layout, so the swap is only the news.
+// ------------------------------------------------------------------------------------------------
+
+const SANS = '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+const MONO = 'ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", monospace';
+
+function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+interface Mail { from: string; subject: string; preview: string; time: string; unread?: boolean; tag?: string; hue: number }
+
+const OLDER: Mail[] = [
+  { from: 'Ops Desk', subject: 'Weekly deliverability digest', preview: 'Inbox placement held at 98.6% across all seeds. Two soft bounces on…', time: '9:14 PM', hue: 200 },
+  { from: 'Mara Quinn', subject: 'Re: Q4 launch sequence', preview: 'Love the new subject lines. Can we send the second wave at 6 a.m.…', time: '8:02 PM', hue: 330 },
+  { from: 'DMARC Reports', subject: 'Aggregate report for emailpilots.dev', preview: '412 messages evaluated. SPF pass 100%, DKIM pass 100%, alignment…', time: '6:47 PM', hue: 140 },
+  { from: 'Jon at Harbor Co.', subject: 'Your plane is cleared', preview: 'Thanks for flying with us. The runway lights are on and the tower…', time: '5:30 PM', hue: 30 },
+  { from: 'Billing', subject: 'Receipt: Pilot plan (annual)', preview: 'Thanks for your payment. Your receipt for the overnight flight plan…', time: 'Tue', hue: 260 },
+  { from: 'Priya N.', subject: 'Copilot notes from the storm', preview: 'Logged the turbulence at the second gate. Nothing alarming, but the…', time: 'Tue', hue: 10 },
+];
+
+const RECEIVED: Mail = {
+  from: 'The Overnight Flight', subject: 'Re: Delivered, on time, in one piece',
+  preview: 'Your email landed safely in the inbox. SPF pass, DKIM pass, DMARC aligned…', time: 'now', unread: true, tag: 'NEW', hue: 175,
+};
+
+function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', rand: () => number): void {
+  const received = state === 'received';
+  // window: deep night-blue, a chrome bar, three folders' worth of sidebar, a list, a reading pane
+  ctx.fillStyle = '#0b1019';
+  ctx.fillRect(0, 0, W, H);
+  // chrome
+  ctx.fillStyle = '#121a28';
+  ctx.fillRect(0, 0, W, 54);
+  for (const [i, c] of ['#ff5f57', '#febc2e', '#28c840'].entries()) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(30 + i * 26, 27, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#9fb1cc';
+  ctx.font = `600 22px ${SANS}`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Inbox', 126, 27);
+  ctx.fillStyle = '#58698a';
+  ctx.font = `400 20px ${SANS}`;
+  ctx.fillText(received ? '129 messages · 4 unread' : '128 messages · 3 unread', 196, 27);
+  // search box
+  ctx.fillStyle = '#0b1019';
+  rr(ctx, W - 330, 12, 300, 30, 15);
+  ctx.fill();
+  ctx.fillStyle = '#4b5b78';
+  ctx.font = `400 18px ${SANS}`;
+  ctx.fillText('Search mail', W - 300, 27);
+
+  // sidebar
+  const SB = 210;
+  ctx.fillStyle = '#0e1523';
+  ctx.fillRect(0, 54, SB, H - 54);
+  ctx.fillStyle = '#1b6fe8';
+  rr(ctx, 18, 72, SB - 36, 44, 10);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = `600 20px ${SANS}`;
+  ctx.fillText('+  Compose', 40, 94);
+  const folders: [string, string][] = [
+    ['Inbox', received ? '4' : '3'], ['Starred', ''], ['Sent', ''], ['Drafts', '2'], ['Archive', ''], ['Spam', ''],
+  ];
+  folders.forEach(([name, count], i) => {
+    const y = 140 + i * 46;
+    if (i === 0) {
+      ctx.fillStyle = 'rgba(80,140,255,0.16)';
+      rr(ctx, 12, y - 6, SB - 24, 40, 8);
+      ctx.fill();
+    }
+    ctx.fillStyle = i === 0 ? '#cfe0ff' : '#7e8fae';
+    rr(ctx, 30, y + 6, 16, 16, 4);
+    ctx.fill();
+    ctx.font = `${i === 0 ? 600 : 400} 20px ${SANS}`;
+    ctx.fillText(name, 62, y + 14);
+    if (count) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = i === 0 ? '#8fb6ff' : '#58698a';
+      ctx.fillText(count, SB - 28, y + 14);
+      ctx.textAlign = 'left';
+    }
+  });
+  ctx.fillStyle = '#58698a';
+  ctx.font = `600 15px ${SANS}`;
+  ctx.fillText('LABELS', 30, 440);
+  for (const [i, [name, c]] of ([['Customers', '#4ade80'], ['Campaigns', '#f59e0b'], ['Flight log', '#38bdf8']] as const).entries()) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(38, 478 + i * 36, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7e8fae';
+    ctx.font = `400 19px ${SANS}`;
+    ctx.fillText(name, 56, 478 + i * 36);
+  }
+
+  // message list
+  const LX = SB;
+  const LW = 420;
+  ctx.fillStyle = '#0d131f';
+  ctx.fillRect(LX, 54, LW, H - 54);
+  ctx.fillStyle = '#1b2539';
+  ctx.fillRect(LX + LW - 1, 54, 1, H - 54);
+  const list = received ? [RECEIVED, ...OLDER] : OLDER;
+  const ROW = 88;
+  list.slice(0, 7).forEach((m, i) => {
+    const y = 54 + i * ROW;
+    const selected = received && i === 0;
+    if (selected) {
+      ctx.fillStyle = 'rgba(70,140,255,0.2)';
+      ctx.fillRect(LX, y, LW - 1, ROW);
+      ctx.fillStyle = '#4c9dff';
+      ctx.fillRect(LX, y, 4, ROW);
+    }
+    ctx.fillStyle = '#1b2539';
+    ctx.fillRect(LX + 14, y + ROW - 1, LW - 28, 1);
+    // avatar
+    ctx.fillStyle = `hsl(${m.hue} 55% 42%)`;
+    ctx.beginPath();
+    ctx.arc(LX + 44, y + 36, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 22px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(m.from[0]!, LX + 44, y + 37);
+    ctx.textAlign = 'left';
+    const unread = m.unread || (!received && i < 3) || (received && i > 0 && i < 4);
+    ctx.fillStyle = unread ? '#f2f6ff' : '#9fb1cc';
+    ctx.font = `${unread ? 700 : 500} 20px ${SANS}`;
+    ctx.fillText(m.from, LX + 84, y + 26);
+    ctx.fillStyle = unread ? '#c4d4f2' : '#7e8fae';
+    ctx.font = `${unread ? 600 : 400} 18px ${SANS}`;
+    ctx.fillText(m.subject.length > 31 ? m.subject.slice(0, 30) + '…' : m.subject, LX + 84, y + 52);
+    ctx.fillStyle = '#58698a';
+    ctx.font = `400 16px ${SANS}`;
+    ctx.fillText(m.preview.slice(0, 40) + '…', LX + 84, y + 74);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = unread ? '#8fb6ff' : '#58698a';
+    ctx.font = `500 16px ${SANS}`;
+    ctx.fillText(m.time, LX + LW - 18, y + 26);
+    ctx.textAlign = 'left';
+    if (m.tag) {
+      ctx.fillStyle = '#19c8a7';
+      rr(ctx, LX + LW - 64, y + 40, 46, 22, 6);
+      ctx.fill();
+      ctx.fillStyle = '#04221c';
+      ctx.font = `800 13px ${SANS}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(m.tag, LX + LW - 41, y + 52);
+      ctx.textAlign = 'left';
+    }
+    if (unread && !m.tag) {
+      ctx.fillStyle = '#4c9dff';
+      ctx.beginPath();
+      ctx.arc(LX + LW - 28, y + 54, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // reading pane
+  const PX = LX + LW;
+  const PW = W - PX;
+  ctx.fillStyle = '#0b1019';
+  ctx.fillRect(PX, 54, PW, H - 54);
+  if (!received) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#26324a';
+    ctx.font = `400 22px ${SANS}`;
+    ctx.fillText('Select a message to read', PX + PW / 2, H / 2 - 10);
+    ctx.fillStyle = '#3a4a68';
+    ctx.font = `400 17px ${MONO}`;
+    ctx.fillText('Waiting for the next delivery' + '.'.repeat(1 + Math.floor(rand() * 3)), PX + PW / 2, H / 2 + 26);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillStyle = '#eaf1ff';
+    ctx.font = `700 28px ${SANS}`;
+    ctx.fillText('Re: Delivered, on time, in one piece', PX + 32, 108);
+    ctx.fillStyle = `hsl(175 55% 42%)`;
+    ctx.beginPath();
+    ctx.arc(PX + 52, 168, 22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 22px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('T', PX + 52, 169);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d4e0f8';
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillText('The Overnight Flight', PX + 88, 160);
+    ctx.fillStyle = '#6b7c9c';
+    ctx.font = `400 17px ${SANS}`;
+    ctx.fillText('to me  ·  just now', PX + 88, 184);
+    // the body: real words, then lines of grey for the rest
+    ctx.fillStyle = '#b8c7e4';
+    ctx.font = `400 21px ${SANS}`;
+    ctx.fillText('Hi,', PX + 32, 244);
+    ctx.fillText('Your email flew through the night and landed', PX + 32, 278);
+    ctx.fillText('in the inbox, right on time.', PX + 32, 306);
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = '#1e2a40';
+      rr(ctx, PX + 32, 340 + i * 26, PW - 64 - (i === 4 ? 160 : rand() * 60), 12, 6);
+      ctx.fill();
+    }
+    // the authentication results
+    ctx.fillStyle = '#0f1828';
+    rr(ctx, PX + 32, 482, PW - 64, 104, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#1e3150';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    for (const [i, [k, v]] of ([['SPF', 'PASS'], ['DKIM', 'PASS'], ['DMARC', 'ALIGNED']] as const).entries()) {
+      const x = PX + 56 + i * ((PW - 96) / 3);
+      ctx.fillStyle = '#6b7c9c';
+      ctx.font = `600 15px ${SANS}`;
+      ctx.fillText(k, x, 514);
+      ctx.fillStyle = '#4ade80';
+      ctx.font = `700 24px ${MONO}`;
+      ctx.fillText('✓ ' + v, x, 550);
+    }
+  }
+
+  // status bar
+  ctx.fillStyle = '#0e1523';
+  ctx.fillRect(0, H - 30, W, 30);
+  ctx.fillStyle = '#58698a';
+  ctx.font = `400 15px ${SANS}`;
+  ctx.fillText(received ? 'Delivered just now · all systems normal' : 'Connected · syncing every 5 s', 18, H - 15);
+  ctx.fillStyle = received ? '#4ade80' : '#f59e0b';
+  ctx.beginPath();
+  ctx.arc(W - 24, H - 15, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (received) {
+    // the toast: bright, top right, over the whole window
+    const tw = 360;
+    const tx = W - tw - 28;
+    const ty = 70;
+    const glow = ctx.createRadialGradient(tx + tw / 2, ty + 32, 20, tx + tw / 2, ty + 32, 260);
+    glow.addColorStop(0, 'rgba(60, 255, 214, 0.28)');
+    glow.addColorStop(1, 'rgba(60, 255, 214, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(tx - 200, ty - 120, tw + 400, 320);
+    ctx.fillStyle = '#07221f';
+    rr(ctx, tx, ty, tw, 68, 14);
+    ctx.fill();
+    ctx.strokeStyle = '#19e0bb';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#19e0bb';
+    rr(ctx, tx + 16, ty + 16, 36, 36, 9);
+    ctx.fill();
+    ctx.fillStyle = '#04221c';
+    ctx.font = `800 22px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('✉', tx + 34, ty + 35);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#c9fff3';
+    ctx.font = `800 24px ${SANS}`;
+    ctx.fillText('EMAIL RECEIVED', tx + 68, ty + 28);
+    ctx.fillStyle = '#6fb9ab';
+    ctx.font = `400 16px ${SANS}`;
+    ctx.fillText('The Overnight Flight · now', tx + 68, ty + 52);
+  }
+}
+
+/** Both states of the arrival laptop's display, 1.48:1 (the Blender laptop's panel). */
+export function arrivalScreens(): { idle: CanvasTexture; received: CanvasTexture } {
+  const W = 1024;
+  const H = 692;
+  const make = (state: 'idle' | 'received'): CanvasTexture => {
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+    drawMail(ctx, W, H, state, mulberry32(state === 'idle' ? 11 : 23));
+    // a faint pixel grid and a vignette make a screen read as a screen up close
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+    const t = new CanvasTexture(canvas);
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  };
+  return { idle: make('idle'), received: make('received') };
+}

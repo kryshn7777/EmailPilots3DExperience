@@ -10,7 +10,6 @@ import {
   Group,
   HemisphereLight,
   InstancedMesh,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshPhysicalMaterial,
@@ -20,7 +19,6 @@ import {
   PointLight,
   SphereGeometry,
   SpotLight,
-  Quaternion,
   Points,
   PointsMaterial,
   TorusGeometry,
@@ -35,7 +33,6 @@ import {
   frameArtTexture,
   globeTexture,
   glowTexture,
-  laptopKeysTexture,
   laptopScreenTexture,
   letterTexture,
 } from '../bake/CanvasTextures';
@@ -44,6 +41,7 @@ import {
   type SurfaceMaps,
 } from '../bake/RoomTextures';
 import { asset } from '../asset';
+import { createLaptop } from './Laptop';
 import { requestCompile } from '../warm';
 
 /**
@@ -321,101 +319,12 @@ export class Desk {
 
     // the laptop mid-send — screen faces +X, into the flight line, so the
     // reverse-angle CH1 camera reads "SENDING EMAIL…" as the plane exits it
-    const shell = new MeshStandardMaterial({ color: '#242a3a', roughness: 0.5, metalness: 0.55 });
-    const deck = new Mesh(new BoxGeometry(1.0, 0.06, 1.5), shell);
-    deck.position.set(-0.45, -0.07, 0);
-    const keysMat = new MeshStandardMaterial({ map: laptopKeysTexture(), roughness: 0.7 });
-    const keys = new Mesh(new PlaneGeometry(0.9, 1.4), keysMat);
-    keys.rotation.x = -Math.PI / 2;
-    keys.rotation.z = -Math.PI / 2;
-    keys.position.set(-0.45, -0.038, 0);
-    const screen = new Group();
-    screen.position.set(-0.93, -0.06, 0); // hinge at the deck's back edge
-    screen.rotation.z = 0.24; // leans back, opening toward the flight line
-    const lid = new Mesh(new BoxGeometry(0.04, 1.05, 1.5), shell);
-    lid.position.y = 0.52;
     const displayMat = new MeshBasicMaterial({ map: laptopScreenTexture() });
-    const display = new Mesh(new PlaneGeometry(1.38, 0.93), displayMat);
-    display.rotation.y = Math.PI / 2;
-    display.position.set(0.021, 0.52, 0);
-    // screen bezel + webcam dot above the glass
-    const bezelMaterial = new MeshStandardMaterial({ color: '#10141f', roughness: 0.4 });
-    const bezel = new Mesh(new BoxGeometry(0.012, 1.0, 1.46), bezelMaterial);
-    bezel.position.set(0.012, 0.52, 0);
-    const camDot = new Mesh(new CylinderGeometry(0.012, 0.012, 0.01, 8), bezelMaterial);
-    camDot.rotation.z = Math.PI / 2;
-    camDot.position.set(0.024, 0.985, 0);
-    // brand dart on the lid's back — glows softly into the room
-    const emblemMaterial = new MeshStandardMaterial({
-      color: '#1a2030', emissive: '#7fb4ff', emissiveIntensity: 1.1,
-    });
-    const emblem = new Mesh(new CylinderGeometry(0.09, 0.09, 0.012, 3), emblemMaterial);
-    emblem.rotation.z = Math.PI / 2;
-    emblem.rotation.y = 0.4;
-    emblem.position.set(-0.024, 0.55, 0);
-    screen.add(lid, display, bezel, camDot, emblem);
-    this.group.add(deck, keys, screen);
-    this.disposables.push(
-      deck.geometry, keys.geometry, keysMat, lid.geometry, display.geometry, displayMat, shell,
-      bezel.geometry, bezelMaterial, camDot.geometry, emblem.geometry, emblemMaterial,
-    );
-
-    // — deck detail: real keycaps, trackpad, hinges, ports, feet, LED —
-    const capGeometry = new BoxGeometry(0.075, 0.014, 0.075);
-    const capMaterial = new MeshStandardMaterial({ color: '#2e3547', roughness: 0.6 });
-    const ROWS = 5;
-    const COLS = 13;
-    const caps = new InstancedMesh(capGeometry, capMaterial, ROWS * COLS + 1);
-    const capM = new Matrix4();
-    const capQ = new Quaternion();
-    const capS = new Vector3(1, 1, 1);
-    const capP = new Vector3();
-    let capIndex = 0;
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        capP.set(-0.82 + r * 0.095, -0.032, -0.57 + c * 0.095);
-        caps.setMatrixAt(capIndex++, capM.compose(capP, capQ, capS));
-      }
-    }
-    // spacebar
-    capP.set(-0.34, -0.032, 0);
-    caps.setMatrixAt(capIndex, capM.compose(capP, capQ, new Vector3(1, 1, 6.4)));
-    this.group.add(caps);
-    this.disposables.push(capGeometry, capMaterial, caps);
-
-    const padMaterial = new MeshStandardMaterial({ color: '#1c2231', roughness: 0.35, metalness: 0.2 });
-    const pad = new Mesh(new BoxGeometry(0.3, 0.008, 0.44), padMaterial);
-    pad.position.set(-0.16, -0.036, 0);
-    this.group.add(pad);
-    this.disposables.push(pad.geometry, padMaterial);
-
-    const hingeMaterial = new MeshStandardMaterial({ color: '#161b28', roughness: 0.45, metalness: 0.6 });
-    for (const hz of [-0.55, 0.55]) {
-      const hinge = new Mesh(new CylinderGeometry(0.035, 0.035, 0.22, 10), hingeMaterial);
-      hinge.rotation.x = Math.PI / 2;
-      hinge.position.set(-0.93, -0.06, hz);
-      this.group.add(hinge);
-      this.disposables.push(hinge.geometry);
-    }
-    this.disposables.push(hingeMaterial);
-
-    // side ports on the near edge
-    for (const pz of [0.35, 0.48, 0.61]) {
-      const port = new Mesh(new BoxGeometry(0.05, 0.02, 0.07), bezelMaterial);
-      port.position.set(-0.45, -0.075, pz + 0.15);
-      port.rotation.y = 0;
-      this.group.add(port);
-      this.disposables.push(port.geometry);
-    }
-
-    // power LED: a live coal on the deck edge
-    const ledMaterial = new MeshStandardMaterial({
-      color: '#0c2a18', emissive: '#5fff9f', emissiveIntensity: 2.2,
-    });
-    const led = new Mesh(new BoxGeometry(0.02, 0.012, 0.05), ledMaterial);
-    led.position.set(0.03, -0.075, 0.72);
-    this.group.add(led);
-    this.disposables.push(led.geometry, ledMaterial);
+    const laptop = createLaptop({ screen: displayMat, tilt: 0.24, tier: this.shadows ? 'high' : 'low' });
+    // the hinge sits at the old deck's back edge; the base's underside rests on the desk top
+    laptop.group.position.set(-0.93, -0.1, 0);
+    this.group.add(laptop.group);
+    this.disposables.push(displayMat, laptop);
 
     // cool screen spill onto the desk and the emerging sheet
     this.screenLight = new PointLight('#9fc4ff', 1.1, 5, 2);
@@ -473,20 +382,6 @@ export class Desk {
     flatProp(asset('/models/binder_notebook.glb'), 0.28, -1.22, -1.0, -0.14);
     flatProp(asset('/models/clipboard.glb'), 0.3, 2.75, 1.02, 1.15);
 
-    // — the study set: real furniture, floor-standing —
-    const floorProp = (url: string, targetH: number, x: number, z: number, rotY: number): void => {
-      loader.load(url, (gltf) => {
-        const s = gltf.scene;
-        const box = new Box3().setFromObject(s);
-        const size = box.getSize(new Vector3());
-        s.scale.setScalar(targetH / Math.max(size.y, 1e-3));
-        box.setFromObject(s);
-        s.position.set(x, -1.28 - box.min.y, z);
-        s.rotation.y = rotY;
-        this.group.add(s);
-        requestCompile(s);
-      });
-    };
     // the desk itself: a walnut pedestal desk with a lacquered top and brass pulls.
     // Its top face lands exactly at y −0.10 where the laptop + props sit.
     const deskTop = new MeshPhysicalMaterial({

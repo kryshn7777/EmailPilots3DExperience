@@ -1,5 +1,7 @@
 import {
   Box3,
+  CanvasTexture,
+  CatmullRomCurve3,
   BoxGeometry,
   BufferAttribute,
   ConeGeometry,
@@ -19,15 +21,15 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
-  BOOK_SPINE_CELLS, arrivalScreenTexture, bookSpineTexture, frameArtTexture, meadowTexture, replyTexture,
-  runwayTexture,
+  BOOK_SPINE_CELLS, bookSpineTexture, frameArtTexture, meadowTexture, replyTexture, runwayTexture,
 } from '../bake/CanvasTextures';
 import {
-  WAINSCOT, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
+  WAINSCOT, arrivalScreens, leatherMaps, plasterMaps, rugMaps, wainscotMaps, woodMaps, type SurfaceMaps,
 } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
 import { AIRLINER, Airliner } from './Airliner';
+import { createLaptop, type Laptop } from './Laptop';
 import type { Quality } from '../quality';
 
 /**
@@ -44,6 +46,9 @@ import type { Quality } from '../quality';
  */
 const OFFICE = { x: 278, z: 17 };
 const DESK_TOP = 0.62;
+/** how bright the waiting inbox is, and when it flips to the delivered state (the dart is inside) */
+const IDLE_GLOW = 0.5;
+const RECEIVED_AT = 0.9885;
 
 export class Landing {
   readonly group = new Group();
@@ -53,13 +58,16 @@ export class Landing {
   private reply: Mesh;
   private replyHome = new Vector3();
   private screenMaterial: MeshStandardMaterial | null = null;
+  private screens: { idle: CanvasTexture; received: CanvasTexture } | null = null;
+  private showing: 'idle' | 'received' = 'idle';
   private screenLight: PointLight | null = null;
   private officeBuilt = false;
   /** the departure: lined up on the runway, rolls and climbs out as the dart comes in behind it */
   private departing = new Airliner();
   /** one parked at the apron */
   private parked = new Airliner();
-  private rolled = 0;
+  /** the landed jet's route: down the runway, then off onto the taxiway toward the apron */
+  private route!: CatmullRomCurve3;
   private disposables: { dispose(): void }[] = [];
 
   constructor(runwayEnd: Vector3, quality: Quality) {
@@ -104,6 +112,10 @@ export class Landing {
     this.disposables.push(taxiway.geometry, apron.geometry, taxi);
 
     // traffic: a jet lined up to depart (animated in update) and one parked at the apron
+    this.route = new CatmullRomCurve3([
+      new Vector3(cx - 40, 0, 0), new Vector3(cx - 12, 0, 0), new Vector3(cx - 6.5, 0, 0.25),
+      new Vector3(cx - 4, 0, 2.8), new Vector3(cx - 4, 0, 6.5), new Vector3(cx - 4, 0, 10.5),
+    ], false, 'centripetal');
     this.group.add(this.departing.group, this.parked.group);
     this.parked.group.position.set(cx - 5.3, 0.006, cz + 21);
     this.parked.body.position.y = AIRLINER.wheelDrop;
@@ -390,28 +402,28 @@ export class Landing {
     cp(brass, 0.1, 0.06, 0.8, 0, 0.04, 0);
     add(chair);
 
-    // the laptop, as it was: deck and lid dark steel, open toward the door
-    const deckMat = new MeshStandardMaterial({ color: '#2a3042', roughness: 0.45, metalness: 0.5 });
-    own(deckMat);
-    box(deckMat, 1.7, 0.05, 1.15, x - 0.5, DESK_TOP + 0.06, z + 1.55); // deck
-    box(deckMat, 1.5, 1.25, 0.06, x - 0.5, DESK_TOP + 0.68, z + 2.24); // lid
-
+    // the laptop: the Blender model, hinge at the back of the desk, display toward the door. Its
+    // display shows a mail client that waits, and only reads EMAIL RECEIVED once the dart is inside
+    // (see `update`): two canvases, swapped by flight time
+    this.screens = arrivalScreens();
+    own(this.screens.idle, this.screens.received);
     const screenMaterial = new MeshStandardMaterial({
-      map: arrivalScreenTexture(),
-      emissiveMap: arrivalScreenTexture(),
+      map: this.screens.idle,
+      emissiveMap: this.screens.idle,
       emissive: '#ffffff',
-      emissiveIntensity: 0.12, // dark until the mail actually lands
+      emissiveIntensity: IDLE_GLOW,
       roughness: 0.25,
     });
     this.screenMaterial = screenMaterial;
-    const screen = new Mesh(new PlaneGeometry(1.34, 1.06), screenMaterial);
-    screen.position.set(x - 0.5, DESK_TOP + 0.68, z + 2.2);
-    screen.rotation.y = Math.PI; // faces −z, into the approach
-    add(screen);
+    own(screenMaterial);
+    const laptop: Laptop = createLaptop({ screen: screenMaterial, tilt: 0.18, tier: 'high' });
+    laptop.group.position.set(x - 0.5, DESK_TOP + 0.045, z + 2.25);
+    laptop.group.rotation.y = Math.PI / 2; // the base runs out toward the door (-z)
+    add(laptop.group);
+    own(laptop);
     this.screenLight = new PointLight('#9be8ff', 0, 6, 2);
     this.screenLight.position.set(x - 0.5, DESK_TOP + 0.7, z + 1.4);
     add(this.screenLight);
-    own(screen.geometry, screenMaterial);
 
     // a brass desk lamp with a green shade: the warm key light of the room
     const enamel = new MeshStandardMaterial({ color: '#27503f', roughness: 0.32, metalness: 0.35, side: DoubleSide });
@@ -524,35 +536,24 @@ export class Landing {
   }
 
   /**
-   * The jet ahead of the dart: it holds on the centreline, rolls with constant acceleration,
-   * rotates and leaves the ground at the far end of the runway while the dart comes down
-   * behind it. A pure function of t, so it scrubs both ways.
+   * The jet that has just landed ahead of the dart: it rolls out down the runway on the
+   * centreline braking hard, then turns off onto the taxiway toward the apron and creeps to a
+   * stop. A pure function of t (position on a fixed curve, eased out), so it scrubs both ways.
    */
   private flyDeparture(t: number, time: number): void {
-    const T0 = 0.885; // brakes off
-    const TL = 0.92; // lift-off
-    const ROLL = 26; // units of runway used
-    const X0 = 250;
-    const u = MathUtils.clamp((t - T0) / (TL - T0), 0, 1);
-    let x = X0 + ROLL * u * u;
-    let height = 0;
-    const after = Math.max(0, t - TL);
-    if (after > 0) {
-      x = X0 + ROLL + ((2 * ROLL) / (TL - T0)) * after * 0.9;
-      height = 62 * Math.pow(MathUtils.clamp(after / 0.07, 0, 1.4), 1.5);
-    }
-    // nose up through the rotation, a steady climb attitude after
-    const pitch = 0.23 * MathUtils.smoothstep(t, 0.911, 0.924);
-    const sin = Math.sin(pitch);
-    const cos = Math.cos(pitch);
-    const g = AIRLINER.mainGearX;
-    const w = AIRLINER.wheelDrop;
-    // pitch about the main gear: keep the tyres' contact point at this group's origin
-    this.departing.body.rotation.z = pitch;
-    this.departing.body.position.set(-(g * cos + w * sin), -(g * sin - w * cos), 0);
-    this.departing.group.position.set(x, 0.012 + height, this.group.position.z);
-    this.rolled = ROLL * u * u;
-    this.departing.rollAndGear(this.rolled, MathUtils.smoothstep(t, 0.93, 0.945));
+    const u = MathUtils.clamp((t - 0.88) / (1.0 - 0.88), 0, 1);
+    // distance along the route, braking: fast at first, then slower and slower
+    const s = 1 - Math.pow(1 - u, 3);
+    const route = this.route;
+    const p = route.getPointAt(s);
+    const tan = route.getTangentAt(Math.min(s, 0.999));
+    this.departing.group.position.set(p.x, 0.012, this.group.position.z + p.z);
+    this.departing.group.rotation.y = Math.atan2(-tan.z, tan.x);
+    // the nose dips a touch under braking, and recovers as it slows
+    const brake = Math.pow(1 - u, 2);
+    this.departing.body.rotation.z = -0.02 * brake;
+    this.departing.body.position.set(0, AIRLINER.wheelDrop, 0);
+    this.departing.rollAndGear(route.getLength() * s, 0);
     this.departing.blink(time);
     this.parked.blink(time + 0.4);
   }
@@ -580,10 +581,20 @@ export class Landing {
     this.flyDeparture(t, time);
 
     // the mail lands: the screen wakes as the dart reaches it, then holds
-    const arrive = MathUtils.smoothstep(t, 0.978, 0.995);
-    const ping = arrive * (1 + Math.sin(time * 3.4) * 0.14);
-    if (this.screenMaterial) this.screenMaterial.emissiveIntensity = 0.12 + ping * 2.3;
-    if (this.screenLight) this.screenLight.intensity = ping * 3.5;
+    // The waiting inbox burns steadily; the screen wakes brighter as the dart reaches it, and the
+    // mail reads EMAIL RECEIVED only once the dart is in (a flash marks the change)
+    const arrive = MathUtils.smoothstep(t, 0.978, RECEIVED_AT);
+    const done = t >= RECEIVED_AT ? 1 : 0;
+    const flash = done ? Math.exp(-(t - RECEIVED_AT) * 260) : 0;
+    const ping = arrive * (1 + Math.sin(time * 3.4) * 0.05);
+    const want = done ? 'received' : 'idle';
+    if (this.screenMaterial && this.screens && want !== this.showing) {
+      this.showing = want;
+      this.screenMaterial.map = this.screenMaterial.emissiveMap = this.screens[want];
+      this.screenMaterial.needsUpdate = true;
+    }
+    if (this.screenMaterial) this.screenMaterial.emissiveIntensity = IDLE_GLOW + ping * 0.6 + done * 0.5 + flash * 2.4;
+    if (this.screenLight) this.screenLight.intensity = ping * 2.0 + done * 1.6 + flash * 4;
 
     // the printed reply slides out of the tray once the mail is in
     const slide = MathUtils.smoothstep(t, 0.985, 0.999);
