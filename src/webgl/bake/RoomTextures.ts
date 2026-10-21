@@ -534,3 +534,103 @@ export function curtainWallMaps(seed: number): { map: CanvasTexture; emissiveMap
   };
   return { map: t(colour), emissiveMap: t(glow) };
 }
+
+/**
+ * City pavement: one tile of concrete slabs (a 4 x 4 grid of 1-unit slabs) with joints, tar
+ * seams, stains, chewing-gum dots and worn corners, plus the normal and roughness maps from the
+ * same drawing. Slightly wet: the lamps and neon streak in it.
+ */
+export function pavingMaps(seed: number): Required<SurfaceMaps> {
+  const S = 512;
+  const [canvas, ctx] = makeCanvas(S);
+  const rand = mulberry32(seed);
+  const slab = S / 4;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      const v = 70 + rand() * 22;
+      ctx.fillStyle = `rgb(${v}, ${v + 1}, ${v + 4})`;
+      ctx.fillRect(c * slab, r * slab, slab, slab);
+      // a soft trowelled gradient across the slab
+      const g = ctx.createLinearGradient(c * slab, r * slab, (c + 1) * slab, (r + 1) * slab);
+      g.addColorStop(0, `rgba(255,255,255,${0.02 + rand() * 0.05})`);
+      g.addColorStop(1, `rgba(0,0,0,${0.03 + rand() * 0.05})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(c * slab, r * slab, slab, slab);
+    }
+  }
+  // aggregate speckle, in two fills
+  for (const fill of ['rgba(255,255,255,0.07)', 'rgba(0,0,0,0.1)']) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    for (let i = 0; i < 4200; i++) ctx.rect(rand() * S, rand() * S, 0.8 + rand() * 1.3, 0.8 + rand() * 1.3);
+    ctx.fill();
+  }
+  // oil and water stains
+  for (let i = 0; i < 14; i++) {
+    const x = rand() * S;
+    const y = rand() * S;
+    const rad = 14 + rand() * 40;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, `rgba(10, 12, 20, ${0.12 + rand() * 0.18})`);
+    g.addColorStop(1, 'rgba(10, 12, 20, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  // expansion joints with a darker, rougher seam, and the odd crack
+  ctx.fillStyle = 'rgba(8, 9, 14, 0.92)';
+  for (let i = 0; i <= 4; i++) {
+    ctx.fillRect(i * slab - 1.5, 0, 3, S);
+    ctx.fillRect(0, i * slab - 1.5, S, 3);
+  }
+  ctx.strokeStyle = 'rgba(8, 9, 14, 0.7)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    let x = rand() * S;
+    let y = rand() * S;
+    ctx.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { x += (rand() - 0.5) * 30; y += (rand() - 0.2) * 30; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  return {
+    map: texture(canvas, true),
+    normalMap: heightToNormal(canvas, 3.4),
+    roughnessMap: roughnessFrom(canvas, 0.46, 1.5),
+  };
+}
+
+/** Large stone pavers for plazas: a running-bond of 2 x 1 units with a border band and a worn centre. */
+export function plazaMaps(seed: number): Required<SurfaceMaps> {
+  const S = 512;
+  const [canvas, ctx] = makeCanvas(S);
+  const rand = mulberry32(seed);
+  ctx.fillStyle = '#8a8478';
+  ctx.fillRect(0, 0, S, S);
+  const rowH = S / 4;
+  for (let r = 0; r < 4; r++) {
+    const shift = (r % 2) * (S / 4);
+    for (let c = -1; c < 3; c++) {
+      const x = c * (S / 2) + shift;
+      const t = 0.82 + rand() * 0.3;
+      ctx.fillStyle = `rgb(${Math.round(150 * t)}, ${Math.round(142 * t)}, ${Math.round(128 * t)})`;
+      ctx.fillRect(x, r * rowH, S / 2, rowH);
+    }
+  }
+  ctx.fillStyle = 'rgba(14, 12, 10, 0.85)';
+  for (let r = 0; r <= 4; r++) ctx.fillRect(0, r * rowH - 1.5, S, 3);
+  for (let r = 0; r < 4; r++) {
+    const shift = (r % 2) * (S / 4);
+    for (let c = -1; c < 3; c++) ctx.fillRect(c * (S / 2) + shift - 1.5, r * rowH, 3, rowH);
+  }
+  for (const fill of ['rgba(255,255,255,0.08)', 'rgba(0,0,0,0.12)']) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    for (let i = 0; i < 3800; i++) ctx.rect(rand() * S, rand() * S, 0.8 + rand() * 1.4, 0.8 + rand() * 1.4);
+    ctx.fill();
+  }
+  return {
+    map: texture(canvas, true),
+    normalMap: heightToNormal(canvas, 3.0),
+    roughnessMap: roughnessFrom(canvas, 0.5, 1.2),
+  };
+}
