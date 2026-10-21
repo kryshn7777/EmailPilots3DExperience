@@ -62,6 +62,24 @@ Manifest v2 describes this: `dir`, `atlas` (main sheet), `sheets{name: {atlas}}`
 per module `sheet`, `lean` (hero -> the module it replaces), `kind`, `footprint`,
 `height`, `tris0`.
 
+## Atmosphere and life
+
+- **Fog** is distance fog only, tuned per chapter: clear streets under the window, the far
+  town dissolving into the horizon. `webgl/fog.ts` patches three's shared fog chunks so a
+  chapter can also give the fog a ground-hugging term (`mist` in the grade: strength, boost,
+  scale height, base surface), which thickens far ground and sea but not rooftops or sky.
+  Fog colours are matched to each chapter's horizon so the town meets the ranges without a band.
+- **Mountains** are a sky layer (`Mountains.ts`, `mountains.frag.glsl`): four procedural
+  ridgelines by azimuth with face relief, snow and aerial perspective, pinned to the far plane.
+- **Beyond the town**: a meadow surface and ~2,600 woodland trees as 20-triangle far-ring
+  stand-ins; ~750 verge trees and windbreaks come from a random stream of their own so no
+  house moves, and never get the close-up tier.
+- **Life**: ~1,700 fence runs (cards, real boards near the flight), cars driving every street
+  with car-following and parked in yards, and per-lot yards (`Yards.ts`) with decals, props,
+  tufts and lights from a seeded stream.
+- **Sea**: six Gerstner waves whose Jacobian drives foam, mipmapped normal/foam maps, Fresnel
+  reflection of the live sky, and the beam raking across the swell.
+
 ## Known limits
 
 - One cloud environment serves all chapters of the homes (graded by intensity, not

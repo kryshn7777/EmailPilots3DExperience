@@ -26,8 +26,8 @@ OUT = os.path.join(ROOT, 'public', 'models', 'lighthouse')
 MATERIALS = {
     'granite': dict(map='stone', color='#8c8881', roughness=0.9),
     'white': dict(map='stone', color='#f0ece2', roughness=0.8),
-    'red': dict(map='stone', color='#b03a2e', roughness=0.78),
-    'rock': dict(map='rock', color='#ffffff', roughness=0.35, vertexColors=True),
+    'red': dict(map='stone', color='#c8412f', roughness=0.78),
+    'rock': dict(map='rock', color='#ffffff', roughness=0.55, vertexColors=True),
     'iron': dict(color='#1c2229', roughness=0.45, metalness=0.75),
     'copper': dict(color='#58a58f', roughness=0.5, metalness=0.55),
     'brass': dict(color='#b68c3e', roughness=0.35, metalness=0.9),

@@ -12,13 +12,13 @@
   },
   "red": {
    "map": "stone",
-   "color": "#b03a2e",
+   "color": "#c8412f",
    "roughness": 0.78
   },
   "rock": {
    "map": "rock",
    "color": "#ffffff",
-   "roughness": 0.35,
+   "roughness": 0.55,
    "vertexColors": true
   },
   "iron": {

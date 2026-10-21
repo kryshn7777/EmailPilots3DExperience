@@ -104,7 +104,7 @@ export const CHAPTERS: Chapter[] = [
     // reading as distance
     grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 40, fogFar: 380, envIntensity: 0.26,
       // sea mist lies on the water; the lighthouse, the sky and the stars stand above it
-      mist: { strength: 0.9, boost: 1.4, scale: 3.5, base: 'sea' } },
+      mist: { strength: 0.7, boost: 1.2, scale: 2.5, base: 'sea' } },
   },
   {
     id: 'no-fly', t0: 0.58, t1: 0.66,

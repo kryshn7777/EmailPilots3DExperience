@@ -120,7 +120,7 @@ def tower(P):
     # drain spouts
     for k in range(6):
         a = 2 * math.pi * k / 6 + 0.2
-        iron.cylinder(polar(a, 1.1, Y_DECK + 0.02), polar(a, 1.42, Y_DECK - 0.08), 0.04, 0.035, 8)
+        iron.cylinder(polar(a, 1.1, Y_DECK + 0.02), polar(a, 1.3, Y_DECK - 0.07), 0.024, 0.02, 8)
 
     # gallery balustrade: posts, top rail, mid rail, finials, a gate gap toward the cottage
     for k in range(40):
@@ -252,24 +252,25 @@ def islet(P):
         top += fractal(x * 3.3, y * 3.3, 1.7, 3) * 0.05
         # a flat shelf under the cottage
         d = math.hypot(x - cottage_c.x, y - cottage_c.y)
-        if d < 1.7:
-            k = min(max((1.7 - d) / 0.9, 0), 1)
-            top = top * (1 - k) + 0.46 * k
+        if d < 2.5:
+            k = min(max((2.5 - d) / 1.3, 0), 1)
+            top = top * (1 - k) + 0.52 * k
         # ledges: the strata step the slope
         step = math.floor(top * 3.0) / 3.0
-        return top * 0.62 + step * 0.38
+        flat = min(max((2.5 - d) / 1.3, 0), 1)
+        return top if flat > 0.99 else top * (0.62 + 0.38 * flat) + step * 0.38 * (1 - flat)
 
     def colour(x, y, z, nz):
         n = fractal(x * 1.7, y * 1.7, 9.0, 4)
-        base = Vector((0.07, 0.078, 0.09)) * (0.8 + 0.5 * (n + 0.5))
+        base = Vector((0.80, 0.82, 0.88)) * (0.7 + 0.5 * (n + 0.5))
         # weed and barnacle belt around the waterline, bleached salt above it
         if 0.0 < z < 0.7:
             k = 1.0 - abs(z - 0.28) / 0.45
-            base = base.lerp(Vector((0.07, 0.11, 0.05)), max(k, 0) * 0.8 * (0.5 + 0.5 * (n + 0.5)))
+            base = base.lerp(Vector((0.30, 0.46, 0.22)), max(k, 0) * 0.8 * (0.5 + 0.5 * (n + 0.5)))
         if z > 0.35 and nz > 0.6:
-            base = base.lerp(Vector((0.3, 0.31, 0.3)), min(max(fractal(x * 2.3, y * 2.3, 4.0, 3) + 0.3, 0), 1) * 0.5)
+            base = base.lerp(Vector((2.2, 2.2, 2.1)), min(max(fractal(x * 2.3, y * 2.3, 4.0, 3) + 0.3, 0), 1) * 0.35)
         if z < 0.0:
-            base = base.lerp(Vector((0.03, 0.04, 0.035)), 0.5)
+            base = base.lerp(Vector((0.25, 0.3, 0.28)), 0.5)
         return (base.x, base.y, base.z, 1.0)
 
     rings, segs = 46, 110
@@ -407,7 +408,7 @@ def cottage(P):
         x = -1.4 + k * 0.5
         if abs(x - 0.0) < 0.35:
             continue
-        gr.box(at(x, -D / 2 - 0.85, 0.2 + 0.1), (0.5, 0.12, 0.28), yaw=yaw)
+        gr.box(at(x, -D / 2 - 0.62, 0.2 + 0.0), (0.5, 0.12, 0.28), yaw=yaw)
 
 
 def props(P):
@@ -427,14 +428,14 @@ def props(P):
             m.cylinder(p + Vector((0, 0, z - 0.012)), p + Vector((0, 0, z + 0.012)), 0.115, 0.115, 10, caps=False,
                        colour=(0.1, 0.1, 0.11, 1))
 
-    barrel(-0.6, -1.5)
-    barrel(-0.38, -1.58, (0.2, 0.22, 0.26, 1))
+    barrel(-0.6, -1.15)
+    barrel(-0.38, -1.2, (0.2, 0.22, 0.26, 1))
     barrel(1.1, 0.95, (0.45, 0.12, 0.08, 1))
-    for i, (x, y, z, s) in enumerate([(1.4, -1.35, 0.0, 0.22), (1.4, -1.35, 0.22, 0.2), (1.68, -1.3, 0.0, 0.2)]):
+    for i, (x, y, z, s) in enumerate([(1.4, -1.1, 0.0, 0.22), (1.4, -1.1, 0.22, 0.2), (1.68, -1.05, 0.0, 0.2)]):
         p = local(x, y)
         m.box(p + Vector((0, 0, z + s / 2)), (s, s, s), yaw=yaw + 0.2 * i, colour=(0.42, 0.3, 0.18, 1))
     # coiled rope
-    p = local(-1.2, -1.45)
+    p = local(-1.15, -1.1)
     for k in range(4):
         m.ring(p.z + 0.03 + 0.03 * k, 0.1, 0.022, 14, 5, colour=(0.62, 0.52, 0.36, 1), centre=(p.x, p.y))
     # lifebuoy hung on the tower: red and white

@@ -92,7 +92,7 @@ def rock():
     crack = 1 - np.abs(fbm(10, 10, 4, 53) * 2 - 1)
     cracks = np.clip((crack - 0.86) * 9, 0, 1)
     height = 0.55 * strata + 0.55 * lumps - cracks * 0.5
-    base = _hex('#33373d')
+    base = _hex('#565c66')
     col = base[None, None, :] * (0.6 + 0.9 * lumps[..., None]) * (0.85 + 0.3 * strata[..., None])
     col = col * (1 - cracks[..., None] * 0.7)
     # pale mineral veins and the odd rust stain

@@ -10,6 +10,9 @@ npm run build:buildings                          # towers+blocks (city); houses+
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
+python blender/make_cars.py                      # the four road vehicles
+python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
+python blender/make_ocean.py                     # tileable wave normal and foam maps
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
@@ -67,6 +70,17 @@ decides per lot which tier it gets from its distance to the camera path: houses 
 hero inside `near`; trees get hero inside `treeNear`, detail out to `treeDetail`
 (`rings.detail`, a subset of `mid`), lean beyond. Phones always get the lean module.
 
+## Other generated assets
+
+| script | writes | notes |
+| --- | --- | --- |
+| `make_cars.py` | `public/models/cars/` | four lofted vehicles (~1.4k tris): `paint` (tinted per instance) and `detail` (vertex-coloured) meshes; the runtime is `StreetCars.ts` |
+| `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
+| `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
+
+The lighthouse is modelled in the units of the old procedural tower (lantern centre at
+z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, tooltip) hold.
+
 ## Layout of the code
 
 ```
@@ -82,6 +96,8 @@ bld/
   homes.py          the twelve houses     trees.py   the four trees (lean)
   hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
   bark.py           periodic procedural bark strips
+  cars.py           lofted road vehicles
+  lighthouse.py, lh_geo.py, lh_tex.py   the lighthouse, its builders and its maps
   archetypes.py     the eight towers and four blocks
   model.py          the low/high pair, UV assignment, bake proxies
   atlas.py          sheet layouts and the rectangle packer
