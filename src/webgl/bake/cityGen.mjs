@@ -204,6 +204,7 @@ export function homeLots(modules) {
   const houses = modules.filter((m) => m.kind === 'house' && !m.lean);
   const trees = modules.filter((m) => m.kind === 'tree' && !m.lean);
   const { w, d, lotW, lots: perRow, lotD, street } = HOME_CELL;
+  const lots_ = perRow;
   const lots = [];
   const pick = (list) => list[Math.floor(rand() * list.length)];
 
@@ -255,6 +256,66 @@ export function homeLots(modules) {
           }
         }
       }
+    }
+  }
+  // — more green, from a stream of its own so no house or tree above ever moves.
+  // Street trees stand on the verge along every street (small, `street: true`, so the
+  // rings never give them the close-up tier), and a windbreak of poplars and pines
+  // backs some rear fences.
+  const extra = mulberry32(CITY_SEED + 97);
+  const planted = (x, z, scale, opts = {}) => {
+    const mod = trees[Math.floor(extra() * trees.length)];
+    const s = scale * (0.85 + extra() * 0.35);
+    lots.push({
+      x, z, w: mod.footprint[0] * s, d: mod.footprint[1] * s, h: mod.height * s,
+      yaw: extra() * Math.PI * 2, tint: TREE_TINTS[Math.floor(extra() * TREE_TINTS.length)],
+      moduleId: mod.id, ...opts,
+    });
+  };
+  const { cross } = HOME_CELL;
+  for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+    for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+      const x0 = ix * w;
+      for (const zv of [iz * d + lotD + 0.35, iz * d + lotD + street - 0.35]) {
+        for (let x = x0 + 1.4; x < x0 + lots_ * lotW - 1.0; x += 5.2 + extra() * 1.2) {
+          if (extra() < 0.78) planted(x + (extra() - 0.5) * 1.0, zv, 0.5, { street: true });
+        }
+      }
+      // corner trees on the cross streets
+      if (extra() < 0.6) planted(x0 + lots_ * lotW + cross * 0.5, iz * d + lotD + 0.35, 0.55, { street: true });
+      // windbreak behind some rear fences
+      for (const rz of [iz * d + 0.55, iz * d + d - 0.55]) {
+        for (let x = x0 + 1; x < x0 + lots_ * lotW; x += 3.5 + extra() * 2) {
+          if (extra() < 0.17) planted(x, rz, 0.8);
+        }
+      }
+    }
+  }
+  // — the country beyond the town: groves and woodland in patches with meadow between,
+  // so the town ends in trees rather than in an empty street grid. Far-ring stand-ins
+  // only (`forest: true`), never real modules.
+  const sm = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+  const hash2 = (ix, iz) => {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const vnoise = (x, z) => {
+    const ix = Math.floor(x), iz = Math.floor(z);
+    const fx = x - ix, fz = z - iz;
+    const a = hash2(ix, iz), b = hash2(ix + 1, iz), c = hash2(ix, iz + 1), e = hash2(ix + 1, iz + 1);
+    const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + e * u) * v;
+  };
+  const townX0 = HOME_CELLS.x[0] * w - 7, townX1 = HOME_CELLS.x[1] * w + 7;
+  const townZ0 = HOME_CELLS.z[0] * d - 7, townZ1 = HOME_CELLS.z[1] * d + 7;
+  for (let gx = -340; gx < 470; gx += 9) {
+    for (let gz = -340; gz < 310; gz += 9) {
+      const x = gx + (extra() - 0.5) * 8, z = gz + (extra() - 0.5) * 8;
+      if (x > townX0 && x < townX1 && z > townZ0 && z < townZ1) continue;
+      const density = sm(0.4, 0.62, vnoise(x / 75 + 3.1, z / 75 - 1.7)) * 0.85 + 0.04;
+      if (extra() > density) continue;
+      planted(x, z, 1.0 + extra() * 0.7, { forest: true });
     }
   }
   return { lots };

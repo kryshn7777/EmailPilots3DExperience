@@ -57,7 +57,7 @@ export class Mountains {
   update(t: number, camera: Vector3, fogColor: Color, deckClose: number): void {
     const opacity =
       MathUtils.smoothstep(t, 0.06, 0.11) *
-      (1 - MathUtils.smoothstep(t, 0.27, 0.33)) *
+      (1 - MathUtils.smoothstep(t, 0.3, 0.335)) *
       (1 - MathUtils.smoothstep(deckClose, 0.0, 0.6));
     this.mesh.visible = opacity > 0.003;
     if (!this.mesh.visible) return;

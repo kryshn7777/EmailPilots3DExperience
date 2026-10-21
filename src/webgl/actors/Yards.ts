@@ -13,6 +13,8 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
+  DoubleSide,
+  PlaneGeometry,
   Points,
   PointsMaterial,
   Quaternion,
@@ -244,6 +246,35 @@ function decalAtlas(): CanvasTexture {
   return texture;
 }
 
+/** A grass tuft on a transparent ground; the instance tint colours it. */
+function tuftTexture(): CanvasTexture {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2d context unavailable');
+  let seed = 991;
+  const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 34; k++) {
+    const x0 = S * 0.2 + rnd() * S * 0.6;
+    const lean = (rnd() - 0.5) * S * 0.5;
+    const h = S * (0.45 + rnd() * 0.5);
+    const g = 150 + rnd() * 90;
+    ctx.fillStyle = `rgb(${g * 0.55},${g},${g * 0.38})`;
+    ctx.beginPath();
+    ctx.moveTo(x0 - 2.4, S);
+    ctx.quadraticCurveTo(x0 + lean * 0.3, S - h * 0.6, x0 + lean, S - h);
+    ctx.quadraticCurveTo(x0 + lean * 0.3 + 2, S - h * 0.55, x0 + 2.4, S);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
 /** UV rectangle of a tile, nudged half a texel in so neighbours never bleed. */
 function tileUV(tile: Tile): [number, number, number, number] {
   const i = TILES.indexOf(tile);
@@ -284,11 +315,22 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
 }
 
 type PropKind = 'shrub' | 'hedge' | 'mailbox' | 'shed' | 'patioSet' | 'umbrellaSet' | 'bbq' | 'swing'
-  | 'trampoline' | 'woodpile' | 'pot' | 'bench';
+  | 'trampoline' | 'woodpile' | 'pot' | 'bench' | 'tuft';
 
 /** Prop geometry, modelled at site scale (a person would be ~0.55 tall), in neutral colours the instance tint shifts. */
 function propGeometry(kind: PropKind): BufferGeometry {
   switch (kind) {
+    case 'tuft': {
+      // three crossed cards: grass at this scale is a texture, not blades
+      const cards: BufferGeometry[] = [];
+      for (let k = 0; k < 3; k++) {
+        const g = new PlaneGeometry(0.3, 0.26).translate(0, 0.13, 0).rotateY((k * Math.PI) / 3);
+        cards.push(g);
+      }
+      const merged = mergeGeometries(cards.map((c) => c.toNonIndexed()), false)!;
+      cards.forEach((c) => c.dispose());
+      return merged;
+    }
     case 'shrub':
       return tinted(new IcosahedronGeometry(0.5, 1).translate(0, 0.42, 0).toNonIndexed(), '#ffffff');
     case 'hedge':
@@ -390,6 +432,8 @@ interface PropPlacement {
 }
 interface Light { x: number; y: number; z: number; kind: 'path' | 'porch' | 'pool' | 'fire'; }
 
+/** tufts carry their own green; the tint only shifts it toward straw or lush */
+const TUFT_TINTS = ['#ffffff', '#f4f8e4', '#e2efc0', '#f6efc4', '#d4e8a8', '#ffffff'];
 const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'];
 const BLOOM_SHRUBS = ['#c04a7a', '#d9a02e', '#b5392e', '#8a5ac0', '#e8e2d4', '#d8703a'];
 const FLOWERS = ['#e8d44a', '#d94a6a', '#f2f2ec', '#9a6ad8', '#f08a3a', '#d83a3a', '#6aa6e8'];
@@ -637,6 +681,48 @@ export class Yards {
         // a hedge standing behind it, now and then
         if (chance(0.35)) prop('hedge', (a + b) / 2, lotD - 0.12, 0, [b - a, between(0.22, 0.34), 0.16], pick(GREENS));
       }
+
+      // — more green: hedges, a thicker planting of shrubs, and grass where the mower misses
+      if (chance(0.24)) {
+        // a clipped hedge along the front, from a side toward the walk
+        const side = chance(0.5) ? -1 : 1;
+        const len = between(1.0, 2.4);
+        prop('hedge', side * (3.3 - len / 2 - 0.1), 0.52, 0, [len, between(0.2, 0.32), 0.17], pick(GREENS));
+      }
+      if (chance(0.3)) {
+        // a hedge down a property line, behind the house
+        const side = chance(0.5) ? -1 : 1;
+        const len = between(1.5, Math.max(lotD - vR - 0.6, 1.6));
+        prop('hedge', side * 3.32, lotD - 0.5 - len / 2, Math.PI / 2, [len, between(0.22, 0.34), 0.17], pick(GREENS));
+      }
+      for (let k = 0; k < 1 + Math.floor(rand() * 4); k++) {
+        const r = between(0.1, 0.22);
+        const p = place(r + 0.05, 'any', [-3.2, 3.2], [0.5, lotD - 0.5]);
+        if (!p) continue;
+        claim(p[0], p[1], r);
+        prop('shrub', p[0], p[1], rand() * 6, [r, r * between(0.6, 1.0), r], chance(0.2) ? pick(BLOOM_SHRUBS) : pick(GREENS));
+      }
+      // grass tufts: along the fence lines, up the walls of the house, and scattered
+      const tufts = 10 + Math.floor(rand() * 26);
+      for (let k = 0; k < tufts; k++) {
+        const roll = rand();
+        let u: number, v: number;
+        if (roll < 0.4) {
+          // hugging a fence line
+          const rear = chance(0.5);
+          u = rear ? between(-3.3, 3.3) : (chance(0.5) ? -1 : 1) * between(3.2, 3.4);
+          v = rear ? lotD - between(0.05, 0.3) : between(vR, lotD);
+        } else if (roll < 0.7) {
+          // against the walls of the house
+          u = (chance(0.5) ? -1 : 1) * (hw / 2 + between(0.04, 0.2));
+          v = between(vF, vR);
+        } else {
+          u = between(-3.2, 3.2);
+          v = between(0.4, lotD - 0.3);
+        }
+        if (!free(u, v, 0.05)) continue;
+        prop('tuft', u, v, rand() * 3.14, between(0.7, 1.5), pick(TUFT_TINTS));
+      }
     }
 
     this.buildDecals(decals);
@@ -697,7 +783,11 @@ export class Yards {
       byKind.set(p.kind, list);
     }
     const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05 });
-    this.disposables.push(material);
+    const tuftMap = tuftTexture();
+    const tuftMaterial = new MeshStandardMaterial({
+      map: tuftMap, alphaTest: 0.5, side: DoubleSide, roughness: 0.9, metalness: 0,
+    });
+    this.disposables.push(material, tuftMaterial, tuftMap);
     const m4 = new Matrix4();
     const q = new Quaternion();
     const Y = new Vector3(0, 1, 0);
@@ -706,7 +796,7 @@ export class Yards {
     const tint = new Color();
     for (const [kind, list] of byKind) {
       const geometry = propGeometry(kind);
-      const inst = new InstancedMesh(geometry, material, list.length);
+      const inst = new InstancedMesh(geometry, kind === 'tuft' ? tuftMaterial : material, list.length);
       list.forEach((p, i) => {
         q.setFromAxisAngle(Y, p.yaw);
         inst.setMatrixAt(i, m4.compose(pos.set(p.x, 0, p.z), q, sc.set(p.sx, p.sy, p.sz)));

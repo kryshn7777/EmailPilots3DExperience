@@ -2,7 +2,6 @@ import {
   AdditiveBlending,
   BufferGeometry,
   CatmullRomCurve3,
-  DoubleSide,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -23,7 +22,7 @@ import {
   HOME_CELL, HOME_CELLS, ROOFTOP_BASE_Y, fenceRuns, homeLots,
 } from '../bake/cityGen.mjs';
 import { PATH_POINTS } from '../rig/pathPoints.mjs';
-import { cloudDeckTexture, glowTexture, softShadowTexture } from '../bake/CanvasTextures';
+import { glowTexture, meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
 import { StreetCars } from './StreetCars';
@@ -56,49 +55,11 @@ export class Rooftops {
   private cars: StreetCars | null = null;
   private yards: Yards | null = null;
   private path: Vector3[] | null = null;
-  private deck: Mesh[] = [];
   private disposables: { dispose(): void }[] = [];
 
   constructor(rand: () => number, quality: Quality) {
     void rand;
     this.buildGround();
-
-    // two offset cloud sheets drifting over it — broken, not a lid, so the
-    // streets stay readable through the gaps
-    const deckMap = cloudDeckTexture();
-    this.disposables.push(deckMap);
-    // repeat counts are high on purpose: the sheets are 900 units across, and
-    // at the old 4.5–7 a single cloud tile smeared over most of the frame as
-    // soon as the flight climbed — giant marbled slabs, not weather
-    for (const [y, repeat, opacity, scale] of [
-      // mist, not weather: both sheets lie BELOW the roofs (houses stand about three
-      // units tall on the ground at ROOFTOP_BASE_Y), so the streets and the lower
-      // walls pool in it while the roofs and the whole sky above stay clear. They
-      // used to hang over the roofs, between the lens and every house.
-      [ROOFTOP_BASE_Y + 0.35, 20, 0.1, 1],
-      [ROOFTOP_BASE_Y + 1.3, 13, 0.05, 0.82],
-    ] as const) {
-      const material = new MeshBasicMaterial({
-        map: deckMap,
-        // tinted to the dusk, not left white: white mist bleached the lawns
-        color: '#8d9db8',
-        transparent: true,
-        opacity,
-        depthWrite: false,
-        side: DoubleSide,
-        fog: true,
-      });
-      material.map = deckMap.clone();
-      material.map.needsUpdate = true;
-      material.map.repeat.set(repeat, repeat);
-      const sheet = new Mesh(new PlaneGeometry(900 * scale, 760 * scale), material);
-      sheet.rotation.x = -Math.PI / 2;
-      sheet.position.set(60, y, 0);
-      sheet.renderOrder = -2; // always behind anything standing in it
-      this.group.add(sheet);
-      this.deck.push(sheet);
-      this.disposables.push(sheet.geometry, material, material.map);
-    }
 
     this.buildLamps();
     this.buildFences(quality);
@@ -113,13 +74,15 @@ export class Rooftops {
    */
   private buildGround(): void {
     const { w, d } = HOME_CELL;
+    const cellsX = HOME_CELLS.x[1] - HOME_CELLS.x[0];
+    const cellsZ = HOME_CELLS.z[1] - HOME_CELLS.z[0];
     const loader = new TextureLoader();
     const load = (file: string): ReturnType<TextureLoader['load']> => {
       const t = loader.load(asset(`/models/homes/${file}`));
       t.colorSpace = SRGBColorSpace;
       t.wrapS = t.wrapT = RepeatWrapping;
       t.anisotropy = 8;
-      t.repeat.set(28, 27);
+      t.repeat.set(cellsX, cellsZ);
       return t;
     };
     const color = load('ground-color.webp');
@@ -133,12 +96,22 @@ export class Rooftops {
       emissiveMap: glow,
       emissiveIntensity: 0.5,
     });
-    const ground = new Mesh(new PlaneGeometry(w * 28, d * 27), material);
+    // exactly the cells the houses occupy, corners on cell boundaries so the texture
+    // repeats line up with the lot grid; the country beyond is a different surface
+    const ground = new Mesh(new PlaneGeometry(w * cellsX, d * cellsZ), material);
     ground.rotation.x = -Math.PI / 2;
-    // x spans -384..512 and z spans -364..338: both edges on cell boundaries
-    ground.position.set(w * 2, ROOFTOP_BASE_Y, -d / 2);
+    ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
-    this.disposables.push(ground.geometry, material, color, glow);
+
+    // the meadow and fields under the woodland, out past the edge of town
+    const meadow = meadowTexture();
+    meadow.repeat.set(30, 30);
+    const meadowMaterial = new MeshStandardMaterial({ map: meadow, roughness: 1, metalness: 0 });
+    const outskirts = new Mesh(new PlaneGeometry(1500, 1500), meadowMaterial);
+    outskirts.rotation.x = -Math.PI / 2;
+    outskirts.position.set(80, ROOFTOP_BASE_Y - 0.06, -26);
+    this.group.add(outskirts);
+    this.disposables.push(ground.geometry, material, color, glow, outskirts.geometry, meadowMaterial, meadow);
   }
 
   /** Warm lamp sprites over every streetlamp in every cell. */
@@ -206,6 +179,7 @@ export class Rooftops {
     });
     const geometry = new PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
+    lots = lots.filter((lot) => !lot.forest);
     const inst = new InstancedMesh(geometry, material, lots.length);
     const m4 = new Matrix4();
     const q = new Quaternion();
@@ -223,13 +197,9 @@ export class Rooftops {
     this.disposables.push(map, material, geometry, inst);
   }
 
-  /** Drifts the two sheets against each other — the deck is never static. */
+  /** Per-frame work: traffic and the firepits' flicker. */
   update(time: number): void {
     if (!this.group.visible) return;
-    for (let i = 0; i < this.deck.length; i++) {
-      const map = (this.deck[i]!.material as MeshBasicMaterial).map;
-      if (map) map.offset.x = time * (i === 0 ? 0.0016 : 0.0029);
-    }
     this.cars?.update(time);
     this.yards?.update(time);
   }

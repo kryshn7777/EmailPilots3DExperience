@@ -40,7 +40,7 @@ const OFFSETS = {
 const RINGS = {
   city: { high: { near: 18, mid: 1e6 }, low: { near: 8, mid: 45 } },
   rooftops: {
-    high: { near: 11, mid: 110, treeNear: 13, treeDetail: 28 },
+    high: { near: 11, mid: 110, treeNear: 13, treeDetail: 28, streetDetail: 20 },
     low: { near: 10, mid: 55 },
   },
 };
@@ -62,11 +62,20 @@ const partition = (lots, offset, radii, kindOf = () => undefined) => {
       if (d < best) best = d;
     }
     const isTree = kindOf(lot) === 'tree';
+    if (lot.forest) {
+      // woodland is scenery: stand-ins in every ring, never a real module
+      out.high.far.push(i);
+      out.low.far.push(i);
+      return;
+    }
     for (const tier of ['high', 'low']) {
       const r = radii[tier];
-      const near = isTree && r.treeNear !== undefined ? r.treeNear : r.near;
+      // verge trees are small and many: detail tier at most, never the 9k-triangle hero
+      let near = isTree && r.treeNear !== undefined ? r.treeNear : r.near;
+      if (lot.street) near = 0;
+      const detailTo = lot.street ? Math.min(r.treeDetail ?? 0, r.streetDetail ?? 22) : r.treeDetail;
       (best < near ? out[tier].near : best < r.mid ? out[tier].mid : out[tier].far).push(i);
-      if (isTree && r.treeDetail !== undefined && best >= near && best < r.treeDetail) {
+      if (isTree && detailTo !== undefined && best >= near && best < detailTo) {
         out[tier].detail.push(i);
       }
     }

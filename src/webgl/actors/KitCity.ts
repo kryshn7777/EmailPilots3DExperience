@@ -25,6 +25,8 @@ import { requestCompile } from '../warm';
 export interface KitLot {
   x: number; z: number; w: number; d: number; h: number;
   yaw: number; tint: string; moduleId: string;
+  /** woodland beyond the town: drawn as a stand-in, never a module */
+  forest?: boolean;
 }
 export interface KitRingSet {
   near: number[]; mid: number[]; far: number[];
@@ -401,7 +403,8 @@ export class KitCity {
         houses, (l) => [l.x, l.h * 0.56 + l.h * 0.22, l.z, l.w * 1.06, l.h * 0.44, l.d * 1.06], false);
     }
     if (trees.length) {
-      make(new IcosahedronGeometry(1, 1), new MeshStandardMaterial({ color: '#4d6c3a', roughness: 1 }),
+      // a woodland of thousands: 20-triangle blobs, the 80-triangle ones only for a few
+      make(new IcosahedronGeometry(1, trees.length > 600 ? 0 : 1), new MeshStandardMaterial({ color: '#4d6c3a', roughness: 1 }),
         trees, (l) => [l.x, l.h * 0.62, l.z, l.w * 0.5, l.h * 0.4, l.d * 0.5], true);
     }
   }

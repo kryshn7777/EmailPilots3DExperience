@@ -723,14 +723,21 @@ export class Engine {
       // the ground and still reads as cloud, without closing the whole frame.
       // 16/115 now (it was 8/78): the same cloud floor, with the sky above and
       // the weather in it readable instead of one flat tan fog
-      this.fog.near = MathUtils.lerp(this.fog.near, 16, deckClose);
-      this.fog.far = MathUtils.lerp(this.fog.far, 115, deckClose);
+      this.fog.near = MathUtils.lerp(this.fog.near, 40, deckClose);
+      this.fog.far = MathUtils.lerp(this.fog.far, 240, deckClose);
+    }
+    // the district leaves the frame by thickening into the storm's weather, not by
+    // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
+    const leave = MathUtils.smoothstep(t, 0.3, 0.335);
+    if (leave > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
+      this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
     }
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
-    this.rooftops.group.visible = t > 0.06 && t < 0.33 && deckClose < 0.99;
+    this.rooftops.group.visible = t > 0.06 && t < 0.335;
     this.rooftops.update(time);
-    this.mountains.update(t, this.camera.position, this.fog.color, deckClose);
+    this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
     this.panel.update(t);

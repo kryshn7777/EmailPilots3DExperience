@@ -36,6 +36,10 @@ export interface CityLot {
   yaw: number;
   tint: string;
   moduleId: string;
+  /** a verge tree: never given the close-up tier */
+  street?: boolean;
+  /** a woodland tree beyond the town: a far-ring stand-in only */
+  forest?: boolean;
 }
 
 export function cityLayout(canyonZ?: number): Building[];

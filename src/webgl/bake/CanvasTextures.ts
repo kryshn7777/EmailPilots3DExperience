@@ -802,3 +802,59 @@ export function softShadowTexture(): CanvasTexture {
   ctx.fillRect(0, 0, 128, 128);
   return new CanvasTexture(canvas);
 }
+
+/**
+ * Meadow and field for the country past the town: greens and straw, mown stripes, a
+ * few plough-brown patches. Tileable (everything is drawn with wrap-around), meant to
+ * be repeated many times and seen from altitude through fog.
+ */
+export function meadowTexture(): CanvasTexture {
+  const S = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2d context unavailable');
+  let seed = 7771;
+  const rnd = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  ctx.fillStyle = '#4f7a36';
+  ctx.fillRect(0, 0, S, S);
+  const blob = (x: number, y: number, r: number, color: string): void => {
+    for (const ox of [-S, 0, S]) {
+      for (const oy of [-S, 0, S]) {
+        const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+      }
+    }
+  };
+  const colours = ['rgba(120,150,60,0.5)', 'rgba(70,105,48,0.55)', 'rgba(150,150,70,0.4)', 'rgba(96,74,48,0.3)', 'rgba(90,130,70,0.5)'];
+  for (let i = 0; i < 70; i++) blob(rnd() * S, rnd() * S, 30 + rnd() * 90, colours[Math.floor(rnd() * colours.length)]!);
+  // fields: mown bands and furrows in a few rectangles
+  for (let i = 0; i < 9; i++) {
+    const x = rnd() * S, y = rnd() * S, w = 70 + rnd() * 140, h = 50 + rnd() * 110;
+    const stripe = 6 + Math.floor(rnd() * 8);
+    const vertical = rnd() < 0.5;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    for (let k = 0; k < 40; k++) {
+      ctx.fillStyle = k % 2 ? 'rgba(255,240,170,0.08)' : 'rgba(30,50,20,0.1)';
+      if (vertical) ctx.fillRect(x + k * stripe, y, stripe, h);
+      else ctx.fillRect(x, y + k * stripe, w, stripe);
+    }
+    ctx.restore();
+  }
+  for (let i = 0; i < 5000; i++) {
+    ctx.fillStyle = `rgba(${40 + rnd() * 60},${70 + rnd() * 70},${30 + rnd() * 30},0.18)`;
+    ctx.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  texture.anisotropy = 8;
+  return texture;
+}

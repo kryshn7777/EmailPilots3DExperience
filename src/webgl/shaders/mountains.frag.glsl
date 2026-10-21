@@ -144,7 +144,7 @@ void main() {
     // aerial perspective, heavier toward the foot of the range
     // the foot dissolves into the fog colour the ground ends in, the upper
     // slopes into the sky's horizon, and the haze glows toward the sun
-    float foot = 1.0 - smoothstep(base, base + 0.014, el);
+    float foot = 1.0 - smoothstep(base, base + 0.03, el);
     vec3 hazeCol = mix(uFog, uHorizon, smoothstep(0.0, 0.07, el));
     float towardSun = pow(max(dot(view, normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + vec3(1e-5, 0.0, 0.0))), 0.0), 3.0);
     hazeCol += sun * 0.10 * towardSun * (1.0 - foot);
