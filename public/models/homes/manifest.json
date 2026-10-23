@@ -13,418 +13,6 @@
   },
   "modules": [
     {
-      "id": "home-cottage",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-cottage.lod0.glb",
-      "footprint": [
-        3.036,
-        2.772
-      ],
-      "height": 1.997,
-      "tris0": 62,
-      "density": 13.88,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-colonial",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-colonial.lod0.glb",
-      "footprint": [
-        4.224,
-        3.679
-      ],
-      "height": 2.879,
-      "tris0": 72,
-      "density": 7.53,
-      "roof": "#3c3f45"
-    },
-    {
-      "id": "home-ranch",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-ranch.lod0.glb",
-      "footprint": [
-        5.841,
-        3.036
-      ],
-      "height": 1.894,
-      "tris0": 38,
-      "density": 10.25,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-farmhouse",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-farmhouse.lod0.glb",
-      "footprint": [
-        3.465,
-        4.95
-      ],
-      "height": 3.16,
-      "tris0": 106,
-      "density": 8.95,
-      "roof": "#3f464b"
-    },
-    {
-      "id": "home-craftsman",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-craftsman.lod0.glb",
-      "footprint": [
-        4.472,
-        3.96
-      ],
-      "height": 2.095,
-      "tris0": 83,
-      "density": 11.29,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-victorian",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-victorian.lod0.glb",
-      "footprint": [
-        4.669,
-        3.349
-      ],
-      "height": 3.642,
-      "tris0": 86,
-      "density": 8.59,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-terrace",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-terrace.lod0.glb",
-      "footprint": [
-        6.6,
-        2.97
-      ],
-      "height": 2.871,
-      "tris0": 10,
-      "density": 8.0,
-      "roof": "#36363a"
-    },
-    {
-      "id": "home-modern",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-modern.lod0.glb",
-      "footprint": [
-        4.62,
-        3.465
-      ],
-      "height": 2.046,
-      "tris0": 20,
-      "density": 8.89,
-      "roof": "#9a9ca0"
-    },
-    {
-      "id": "home-bungalow",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-bungalow.lod0.glb",
-      "footprint": [
-        3.3,
-        3.267
-      ],
-      "height": 2.062,
-      "tris0": 82,
-      "density": 12.71,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-suburban",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-suburban.lod0.glb",
-      "footprint": [
-        5.676,
-        3.465
-      ],
-      "height": 2.739,
-      "tris0": 76,
-      "density": 8.92,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-tudor",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-tudor.lod0.glb",
-      "footprint": [
-        3.762,
-        3.003
-      ],
-      "height": 3.762,
-      "tris0": 24,
-      "density": 9.44,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-duplex",
-      "kind": "house",
-      "sheet": "main",
-      "lod0": "home-duplex.lod0.glb",
-      "footprint": [
-        4.29,
-        3.135
-      ],
-      "height": 2.739,
-      "tris0": 34,
-      "density": 10.31,
-      "roof": "#3c3f45"
-    },
-    {
-      "id": "tree-oak",
-      "kind": "tree",
-      "sheet": "main",
-      "lod0": "tree-oak.lod0.glb",
-      "footprint": [
-        3.069,
-        2.753
-      ],
-      "height": 3.519,
-      "tris0": 92,
-      "density": 7.32
-    },
-    {
-      "id": "tree-maple",
-      "kind": "tree",
-      "sheet": "main",
-      "lod0": "tree-maple.lod0.glb",
-      "footprint": [
-        2.433,
-        2.532
-      ],
-      "height": 3.432,
-      "tris0": 92,
-      "density": 9.07
-    },
-    {
-      "id": "tree-pine",
-      "kind": "tree",
-      "sheet": "main",
-      "lod0": "tree-pine.lod0.glb",
-      "footprint": [
-        1.782,
-        1.782
-      ],
-      "height": 3.498,
-      "tris0": 36,
-      "density": 12.29
-    },
-    {
-      "id": "tree-poplar",
-      "kind": "tree",
-      "sheet": "main",
-      "lod0": "tree-poplar.lod0.glb",
-      "footprint": [
-        1.354,
-        1.358
-      ],
-      "height": 4.584,
-      "tris0": 92,
-      "density": 11.36
-    },
-    {
-      "id": "home-cottage-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-cottage",
-      "lod": "hero",
-      "lod0": "home-cottage-hero.lod0.glb",
-      "footprint": [
-        3.036,
-        2.772
-      ],
-      "height": 1.997,
-      "tris0": 3926,
-      "density": 29.0,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-colonial-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-colonial",
-      "lod": "hero",
-      "lod0": "home-colonial-hero.lod0.glb",
-      "footprint": [
-        4.224,
-        3.679
-      ],
-      "height": 2.879,
-      "tris0": 6318,
-      "density": 20.29,
-      "roof": "#3c3f45"
-    },
-    {
-      "id": "home-ranch-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-ranch",
-      "lod": "hero",
-      "lod0": "home-ranch-hero.lod0.glb",
-      "footprint": [
-        5.841,
-        3.036
-      ],
-      "height": 1.894,
-      "tris0": 4692,
-      "density": 22.5,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-farmhouse-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-farmhouse",
-      "lod": "hero",
-      "lod0": "home-farmhouse-hero.lod0.glb",
-      "footprint": [
-        3.465,
-        4.95
-      ],
-      "height": 3.16,
-      "tris0": 6404,
-      "density": 19.64,
-      "roof": "#3f464b"
-    },
-    {
-      "id": "home-craftsman-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-craftsman",
-      "lod": "hero",
-      "lod0": "home-craftsman-hero.lod0.glb",
-      "footprint": [
-        4.472,
-        3.96
-      ],
-      "height": 2.095,
-      "tris0": 4223,
-      "density": 23.48,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-victorian-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-victorian",
-      "lod": "hero",
-      "lod0": "home-victorian-hero.lod0.glb",
-      "footprint": [
-        4.669,
-        3.349
-      ],
-      "height": 3.642,
-      "tris0": 6932,
-      "density": 18.3,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-terrace-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-terrace",
-      "lod": "hero",
-      "lod0": "home-terrace-hero.lod0.glb",
-      "footprint": [
-        6.6,
-        2.97
-      ],
-      "height": 2.871,
-      "tris0": 8278,
-      "density": 16.6,
-      "roof": "#36363a"
-    },
-    {
-      "id": "home-modern-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-modern",
-      "lod": "hero",
-      "lod0": "home-modern-hero.lod0.glb",
-      "footprint": [
-        4.62,
-        3.465
-      ],
-      "height": 2.046,
-      "tris0": 2230,
-      "density": 19.5,
-      "roof": "#9a9ca0"
-    },
-    {
-      "id": "home-bungalow-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-bungalow",
-      "lod": "hero",
-      "lod0": "home-bungalow-hero.lod0.glb",
-      "footprint": [
-        3.3,
-        3.267
-      ],
-      "height": 2.062,
-      "tris0": 3734,
-      "density": 27.05,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-suburban-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-suburban",
-      "lod": "hero",
-      "lod0": "home-suburban-hero.lod0.glb",
-      "footprint": [
-        5.676,
-        3.465
-      ],
-      "height": 2.739,
-      "tris0": 6262,
-      "density": 19.5,
-      "roof": "#4d5056"
-    },
-    {
-      "id": "home-tudor-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-tudor",
-      "lod": "hero",
-      "lod0": "home-tudor-hero.lod0.glb",
-      "footprint": [
-        3.762,
-        3.003
-      ],
-      "height": 3.762,
-      "tris0": 3242,
-      "density": 20.66,
-      "roof": "#5e473a"
-    },
-    {
-      "id": "home-duplex-hero",
-      "kind": "house",
-      "sheet": "hero-houses",
-      "lean": "home-duplex",
-      "lod": "hero",
-      "lod0": "home-duplex-hero.lod0.glb",
-      "footprint": [
-        4.29,
-        3.135
-      ],
-      "height": 2.739,
-      "tris0": 3692,
-      "density": 21.38,
-      "roof": "#3c3f45"
-    },
-    {
       "id": "tree-oak-hero",
       "kind": "tree",
       "sheet": "hero-trees",
@@ -591,6 +179,418 @@
       ],
       "height": 4.585,
       "tris0": 706
+    },
+    {
+      "id": "home-cottage",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-cottage.lod0.glb",
+      "footprint": [
+        3.036,
+        2.772
+      ],
+      "height": 1.997,
+      "tris0": 62,
+      "density": 27.67,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-colonial",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-colonial.lod0.glb",
+      "footprint": [
+        4.224,
+        3.679
+      ],
+      "height": 2.879,
+      "tris0": 72,
+      "density": 15.15,
+      "roof": "#3c3f45"
+    },
+    {
+      "id": "home-ranch",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-ranch.lod0.glb",
+      "footprint": [
+        5.841,
+        3.036
+      ],
+      "height": 1.894,
+      "tris0": 38,
+      "density": 20.5,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-farmhouse",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-farmhouse.lod0.glb",
+      "footprint": [
+        3.465,
+        4.95
+      ],
+      "height": 3.16,
+      "tris0": 106,
+      "density": 17.9,
+      "roof": "#3f464b"
+    },
+    {
+      "id": "home-craftsman",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-craftsman.lod0.glb",
+      "footprint": [
+        4.472,
+        3.96
+      ],
+      "height": 2.095,
+      "tris0": 83,
+      "density": 22.59,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-victorian",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-victorian.lod0.glb",
+      "footprint": [
+        4.669,
+        3.349
+      ],
+      "height": 3.642,
+      "tris0": 86,
+      "density": 17.24,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-terrace",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-terrace.lod0.glb",
+      "footprint": [
+        6.6,
+        2.97
+      ],
+      "height": 2.871,
+      "tris0": 10,
+      "density": 16.0,
+      "roof": "#36363a"
+    },
+    {
+      "id": "home-modern",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-modern.lod0.glb",
+      "footprint": [
+        4.62,
+        3.465
+      ],
+      "height": 2.046,
+      "tris0": 20,
+      "density": 17.87,
+      "roof": "#9a9ca0"
+    },
+    {
+      "id": "home-bungalow",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-bungalow.lod0.glb",
+      "footprint": [
+        3.3,
+        3.267
+      ],
+      "height": 2.062,
+      "tris0": 82,
+      "density": 25.44,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-suburban",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-suburban.lod0.glb",
+      "footprint": [
+        5.676,
+        3.465
+      ],
+      "height": 2.739,
+      "tris0": 76,
+      "density": 18.0,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-tudor",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-tudor.lod0.glb",
+      "footprint": [
+        3.762,
+        3.003
+      ],
+      "height": 3.762,
+      "tris0": 24,
+      "density": 18.9,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-duplex",
+      "kind": "house",
+      "sheet": "main",
+      "lod0": "home-duplex.lod0.glb",
+      "footprint": [
+        4.29,
+        3.135
+      ],
+      "height": 2.739,
+      "tris0": 34,
+      "density": 20.62,
+      "roof": "#3c3f45"
+    },
+    {
+      "id": "tree-oak",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-oak.lod0.glb",
+      "footprint": [
+        3.069,
+        2.753
+      ],
+      "height": 3.519,
+      "tris0": 92,
+      "density": 14.64
+    },
+    {
+      "id": "tree-maple",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-maple.lod0.glb",
+      "footprint": [
+        2.433,
+        2.532
+      ],
+      "height": 3.432,
+      "tris0": 92,
+      "density": 18.14
+    },
+    {
+      "id": "tree-pine",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-pine.lod0.glb",
+      "footprint": [
+        1.782,
+        1.782
+      ],
+      "height": 3.498,
+      "tris0": 36,
+      "density": 24.72
+    },
+    {
+      "id": "tree-poplar",
+      "kind": "tree",
+      "sheet": "main",
+      "lod0": "tree-poplar.lod0.glb",
+      "footprint": [
+        1.354,
+        1.358
+      ],
+      "height": 4.584,
+      "tris0": 92,
+      "density": 22.73
+    },
+    {
+      "id": "home-cottage-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-cottage",
+      "lod": "hero",
+      "lod0": "home-cottage-hero.lod0.glb",
+      "footprint": [
+        3.036,
+        2.772
+      ],
+      "height": 1.997,
+      "tris0": 4996,
+      "density": 29.0,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-colonial-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-colonial",
+      "lod": "hero",
+      "lod0": "home-colonial-hero.lod0.glb",
+      "footprint": [
+        4.224,
+        3.679
+      ],
+      "height": 2.879,
+      "tris0": 7208,
+      "density": 20.29,
+      "roof": "#3c3f45"
+    },
+    {
+      "id": "home-ranch-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-ranch",
+      "lod": "hero",
+      "lod0": "home-ranch-hero.lod0.glb",
+      "footprint": [
+        5.841,
+        3.036
+      ],
+      "height": 1.894,
+      "tris0": 4692,
+      "density": 22.5,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-farmhouse-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-farmhouse",
+      "lod": "hero",
+      "lod0": "home-farmhouse-hero.lod0.glb",
+      "footprint": [
+        3.465,
+        4.95
+      ],
+      "height": 3.16,
+      "tris0": 6404,
+      "density": 19.64,
+      "roof": "#3f464b"
+    },
+    {
+      "id": "home-craftsman-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-craftsman",
+      "lod": "hero",
+      "lod0": "home-craftsman-hero.lod0.glb",
+      "footprint": [
+        4.472,
+        3.96
+      ],
+      "height": 2.095,
+      "tris0": 4353,
+      "density": 23.48,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-victorian-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-victorian",
+      "lod": "hero",
+      "lod0": "home-victorian-hero.lod0.glb",
+      "footprint": [
+        4.669,
+        3.349
+      ],
+      "height": 3.642,
+      "tris0": 8978,
+      "density": 18.3,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-terrace-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-terrace",
+      "lod": "hero",
+      "lod0": "home-terrace-hero.lod0.glb",
+      "footprint": [
+        6.6,
+        2.97
+      ],
+      "height": 2.871,
+      "tris0": 8278,
+      "density": 16.6,
+      "roof": "#36363a"
+    },
+    {
+      "id": "home-modern-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-modern",
+      "lod": "hero",
+      "lod0": "home-modern-hero.lod0.glb",
+      "footprint": [
+        4.62,
+        3.465
+      ],
+      "height": 2.046,
+      "tris0": 2230,
+      "density": 19.5,
+      "roof": "#9a9ca0"
+    },
+    {
+      "id": "home-bungalow-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-bungalow",
+      "lod": "hero",
+      "lod0": "home-bungalow-hero.lod0.glb",
+      "footprint": [
+        3.3,
+        3.267
+      ],
+      "height": 2.062,
+      "tris0": 4868,
+      "density": 27.05,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-suburban-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-suburban",
+      "lod": "hero",
+      "lod0": "home-suburban-hero.lod0.glb",
+      "footprint": [
+        5.676,
+        3.465
+      ],
+      "height": 2.739,
+      "tris0": 6590,
+      "density": 19.5,
+      "roof": "#4d5056"
+    },
+    {
+      "id": "home-tudor-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-tudor",
+      "lod": "hero",
+      "lod0": "home-tudor-hero.lod0.glb",
+      "footprint": [
+        3.762,
+        3.003
+      ],
+      "height": 3.762,
+      "tris0": 6048,
+      "density": 20.66,
+      "roof": "#5e473a"
+    },
+    {
+      "id": "home-duplex-hero",
+      "kind": "house",
+      "sheet": "hero-houses",
+      "lean": "home-duplex",
+      "lod": "hero",
+      "lod0": "home-duplex-hero.lod0.glb",
+      "footprint": [
+        4.29,
+        3.135
+      ],
+      "height": 2.739,
+      "tris0": 3692,
+      "density": 21.38,
+      "roof": "#3c3f45"
     }
   ],
   "sheets": {

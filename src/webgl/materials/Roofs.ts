@@ -203,33 +203,24 @@ const VERT_PARS = /* glsl */ `
 attribute vec4 aRoof;
 attribute float aRoofK;
 varying vec4 vRoof;
-varying float vRoofK;
-varying vec2 vLot;
+varying vec3 vRoofL;
 varying vec3 vRoofWN;
-varying vec3 vRoofT;
-varying vec3 vRoofB;
 varying vec3 vRoofP;
 `;
 
 const VERT_MAIN = /* glsl */ `
   vRoof = aRoof;
   vRoofP = transformed;
-  vRoofK = aRoofK;
   {
+    // few varyings: this rides on an instanced standard material that already carries many
     #ifdef USE_INSTANCING
-      vLot = instanceMatrix[3].xz;
+      vRoofL = vec3(instanceMatrix[3].xz, aRoofK);
       mat3 iR = mat3(instanceMatrix);
     #else
-      vLot = vec2(0.0);
+      vRoofL = vec3(0.0, 0.0, aRoofK);
       mat3 iR = mat3(1.0);
     #endif
-    float rk = mod(aRoofK + 0.5, 4.0) - 0.5;
-    vec3 rn = normalize(objectNormal);
-    vec3 rt = (rk > 1.5 || abs(rn.y) > 0.995) ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), rn));
-    vec3 rb = cross(rn, rt);
-    vRoofWN = normalize(mat3(modelMatrix) * (iR * rn));
-    vRoofT = normalize((modelViewMatrix * vec4(iR * rt, 0.0)).xyz);
-    vRoofB = normalize((modelViewMatrix * vec4(iR * rb, 0.0)).xyz);
+    vRoofWN = normalize(mat3(modelMatrix) * (iR * normalize(objectNormal)));
   }
 `;
 
@@ -237,11 +228,8 @@ const FRAG_PARS = (fine: boolean): string => /* glsl */ `
 ${fine ? '#define ROOF_FINE' : ''}
 uniform vec3 uRoofBase[16];
 varying vec4 vRoof;
-varying float vRoofK;
-varying vec2 vLot;
+varying vec3 vRoofL;
 varying vec3 vRoofWN;
-varying vec3 vRoofT;
-varying vec3 vRoofB;
 varying vec3 vRoofP;
 ${glslColors()}
 // the town's late sun comes from +x, a little +z: solar faces it, moss hides from it
@@ -273,7 +261,7 @@ vec2 wallGrad = vec2(0.0);
 
 const FRAG_COLOR = /* glsl */ `
 {
-  float rk = floor(vRoofK + 0.5);
+  float rk = floor(vRoofL.z + 0.5);
   float kind = mod(rk, 4.0);
   int baseI = int(rk / 4.0);
   vec3 base = uRoofBase[baseI];
@@ -286,7 +274,7 @@ const FRAG_COLOR = /* glsl */ `
   }
   if (isRoof) {
     roofOn = 1.0;
-    vec2 lot = floor(vLot * 4.0 + 0.5) * 0.25;
+    vec2 lot = floor(vRoofL.xy * 4.0 + 0.5) * 0.25;
     float h0 = rHash(lot + 0.37), h1 = rHash(lot + 3.71), h2 = rHash(lot + 9.13), h3 = rHash(lot + 17.9);
     float h4 = rHash(lot + 23.3), h5 = rHash(lot + 31.7);
     bool flatRoof = kind > 1.5 && kind < 2.5;
@@ -518,7 +506,7 @@ if (roofOn < 0.5) {
     // walls stand on the module's axes, so x + z runs along any of them
     vec2 w = vec2(pm.x + pm.z, pm.y);
     float px = max(fwidth(w.x), fwidth(w.y));
-    vec2 lot = floor(vLot * 4.0 + 0.5) * 0.25;
+    vec2 lot = floor(vRoofL.xy * 4.0 + 0.5) * 0.25;
     float grime = (1.0 - smoothstep(0.0, 0.5, w.y)) * (0.55 + 0.45 * rNoise(vec2(w.x * 2.3, 0.0) + lot));
     diffuseColor.rgb *= 1.0 - 0.24 * grime;
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.96, 0.92, 0.82), grime * 0.5);
@@ -576,7 +564,12 @@ export function applyRoofs(material: MeshStandardMaterial, bases: string[], fine
         if (roofOn > 0.5) {
           normal = normalize(mix(normal, nonPerturbedNormal, roofFlatten));
           #ifdef ROOF_FINE
-            normal = normalize(normal - normalize(vRoofT) * roofGrad.x - normalize(vRoofB) * roofGrad.y);
+            // the roof plane's frame: across the slope and up it (world, then view)
+            vec3 rwn = normalize(vRoofWN);
+            vec3 rtw = abs(rwn.y) > 0.995 ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), rwn));
+            vec3 rtv = normalize((viewMatrix * vec4(rtw, 0.0)).xyz);
+            vec3 rbv = normalize((viewMatrix * vec4(cross(rwn, rtw), 0.0)).xyz);
+            normal = normalize(normal - rtv * roofGrad.x - rbv * roofGrad.y);
           #endif
         }
         #ifdef ROOF_FINE

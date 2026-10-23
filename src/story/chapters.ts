@@ -133,7 +133,9 @@ export const CHAPTERS: Chapter[] = [
     rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2, bank: 0.7 },
     grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#dcc6a4', fogNear: 100, fogFar: 360, envIntensity: 0.6, cloud: 0.55, wet: 0.1, bounce: 0.6,
       mist: { strength: 0.6, boost: 1.4, scale: 6, base: 'ground' },
-      inscatter: 0.15, volume: { density: 0.006, scale: 4, noise: 0.75, aniso: 0.8, sun: 0.9, ambient: 0.25, base: 'ground' } },
+      // no volume up here: from formation height the ground haze only greys the town (the mist and
+      // the fog already give it depth), so it fades out across the takeoff/formation seam
+      inscatter: 0.15 },
   },
   {
     id: 'storm', t0: 0.36, t1: 0.48,

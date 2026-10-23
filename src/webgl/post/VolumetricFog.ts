@@ -188,6 +188,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   vec4 v = acc / wsum;
   float T = mix(1.0, v.a, uIntensity);
   vec3 c = inputColor.rgb * T + v.rgb * uIntensity;
+  if (uDebug > 1.5) { outputColor = vec4(vec3(v.a), 1.0); return; }
   outputColor = uDebug > 0.5 ? vec4(v.rgb * uIntensity, 1.0) : vec4(c, inputColor.a);
 }
 `;
@@ -263,7 +264,7 @@ export class VolumetricFogEffect extends Effect {
     this.blurV = blurV;
   }
 
-  /** inspection aid: 1 shows the scattered light alone */
+  /** inspection aid: 1 shows the scattered light alone, 2 the transmittance */
   set debug(mode: number) {
     this.uniforms.get('uDebug')!.value = mode;
   }

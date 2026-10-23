@@ -94,6 +94,10 @@ function dequantized(source: BufferGeometry): BufferGeometry {
   return geometry;
 }
 
+/** far-ring roof colours: the shingle, clay, slate and metal mix of the town's real roofs, a shade darker */
+const FAR_ROOFS = ['#3a3c40', '#57504a', '#6e4434', '#4a5462', '#7a3a2c', '#a85a3c', '#b8724a', '#485058',
+  '#2f5440', '#8a3a2e', '#3a3e44', '#8e8c84', '#2f4262', '#8a6a48'];
+
 /** Gable roof of unit size, ridge along x: the far-ring stand-in for a house roof. */
 function roofPrism(): BufferGeometry {
   const A = [-0.5, -0.5, -0.5], B = [-0.5, -0.5, 0.5], C = [-0.5, 0.5, 0];
@@ -564,7 +568,7 @@ export class KitCity {
     const make = (
       geometry: BufferGeometry, material: MeshStandardMaterial, list: number[],
       place: (lot: KitLot) => [number, number, number, number, number, number],
-      tinted: boolean,
+      tint: ((lot: KitLot) => string) | null,
     ): void => {
       const inst = new InstancedMesh(geometry, material, list.length);
       list.forEach((lotIndex, k) => {
@@ -572,7 +576,7 @@ export class KitCity {
         const [x, y, z, sx, sy, sz] = place(lot);
         q.setFromAxisAngle(Y, lot.yaw);
         inst.setMatrixAt(k, m4.compose(p.set(x, y, z), q, s.set(sx, sy, sz)));
-        if (tinted) inst.setColorAt(k, this.color.set(lot.tint));
+        if (tint) inst.setColorAt(k, this.color.set(tint(lot)));
       });
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
       this.group.add(inst);
@@ -581,14 +585,20 @@ export class KitCity {
     };
     if (houses.length) {
       make(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: '#d6cdbb', roughness: 0.9 }),
-        houses, (l) => [l.x, l.h * 0.28, l.z, l.w, l.h * 0.56, l.d], true);
-      make(roofPrism(), new MeshStandardMaterial({ color: '#4a4b52', roughness: 0.95, side: DoubleSide }),
-        houses, (l) => [l.x, l.h * 0.56 + l.h * 0.22, l.z, l.w * 1.06, l.h * 0.44, l.d * 1.06], false);
+        houses, (l) => [l.x, l.h * 0.28, l.z, l.w, l.h * 0.56, l.d], (l) => l.tint);
+      // the roofs keep the town's mix of colours out here too (materials/Roofs.ts dresses the real ones)
+      const roofHash = (l: KitLot): number => {
+        const v = Math.sin(l.x * 12.9898 + l.z * 78.233) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      make(roofPrism(), new MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, side: DoubleSide }),
+        houses, (l) => [l.x, l.h * 0.56 + l.h * 0.22, l.z, l.w * 1.06, l.h * 0.44, l.d * 1.06],
+        (l) => FAR_ROOFS[Math.floor(roofHash(l) * FAR_ROOFS.length)]!);
     }
     if (trees.length) {
       // a woodland of thousands: 20-triangle blobs, the 80-triangle ones only for a few
       make(new IcosahedronGeometry(1, trees.length > 600 ? 0 : 1), new MeshStandardMaterial({ color: '#4d6c3a', roughness: 1 }),
-        trees, (l) => [l.x, l.h * 0.62, l.z, l.w * 0.5, l.h * 0.4, l.d * 0.5], true);
+        trees, (l) => [l.x, l.h * 0.62, l.z, l.w * 0.5, l.h * 0.4, l.d * 0.5], (l) => l.tint);
     }
   }
 

@@ -268,7 +268,14 @@ sky (as an environment map) that the homes take their light and reflections from
 **Not** baked: the sun, and shadows from it or from clouds. Its direction changes in
 every chapter and each module is instanced at four rotations, so a sun baked into a
 shared atlas would be wrong on three of the four. The engine keeps a real
-directional light for it. The cloud environment is rendered *without* a sun disc for
+directional light for it.
+
+Nor is a house's **roofing**: every house type is one module instanced across the town, so a baked
+roof would give the whole neighbourhood twelve roofs. Each module's manifest entry carries `roof`, the
+colour of its main roofing material, and `src/webgl/materials/Roofs.ts` reads the baked course pattern
+against it to re-roof every lot in its own style and colour (shingle, clay tile, slate, standing-seam
+metal, cedar shake), with weathering, ridge caps, solar arrays and skylights. The homes' `main` sheet is
+2048 px (about 25 px per metre on a house, like the hero sheet); phones get 1024 px maps. The cloud environment is rendered *without* a sun disc for
 the same reason (the clouds are still lit by a sun, so they glow and have silver
 edges on the sun side).
 
