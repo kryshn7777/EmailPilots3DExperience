@@ -34,6 +34,8 @@ export interface KitLot {
   forest?: boolean;
   /** a small tree on the verge of a street */
   street?: boolean;
+  /** stretch in y alone over the module's own proportions (cityGen TOWER_RISE); absent is 1 */
+  rise?: number;
 }
 export interface KitRingSet {
   near: number[]; mid: number[]; far: number[];
@@ -450,8 +452,10 @@ export class KitCity {
           // ratios agree and the module lands at its own proportions; taking
           // the smallest keeps it undistorted and inside its plot if they
           // ever drift. Measured off the GEOMETRY (a hero off its shell, above).
-          const fit = Math.min(lot.w / geomW, lot.d / geomD, lot.h / geomHeight);
-          s.set(fit, fit, fit);
+          const rise = lot.rise ?? 1;
+          const fit = Math.min(lot.w / geomW, lot.d / geomD, lot.h / rise / geomHeight);
+          // a tower the generator raises (cityGen TOWER_RISE) stretches in y alone, on the same plot
+          s.set(fit, fit * rise, fit);
           p.set(lot.x, -baseY * fit, lot.z);
           inst.setMatrixAt(k, m4.compose(p, q, s));
           inst.setColorAt(k, this.color.set(lot.tint));

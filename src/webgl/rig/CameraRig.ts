@@ -56,8 +56,8 @@ const BEATS: Beat[] = [
   // delivery (rig.shot) with the frame matted and the lantern isolated against the sea
   { id: 'beacon-wide', at: [0.478, 0.488, 0.5, 0.514], fov: 1.1 },
   { id: 'delivery', at: [0.505, 0.518, 0.566, 0.585], bars: 1, bokeh: 2.2, fov: 0.92 },
-  // the dive into the city: the lens widens and the frame tilts into the drop
-  { id: 'dive', at: [0.655, 0.668, 0.69, 0.715], fov: 1.1, dutch: 4, bars: 0.6 },
+  // the dive into the city: the frame tilts into the drop (the lens holds: widening it shrank the towers)
+  { id: 'dive', at: [0.655, 0.668, 0.69, 0.715], dutch: 4, bars: 0.6 },
   // the canyon floor: low over the wet street, leaning the other way
   { id: 'canyon', at: [0.7, 0.715, 0.735, 0.75], dutch: -2 },
   // touchdown: the camera swings out to the runway edge at wheel height and waits there; the dart

@@ -863,7 +863,8 @@ export class Engine {
     this.birds.group.visible = t > 0.055 && t < 0.3;
     // ends with the sea reveal (0.605) — the extra tail let the camera catch
     // radar rings and ship lights hanging in the no-fly sky during the bend
-    this.beacon.group.visible = t > 0.44 && t < 0.605;
+    // from 0.4: the sea comes up under the storm before the lighthouse forms out of the mist
+    this.beacon.group.visible = t > 0.4 && t < 0.605;
     // (the overnight deck gates itself — Clouds.update fades it in on t)
     // city arrives while the camera is still short of the first lots (it
     // crosses x≈170 near t 0.66) so it builds at a distance instead of
@@ -945,7 +946,7 @@ export class Engine {
     const stormness =
       MathUtils.smoothstep(t, 0.34, 0.38) * (1 - MathUtils.smoothstep(t, 0.46, 0.52));
     this.storm.update(time, dt, stormness, Math.random, t);
-    this.biplane.update(t, time);
+    this.biplane.update(t, time, this.storm.flash);
     this.birds.update(time, t);
     this.wingPlanes.update(
       this.rig.planeWorldPos,

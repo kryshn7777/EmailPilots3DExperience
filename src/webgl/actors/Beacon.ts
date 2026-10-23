@@ -129,6 +129,19 @@ export class Beacon {
   private radar: Mesh | null = null;
   /** the lamp's bearing: the wall clock, one turn every BEAM_PERIOD seconds */
   private beamYaw = 0;
+  /**
+   * The arrival, in order: the sea comes up under the storm first, then the lamp glows out of the
+   * murk, then the tower and its islet come out of the mist. `uVeil` 1 is a tower still lost in it
+   * (dissolved away), 0 is clear; `uVeilColor` is the mist it is lost in (the fog colour).
+   */
+  private veil = { uVeil: { value: 1 }, uVeilColor: { value: new Color('#0a1a21') } };
+  /** the live sky's horizon colour (bindSky): the mist the tower stands in is lit like the sky behind it */
+  private skyHorizon: Color | null = null;
+  /** the sweep as a light: the freighter's materials take it (see beamLit) */
+  private beamLight = {
+    uLamp: { value: new Vector3() }, uBeamDir: { value: new Vector3(1, 0, 0) },
+    uBeamColor: { value: new Color('#c8fff4') }, uBeamPower: { value: 0 },
+  };
   private disposables: { dispose(): void }[] = [];
 
   constructor(anchor: Vector3, raycast: Raycast, private tooltip: Tooltip, quality: Quality) {
@@ -394,6 +407,9 @@ export class Beacon {
         m.roughness = Math.max(0.14, spec.roughness * 0.42);
         ReflectionProbe.adopt(m, 0.9);
       }
+      // the lantern's own glass and lens glow through the murk first; the keeper's lit windows
+      // belong to the tower and come out of the mist with it
+      this.veiled(m, name === 'glass_lantern' || name === 'lens');
       materials.set(name, m);
       this.disposables.push(m);
     }
@@ -407,6 +423,72 @@ export class Beacon {
     });
     this.tower.add(gltf.scene);
     this.mirrored(gltf.scene);
+  }
+
+  /**
+   * Lets a lighthouse material stand in the mist: shaded toward the mist's colour by `uVeil`, and,
+   * when nearly lost, dissolved away with a fine per-pixel dither so the tower forms out of the
+   * murk instead of popping in. The lamp's own glass and glow (`lamp`) are veiled half as much: a
+   * light seen through fog before the tower under it.
+   */
+  private veiled(m: MeshStandardMaterial, lamp: boolean): void {
+    const veil = this.veil;
+    m.onBeforeCompile = (shader, renderer) => {
+      // the shared fog hook (webgl/fog.ts) lives on the prototype; an own hook must call it
+      Material.prototype.onBeforeCompile.call(m, shader, renderer);
+      shader.uniforms.uVeil = veil.uVeil;
+      shader.uniforms.uVeilColor = veil.uVeilColor;
+      shader.fragmentShader = 'uniform float uVeil;\nuniform vec3 uVeilColor;\n' + shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+        float veil = uVeil * ${lamp ? '0.5' : '1.0'};
+        if (veil > 0.0) {
+          float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          if (n < smoothstep(0.86, 1.0, veil)) discard;
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, uVeilColor, smoothstep(0.0, 0.85, veil));
+        }`,
+      );
+    };
+    m.customProgramCacheKey = () => (lamp ? 'veil-lamp' : 'veil');
+  }
+
+  /**
+   * The lamp's sweep as a real light on the freighter: a narrow cone from the lantern along the
+   * beam, with a faint halo round it, falling off with distance and shaded by the hull's own
+   * normals. As the beam comes round, the ship stands out of the dark and sinks back into it.
+   */
+  private beamLit(m: MeshStandardMaterial): void {
+    const u = this.beamLight;
+    m.onBeforeCompile = (shader, renderer) => {
+      Material.prototype.onBeforeCompile.call(m, shader, renderer);
+      Object.assign(shader.uniforms, u);
+      shader.vertexShader = 'varying vec3 vBeamWorld;\n' + shader.vertexShader.replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+        vBeamWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+      );
+      shader.fragmentShader = `uniform vec3 uLamp;
+uniform vec3 uBeamDir;
+uniform vec3 uBeamColor;
+uniform float uBeamPower;
+varying vec3 vBeamWorld;
+` + shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `if (uBeamPower > 0.0) {
+          vec3 toP = vBeamWorld - uLamp;
+          float d = length(toP);
+          vec3 Ld = toP / max(d, 1e-3);
+          float c = dot(Ld, uBeamDir);
+          // the cone (about 6 degrees, soft-edged) and the halo the wet air makes round it
+          float cone = smoothstep(0.9848, 0.9972, c) + 0.1 * smoothstep(0.93, 0.99, c);
+          vec3 L = normalize((viewMatrix * vec4(-Ld, 0.0)).xyz);
+          float ndl = max(dot(normal, L), 0.0) * 0.75 + 0.25;
+          outgoingLight += diffuseColor.rgb * uBeamColor * (uBeamPower * cone * ndl * 7.0 / (1.0 + 0.0005 * d * d));
+        }
+        #include <opaque_fragment>`,
+      );
+    };
+    m.customProgramCacheKey = () => 'beam-lit';
   }
 
   /** puts an object (and everything under it) in the picture the sea reflects */
@@ -437,6 +519,7 @@ export class Beacon {
   private buildShip(): void {
     const mat = (extra: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial => {
       const m = new MeshStandardMaterial({ vertexColors: true, ...extra });
+      this.beamLit(m);
       this.disposables.push(m);
       return m;
     };
@@ -542,6 +625,7 @@ export class Beacon {
   }
 
   bindSky(sky: SkyDome): void {
+    this.skyHorizon = sky.horizon;
     const u = this.oceanMaterial.uniforms;
     u.uZenith!.value = sky.zenith;
     u.uHorizon!.value = sky.horizon;
@@ -557,9 +641,19 @@ export class Beacon {
     this.beamYaw = (time / BEAM_PERIOD) * Math.PI * 2;
     this.beamPivot.rotation.y = this.beamYaw;
     this.beamMaterial.uniforms.uTime!.value = time;
-    // the beam stands down entering CH7 — inside-the-cone frames wash teal
+    // the lamp comes on out of the murk once the sea is in (and stands down entering CH7 —
+    // inside-the-cone frames wash teal); the tower forms out of the mist after it
+    const lampOn = MathUtils.smoothstep(t, 0.44, 0.47);
+    this.veil.uVeil.value = 1 - MathUtils.smoothstep(t, 0.448, 0.495);
+    // the mist is the fog lit by the sky behind it, a shade lighter than the fog itself, so a
+    // half-veiled tower is a pale shape in the murk rather than a dark cut-out against the horizon
+    if (fogColor) {
+      const mist = this.veil.uVeilColor.value.copy(fogColor);
+      if (this.skyHorizon) mist.lerp(this.skyHorizon, 0.7);
+      mist.multiplyScalar(1.15);
+    }
     this.beamMaterial.uniforms.uIntensity!.value =
-      0.8 * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
+      0.8 * lampOn * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
     this.oceanMaterial.uniforms.uTime!.value = time;
     (this.oceanMaterial.uniforms.uCamPos!.value as Vector3).copy(camera.position);
     // lightning lights the sea, the lamp's sweep rakes across it
@@ -578,6 +672,9 @@ export class Beacon {
     const tilt = this.beamPivot.rotation.z;
     this.rainLight.beamDir.set(Math.cos(this.beamYaw) * Math.cos(tilt), Math.sin(tilt), -Math.sin(this.beamYaw) * Math.cos(tilt));
     this.rainLight.beamPower = this.beamMaterial.uniforms.uIntensity!.value / 0.8;
+    this.beamLight.uLamp.value.copy(this.towerTop);
+    this.beamLight.uBeamDir.value.copy(this.rainLight.beamDir);
+    this.beamLight.uBeamPower.value = this.rainLight.beamPower;
     this.rainLight.lamp.copy(this.towerTop);
     this.rainSky.set(fogColor ?? '#0a1a21').multiplyScalar(2.2).addScalar(0.02);
     this.rain.update(time, camera, beaconness, this.rainLight, this.rainSky,
@@ -592,10 +689,14 @@ export class Beacon {
     // pinned at 0.605 on purpose: red arrives at 0.59 and has to be gone
     // before the city at 0.65, so pushing the whole window would ripple
     // straight through two downstream chapters.
+    // the water arrives first, under the storm's let-down, so the islet never hangs over nothing
     const reveal =
-      MathUtils.smoothstep(t, 0.44, 0.49) *
+      MathUtils.smoothstep(t, 0.405, 0.445) *
       (1 - MathUtils.smoothstep(t, 0.575 + SEA_FADE_DELAY, 0.6));
     this.oceanMaterial.uniforms.uReveal!.value = reveal;
+    // until it is fully in, the water must not write depth: the screen-space passes would take a
+    // near-invisible plane for solid ground and trace blocky reflections and occlusion on it
+    this.oceanMaterial.depthWrite = reveal > 0.97;
     // a fullscreen transparent plane at alpha≈0 still pays full fragment cost
     this.sea.visible = reveal > 0.003;
     // the freighter's additive nav/porthole points outlive the dark hull —
@@ -615,7 +716,7 @@ export class Beacon {
     len = Math.hypot(dx, dz) || 1;
     const camHit = Math.pow(Math.max((beamX * dx + beamZ * dz) / len, 0), 30) * lampGlow;
     // the delivery: the lamp flares white as the dart goes in, whichever way the beam is turned
-    this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32);
+    this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32) * lampOn;
     this.flare.scale.setScalar(5 * TOWER_SCALE * (1 + delivery * 0.45));
 
     // — the freighter stands in toward the light —
@@ -667,7 +768,8 @@ export class Beacon {
 
     // rings retire with the sea — pulsing at full strength until the group
     // cut, one read as a stray white circle in the no-fly sky mid-bend
-    const ringFade = 1 - MathUtils.smoothstep(t, 0.575, 0.6);
+    // (and arrive with the lamp: the group now opens in the storm, before the lighthouse is out)
+    const ringFade = (1 - MathUtils.smoothstep(t, 0.575, 0.6)) * lampOn;
     // the rings open around the PLANE, not around the island — it flies
     // through their centre instead of across a set of circles beside it
     const ringX = planePos.x - this.group.position.x;
