@@ -35,6 +35,7 @@ import { ZoomBlurEffect } from './post/ZoomBlur';
 import { CinemaEffect } from './post/Cinema';
 import { SSREffect } from './post/SSR';
 import { SSGIEffect } from './post/SSGI';
+import { VolumetricFogEffect } from './post/VolumetricFog';
 import { DepthNormals } from './post/viewSpace';
 import { ReflectionProbe } from './materials/ReflectionProbe';
 import {
@@ -59,7 +60,7 @@ import { Panel } from './actors/Panel';
 import { PaperBurst } from './actors/PaperBurst';
 import { PaperPlane } from './actors/PaperPlane';
 import { KitCity } from './actors/KitCity';
-import { fogHeight } from './fog';
+import { fogHeight, fogSun, fogSunColor } from './fog';
 import { ROOFTOP_BASE_Y } from './bake/cityGen.mjs';
 import { Rooftops } from './actors/Rooftops';
 import { Mountains } from './actors/Mountains';
@@ -153,6 +154,8 @@ export class Engine {
   private godRays: GodRaysEffect | null = null;
   private ssr: SSREffect | null = null;
   private ssgi: SSGIEffect | null = null;
+  /** sunlit haze with the sun's shadows in it (post/VolumetricFog.ts). HIGH only; null under ?novol */
+  private volume: VolumetricFogEffect | null = null;
   private depthNormals: DepthNormals | null = null;
   /** the live reflection of the surroundings that car paint and window glass mirror (HIGH) */
   private envProbe: ReflectionProbe | null = null;
@@ -384,6 +387,12 @@ export class Engine {
         }),
       );
       if (this.ssr) effects.push(this.ssr);
+      // the air itself, lit by the sun and shadowed by what stands in it: laid over the shaded
+      // frame and before the bloom, so the brightest shafts glow. ?novol leaves it out.
+      if (!params.has('novol')) {
+        this.volume = new VolumetricFogEffect(this.camera, this.sun);
+        effects.push(this.volume);
+      }
     }
     // bloom is a mip chain over the whole frame and it exists to sell light —
     // blockout mode keeps only the scroll blur and the vignette
@@ -561,6 +570,9 @@ export class Engine {
     this.clouds.sunColor.copy(this.colorA).multiplyScalar(cloudBrightness);
 
     this.clouds.skyColor.copy(this.sky.zenith).lerp(this.sky.horizon, 0.3);
+    // the land bounces the low sun up into the cloud bases: warm, and only worth anything by day
+    this.clouds.groundColor.copy(this.sky.sunColor).lerp(this.sky.horizon, 0.35)
+      .multiplyScalar(0.14 * MathUtils.smoothstep(sunLevel, 0.5, 1.6));
 
     this.blend(from.fogColor, to.fogColor, u);
     this.fog.color.copy(this.colorA);
@@ -583,7 +595,7 @@ export class Engine {
     this.sky.sunDir.copy(this.sunDirWorld);
     this.sky.sunIntensity = sunLevel;
     this.mountains.setSunIntensity(sunLevel);
-    this.sun.intensity = sunLevel * 2.2;
+    this.sun.intensity = sunLevel * 2.2 * num((g) => g.key ?? 1);
     // sky-and-ground bounce: shadowed surfaces take the colour of the sky from above and of
     // the sunlit ground from below, so shade is never a flat grey and rooftops pick up warmth
     this.hemi.color.copy(this.sky.horizon).lerp(this.sky.zenith, 0.35);
@@ -614,6 +626,39 @@ export class Engine {
       MathUtils.lerp(lo.scale, hi.scale, u),
       MathUtils.lerp(lo.boost, hi.boost, u),
     );
+    // the haze glows toward the sun (every tier: it is a few ALU in the fog every material shares)
+    fogSun.value.set(this.sunDirWorld.x, this.sunDirWorld.y, this.sunDirWorld.z, num((g) => g.inscatter ?? 0));
+    fogSunColor.value.copy(this.sun.color);
+    if (this.volume) {
+      // like the mist: a chapter without a volume borrows its neighbour's shape and fades its density
+      type Vol = { density: number; scale: number; noise: number; aniso: number; sun: number; ambient: number; base: number };
+      const volOf = (g: GradeParams): Vol | null => {
+        const v = g.volume;
+        if (!v) return null;
+        return {
+          density: v.density, scale: v.scale, noise: v.noise ?? 0.5, aniso: v.aniso ?? 0.75,
+          sun: v.sun ?? 1, ambient: v.ambient ?? 0.5,
+          base: v.base === 'sea' ? this.beacon.group.position.y + 0.15 : ROOFTOP_BASE_Y,
+        };
+      };
+      const a = volOf(from);
+      const b = volOf(to);
+      const v0 = a ?? (b ? { ...b, density: 0 } : null);
+      const v1 = b ?? (a ? { ...a, density: 0 } : null);
+      const p = this.volume.params;
+      if (!v0 || !v1) {
+        p.density = 0;
+      } else {
+        const mix = (k: keyof Vol): number => MathUtils.lerp(v0[k], v1[k], u);
+        p.density = mix('density');
+        p.scale = mix('scale');
+        p.noise = mix('noise');
+        p.aniso = mix('aniso');
+        p.sun = mix('sun');
+        p.base = mix('base');
+        p.ambient.copy(this.fog.color).lerp(this.sky.zenith, 0.4).multiplyScalar(mix('ambient'));
+      }
+    }
     if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
     if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
@@ -873,6 +918,8 @@ export class Engine {
     // the district leaves the frame by thickening into the storm's weather, not by
     // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
+    // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
+    if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
     if (leave > 0) {
       this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
       this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
@@ -997,7 +1044,10 @@ export class Engine {
       MathUtils.smoothstep(facing, 0.05, 0.4) *
       (1 - MathUtils.smoothstep(offscreen, 1.2, 2.2));
     this.sunUv.set(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
-    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5);
+    // the lens flare only while the sun's disc itself is in the frame
+    const flare = MathUtils.smoothstep(this.sunLevel, 0.6, 1.2) * MathUtils.smoothstep(facing, 0.3, 0.6) *
+      (1 - MathUtils.smoothstep(offscreen, 0.85, 1.0));
+    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5, this.idlePreset ? 0 : flare);
   }
 
   private loop = (): void => {

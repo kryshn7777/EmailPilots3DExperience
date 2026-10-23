@@ -62,10 +62,14 @@ sun-visibility alpha.
 | Lamp shadows | `actors/Streetlights.ts`, `layers.ts` | Three of each street's lent lamp lights are shadow-casting spots that only draw `LAMP_CASTER_LAYER` (cars, people, street furniture, posts), so the things passing under a lamp throw moving shadows without redrawing the buildings. |
 | Rain at the lighthouse | `actors/Rain.ts`, `actors/Beacon.ts` | Wind-driven streaks a pixel wide around the camera, each lit where it falls: by the lamp, by the sweeping beam (brightest looking up the beam), with a forward glint toward the light; splash rings on the water; the sea's planar reflection mirrors the rain, and the tower, rocks and roofs are rain-soaked (darker, glossy, mirroring the live probe; `wet` 0.95 for the traced reflections). |
 | Foliage | `actors/KitCity.ts` | Trees sway in a wind that travels across the town, cards flutter, and a low sun glows through the leaves. |
+| Volumetric fog | `post/VolumetricFog.ts` | The air over the town lit by the sun with the sun's shadows in it: every pixel of a half-resolution buffer marches 32 steps through an exponential height fog broken into drifting banks, asks the sun's shadow map at each step whether the sun reaches it, and scatters sunlight toward the eye (a forward Henyey-Greenstein lobe) where it does. That draws the shafts between houses and through trees, and the golden depth of a hazy evening. Depth-aware blur and a joint-bilateral upsample keep roof edges clean. Per chapter: `volume` in `story/chapters.ts`. |
+| Sun in the haze (every tier) | `fog.ts` | The fog every material shares takes on the sun's colour when looking toward it (`inscatter` per chapter), a broad glow and a tight core: the directional inscattering of an engine's height fog. |
+| Key light | `story/chapters.ts` (`key`) | Scales the sun's direct light alone, so the town gets a low, raking sun and long shadows while the street lamps are already on. |
+| Lens flare | `post/GodRays.ts` | While the sun's disc is in frame: glare, a starburst, an anamorphic streak and aperture ghosts along the sun-to-centre axis, hidden by whatever stands in front of the sun (depth) or the clouds over it (sky alpha). |
 
-`?nogi` and `?nossr` leave the two screen-space passes out for an A/B; with `?probe`,
-`__engine.ssr.debug = 1` shows the reflections alone (2 the reflectivity, 3 how far each ray went)
-and `__engine.ssgi.debug = 1` the bounce light.
+`?nogi`, `?nossr` and `?novol` leave the screen-space passes out for an A/B; with `?probe`,
+`__engine.ssr.debug = 1` shows the reflections alone (2 the reflectivity, 3 how far each ray went),
+`__engine.ssgi.debug = 1` the bounce light and `__engine.volume.debug = 1` the light scattered by the air.
 
 ## Camera direction and the lens
 

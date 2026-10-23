@@ -96,6 +96,8 @@ export class Clouds {
   readonly sunDir = new Vector3(0.6, 0.25, 0.1);
   /** the sky light the slab's shade is made of: the sky's own colour, so bellies are blue under a gold sun */
   readonly skyColor = new Color('#8fa8cc');
+  /** light bounced up from the sunlit land into the cloud bases (the Engine sets it from the grade) */
+  readonly groundColor = new Color('#000000');
 
   /**
    * The overnight deck's own light. The grade hands the city chapter an amber
@@ -239,6 +241,7 @@ export class Clouds {
           uSunDir: { value: this.sunDir },
           uSunColor: { value: this.sunColor },
           uSkyColor: { value: this.skyColor },
+          uGroundColor: { value: this.groundColor },
           uFogColor: { value: this.fogColor },
           uFogNear: { value: 30 },
           uFogFar: { value: 220 },
