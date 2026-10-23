@@ -101,7 +101,9 @@ export const CHAPTERS: Chapter[] = [
   },
   {
     id: 'takeoff', t0: 0.17, t1: 0.26,
-    rig: { fov: 58, camLag: 0.020, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 0.5, offsetSide: 0.45, offsetBack: 0.6, bank: 0.5, lookUp: 0.55 },
+    // low and closer than the other chapters: the street is a long zone, and at the old 0.020
+    // lag the camera rode eleven units back with the dart a speck between the lamps
+    rig: { fov: 58, camLag: 0.014, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 0.75, offsetSide: 0.45, offsetBack: 0.6, bank: 0.5, lookUp: 0.35 },
     grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#7f93b4', fogNear: 80, fogFar: 340, envIntensity: 0.45, cloud: 0.5, wet: 0.4, bounce: 0.9,
       mist: { strength: 1, boost: 2.1, scale: 7, base: 'ground' } },
   },
