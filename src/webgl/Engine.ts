@@ -928,10 +928,12 @@ export class Engine {
     this.beacon.renderReflection(this.renderer, this.scene, this.camera);
     this.depthNormals?.invalidate();
     this.composer.render();
-    // The probe works where there are cars and close-up glass to mirror it: the town and the city.
+    // The probe works where there is something wet or glossy to mirror it: the town, the city, and the
+    // rain-soaked lighthouse.
     // It draws after the frame, when every light that just came into view has its shadow map (the
     // probe's own renders do not redraw them).
-    const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0 : null;
+    const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
+      : t > 0.46 && t < 0.6 ? this.beacon.group.position.y + 1.5 : null;
     this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
 
     if (this.warming) return; // silent warm-up frames: no chrome events

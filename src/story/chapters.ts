@@ -114,7 +114,7 @@ export const CHAPTERS: Chapter[] = [
     // sea and the freighter standing off it are staged at 80–100 units, and
     // at the old far=115 the ship dissolved into fog colour instead of
     // reading as distance
-    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 40, fogFar: 380, envIntensity: 0.26, cloud: 0.4, wet: 0.3, bounce: 0.7,
+    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 40, fogFar: 380, envIntensity: 0.26, cloud: 0.4, wet: 0.95, bounce: 0.7,
       // sea mist lies on the water; the lighthouse, the sky and the stars stand above it
       mist: { strength: 0.7, boost: 1.2, scale: 2.5, base: 'sea' } },
   },
