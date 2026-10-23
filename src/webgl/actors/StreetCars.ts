@@ -23,11 +23,12 @@ import {
   Quaternion,
   Vector3,
 } from 'three';
-import type { Material, WebGLProgramParametersWithUniforms } from 'three';
+import type { Material, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HOME_CELL, HOME_CELLS } from '../bake/cityGen.mjs';
 import { glowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { asset } from '../asset';
+import { LAMP_CASTER_LAYER } from '../layers';
 import { mulberry32 } from '../util';
 import type { Quality } from '../quality';
 
@@ -39,6 +40,8 @@ interface CarType {
   hi?: string;
   length: number;
   width: number;
+  /** a supercar: painted from EXOTIC_PAINTS with a glossier clearcoat, dealt out at about one car in seven */
+  exotic?: boolean;
   lamp: { head: number[]; tail: number[] };
   wheelRadius?: number;
   /** where the four wheels sit, glTF frame: front pair then rear pair, left (-z) first */
@@ -100,9 +103,21 @@ const PAINTS = [
   '#24467a', '#2f5d92', '#3c5b46', '#d3b13f', '#6c4b33', '#e9e4d6',
 ];
 const TAXI_PAINT = '#e6b422';
-/** how common each vehicle type is on the street; the rest default to 1 */
-const TRAFFIC: Record<string, number> = { sedan: 3, hatch: 2.5, suv: 3, pickup: 1.6, van: 0.8, taxi: 0.35 };
-const PARKED: Record<string, number> = { sedan: 3, hatch: 2.5, suv: 3, pickup: 2, van: 0.8, taxi: 0 };
+/** the exotics' own palette: rosso, arancio, lime, giallo, deep blue, white, black, purple, gunmetal, racing green */
+const EXOTIC_PAINTS = [
+  '#b3121c', '#e8611a', '#86c21d', '#f2c419', '#1b3f9a', '#eef0f0', '#0e0f12', '#5b2a86', '#4a4f57', '#13452f',
+];
+/**
+ * How common each vehicle type is on the street; the rest default to 1. The exotics'
+ * share of the total (here about one car in seven) is dealt out evenly rather than drawn
+ * (see `dealer`), so every street has its few.
+ */
+const TRAFFIC: Record<string, number> = {
+  sedan: 3, hatch: 2.5, suv: 3, pickup: 1.6, van: 0.8, taxi: 0.35, supercar: 0.75, gt: 0.6, hyper: 0.45,
+};
+const PARKED: Record<string, number> = {
+  sedan: 3, hatch: 2.5, suv: 3, pickup: 2, van: 0.8, taxi: 0, supercar: 0.8, gt: 0.6, hyper: 0.4,
+};
 
 /** the lane runs from `X0` to `X1`, a fixed stretch of the street well past anything in frame */
 const X0 = -12;
@@ -116,12 +131,14 @@ const HI_OUT = 33;
 /**
  * Material class of each `detail` vertex, packed in the alpha of its colour by
  * blender/bld/cars.py: 0 plastic, 1 chrome, 2 rubber, 3 alloy, 4 fabric, 5 head lamp,
- * 6 tail lamp, 7 plate, 8 brake disc, 9 indicator, 10 gloss black, 11 liner.
+ * 6 tail lamp, 7 plate, 8 brake disc, 9 indicator, 10 gloss black, 11 liner, 12 carbon
+ * fibre (clear-coated, a little sheen), 13 LED light guide (running lights, burns
+ * brighter than a lamp lens), 14 enamel (painted calipers, badges, centre-lock nuts).
  */
 const CLASS_TABLE = `
-const float KR[16] = float[16](0.55, 0.10, 0.90, 0.30, 0.95, 0.12, 0.20, 0.50, 0.40, 0.20, 0.08, 0.90, 0.55, 0.55, 0.55, 0.55);
-const float KM[16] = float[16](0.0, 1.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-const float KE[16] = float[16](0.0, 0.0, 0.0, 0.0, 0.0, 1.6, 0.35, 0.0, 0.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+const float KR[16] = float[16](0.55, 0.10, 0.90, 0.30, 0.95, 0.12, 0.20, 0.50, 0.40, 0.20, 0.08, 0.90, 0.22, 0.15, 0.25, 0.55);
+const float KM[16] = float[16](0.0, 1.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0);
+const float KE[16] = float[16](0.0, 0.0, 0.0, 0.0, 0.0, 1.6, 0.35, 0.0, 0.0, 1.2, 0.0, 0.0, 0.0, 2.6, 0.0, 0.0);
 `;
 
 /** A standard material whose roughness, metalness and emission come from each vertex's material class. */
@@ -152,17 +169,22 @@ function classMaterial(): MeshStandardMaterial {
  * Traffic and parked cars in the neighbourhood. Moving cars follow the street
  * lanes in a ring, slowing for whoever is ahead (so they never drive through each
  * other); parked cars sit in the front yards of the houses the flight passes. The
- * bodies are instanced (six vehicle types, paint tinted per instance).
+ * bodies are instanced (nine vehicle types, paint tinted per instance): six family
+ * cars and three exotics (a mid-engine supercar, a front-engine GT, a winged
+ * hypercar), which take a palette and a glossier clearcoat of their own.
  *
- * Each type exists twice. The lean model (~1.4k triangles) is what everything
+ * Each type exists twice. The lean model (1.4 to 1.6k triangles) is what everything
  * more than HI_IN units from the camera is drawn with, and all there is on the LOW
  * tier. The close-up model (HIGH only: a glasshouse with its interior, lamps, plates,
- * mirrors, ~5 to 8k triangles) has its four wheels as one more instanced mesh, which
+ * mirrors, multi-spoke rims over ventilated discs, 10 to 13k triangles counting its
+ * wheels) has its four wheels as one more instanced mesh, which
  * is what lets them turn with the distance rolled. Every frame the cars are
  * partitioned between the two sets by distance to the camera, so the cost follows
  * the handful of cars the camera is actually near. Headlights and tail lights are
  * glow sprites (tail lights flare while a car brakes), and the headlights throw a
- * pool onto the road.
+ * pool onto the road. On HIGH the bodies and wheels also cast into and take the sun's
+ * shadow map (the soft contact quads stay underneath), and `setEnvMap` lets a
+ * reflection probe feed the paint, glass and close-up detail.
  */
 export class StreetCars {
   readonly group = new Group();
@@ -183,6 +205,10 @@ export class StreetCars {
   private ready = false;
   /** uniform scale of the whole fleet (1 in the neighbourhood) */
   private k = 1;
+  /** what reflects the surroundings (both paints, the glass, the close-up detail); filled once loaded */
+  private reflective: MeshStandardMaterial[] = [];
+  /** an environment map handed over before the models had loaded (see `setEnvMap`) */
+  private envMap: Texture | null | undefined;
 
   // the camera, seen by the last frame that drew these cars (see `init`)
   private eye = new Vector3();
@@ -221,12 +247,18 @@ export class StreetCars {
     this.types = manifest.types;
     const rand = mulberry32(88211);
     const loader = new GLTFLoader();
-    // the paint is one physical material (clearcoat) for both tiers on HIGH, so the swap does not change its look
+    // the paint is one physical material (clearcoat) for both tiers on HIGH, so the swap does not change its look;
+    // the exotics' is glossier (a deeper, sharper clearcoat). Each type is one draw either way.
     const paintMat = high
       ? new MeshPhysicalMaterial({
         color: '#ffffff', metalness: 0.5, roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.08,
       })
       : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.55, roughness: 0.33 });
+    const exoticPaintMat = high
+      ? new MeshPhysicalMaterial({
+        color: '#ffffff', metalness: 0.45, roughness: 0.24, clearcoat: 1, clearcoatRoughness: 0.03,
+      })
+      : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.5, roughness: 0.24 });
     const detailMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 });
     const hiDetailMat = classMaterial();
     // tinted glass: what it lets through is dimmed by its opacity, what it reflects is added on top
@@ -234,23 +266,45 @@ export class StreetCars {
       color: '#06090d', roughness: 0.04, metalness: 0, ior: 1.9, envMapIntensity: 1.6, transparent: true,
       opacity: 0.5, depthWrite: false, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor,
     });
-    this.disposables.push(paintMat, detailMat, hiDetailMat, glassMat);
+    this.disposables.push(paintMat, exoticPaintMat, detailMat, hiDetailMat, glassMat);
+    this.reflective = [paintMat, exoticPaintMat, glassMat, hiDetailMat];
+    if (this.envMap !== undefined) this.setEnvMap(this.envMap);
 
     // lanes: both directions of every street in the district
     const { d, lotD, street } = HOME_CELL;
     const perLane = high ? 6 : 3;
-    const pick = (weights: Record<string, number>): number => {
+    // Vehicle types by weight, except that the exotics' share of the weights is dealt out
+    // evenly (a running tally hands one out each time it passes a whole car) instead of
+    // drawn: a plain draw leaves whole streets without one and bunches them on others.
+    const dealer = (weights: Record<string, number>): (() => number) => {
       const w = this.types.map((t) => weights[t.id] ?? 1);
-      let r = rand() * w.reduce((a, b) => a + b, 0);
-      for (let i = 0; i < w.length; i++) {
-        r -= w[i]!;
-        if (r < 0) return i;
-      }
-      return w.length - 1;
+      const ex = this.types.map((t) => !!t.exotic);
+      const total = (exotic: boolean): number => w.reduce((a, v, i) => a + (ex[i] === exotic ? v : 0), 0);
+      const share = total(true) / Math.max(total(true) + total(false), 1e-6);
+      let tally = rand();
+      return () => {
+        tally += share;
+        const exotic = tally >= 1;
+        if (exotic) tally -= 1;
+        let r = rand() * total(exotic);
+        let last = 0;
+        for (let i = 0; i < w.length; i++) {
+          if (ex[i] !== exotic || !w[i]) continue;
+          last = i;
+          r -= w[i]!;
+          if (r < 0) return i;
+        }
+        return last;
+      };
     };
-    const paintFor = (type: number): Color => new Color(
-      this.types[type]!.id === 'taxi' ? TAXI_PAINT : PAINTS[Math.floor(rand() * PAINTS.length)]!,
-    );
+    const paintFor = (type: number): Color => {
+      const t = this.types[type]!;
+      if (t.id === 'taxi') return new Color(TAXI_PAINT);
+      const palette = t.exotic ? EXOTIC_PAINTS : PAINTS;
+      return new Color(palette[Math.floor(rand() * palette.length)]!);
+    };
+    const traffic = dealer(TRAFFIC);
+    const parking = dealer(PARKED);
     const car = (type: number, x: number, z: number, yaw: number): Car => ({
       idx: this.cars.length, type, tint: paintFor(type), x, z, yaw, scale: 1, odo: rand() * 40, brake: 0, near: false,
     });
@@ -260,7 +314,7 @@ export class StreetCars {
       const length = x1 - x0;
       for (let k = 0; k < count; k++) {
         const s = ((k + rand() * 0.6) / count) * length;
-        const type = pick(TRAFFIC);
+        const type = traffic();
         const driver: Driver = {
           ...car(type, 0, lane.z, dir > 0 ? 0 : Math.PI), s,
           v: (2.1 + rand() * 0.8) * k0, vMax: (2.1 + rand() * 0.8) * k0,
@@ -279,7 +333,7 @@ export class StreetCars {
       }
     }
     this.moving = this.cars.length;
-    for (const spot of this.parked) this.cars.push(car(pick(PARKED), spot.x, spot.z, spot.yaw));
+    for (const spot of this.parked) this.cars.push(car(parking(), spot.x, spot.z, spot.yaw));
     this.counts = this.types.map(() => 0);
     for (const c of this.cars) this.counts[c.type]!++;
 
@@ -299,23 +353,29 @@ export class StreetCars {
       hi: high && t.hi ? await geometries(t.hi) : undefined,
     })));
 
-    const instance = (geo: BufferGeometry, mat: Material, cap: number): InstancedMesh => {
+    // On HIGH the cars cast into the sun's shadow map and take its shadows (their own and the
+    // houses' and trees'), on top of the soft contact quads, and cast into the streetlights'
+    // spots too (LAMP_CASTER_LAYER); the glass neither casts (light falls through the windows
+    // into the cabin) nor receives.
+    const instance = (geo: BufferGeometry, mat: Material, cap: number, shadows = true): InstancedMesh => {
       const inst = new InstancedMesh(geo, mat, Math.max(cap, 1));
       inst.instanceMatrix.setUsage(DynamicDrawUsage);
       inst.frustumCulled = false;
+      inst.castShadow = inst.receiveShadow = high && shadows;
+      if (high && shadows) inst.layers.enable(LAMP_CASTER_LAYER);
       inst.count = 0;
       inst.visible = false;
       this.group.add(inst);
       this.disposables.push(inst, geo);
       return inst;
     };
-    const tier = (parts: Record<string, Mesh>, detail: Material, cap: number, close: boolean): Tier => {
-      const paint = instance(parts.paint!.geometry, paintMat, cap);
+    const tier = (parts: Record<string, Mesh>, detail: Material, cap: number, close: boolean, exotic: boolean): Tier => {
+      const paint = instance(parts.paint!.geometry, exotic ? exoticPaintMat : paintMat, cap);
       const det = instance(parts.detail!.geometry, detail, cap);
       det.instanceMatrix = paint.instanceMatrix;       // one pose, drawn by every mesh of the set
       const t: Tier = { paint, detail: det, count: 0 };
       if (close) {
-        const glass = instance(parts.glass!.geometry, glassMat, cap);
+        const glass = instance(parts.glass!.geometry, glassMat, cap, false);
         glass.instanceMatrix = paint.instanceMatrix;
         glass.renderOrder = 1;
         const wheels = instance(parts.wheel!.geometry, hiDetailMat, cap * 4);
@@ -328,8 +388,9 @@ export class StreetCars {
     };
     loaded.forEach((l, ti) => {
       const cap = this.counts[ti]!;
-      this.lo[ti] = tier(l.lo, detailMat, cap, false);
-      if (l.hi) this.hi[ti] = tier(l.hi, hiDetailMat, cap, true);
+      const exotic = !!this.types[ti]!.exotic;
+      this.lo[ti] = tier(l.lo, detailMat, cap, false, exotic);
+      if (l.hi) this.hi[ti] = tier(l.hi, hiDetailMat, cap, true, exotic);
     });
 
     // contact shadows and headlight pools under moving cars; lights above them
@@ -551,6 +612,31 @@ export class StreetCars {
       if (right) this.qw.multiply(this.qFlip);
       this.qw.multiply(this.qSpin.setFromAxisAngle(this.Z, right ? spin : -spin));
       tier.wheels!.setMatrixAt(k * 4 + w, this.m4.compose(this.p, this.qw, this.sc.set(car.scale, car.scale, car.scale)));
+    }
+  }
+
+  /**
+   * The materials that reflect the surroundings: the family and exotic paints, the glass and
+   * the close-up detail (chrome, alloy, lamp lenses). Empty until the models have loaded.
+   */
+  materials(): MeshStandardMaterial[] {
+    return this.reflective;
+  }
+
+  /**
+   * Hands every reflective material a new environment map (e.g. a live probe of the street);
+   * one handed over before the models load is applied when they do. The programs are only
+   * rebuilt when the map comes or goes or changes kind, so a probe may call this every frame.
+   */
+  setEnvMap(map: Texture | null): void {
+    this.envMap = map;
+    for (const m of this.reflective) {
+      const prev = m.envMap;
+      if (prev === map) continue;
+      m.envMap = map;
+      if (!prev || !map || prev.mapping !== map.mapping || prev.isRenderTargetTexture !== map.isRenderTargetTexture) {
+        m.needsUpdate = true;
+      }
     }
   }
 

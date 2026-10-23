@@ -2,14 +2,18 @@
 
     python blender/make_cars.py
 
-Writes two tiers per vehicle type into public/models/cars/ and a manifest.json:
+Writes two tiers per vehicle type (six family cars, three exotics) into
+public/models/cars/ and a manifest.json:
 
     <type>.glb      the lean model for distance and the LOW tier: two meshes, `paint`
-                    (tinted per instance) and `detail` (vertex-coloured), ~1.4k triangles
+                    (tinted per instance) and `detail` (vertex-coloured), 1.4 to 1.6k triangles
     <type>-hi.glb   the close-up model: `paint`, `detail`, `glass` and a single `wheel` at
                     the origin that the site instances four times and spins (its axle is
                     the glTF z axis, outer face toward -z); the manifest lists where the
-                    four wheels sit (`wheelOffsets`), 5 to 8k triangles with them
+                    four wheels sit (`wheelOffsets`), 10 to 13k triangles with them
+
+`exotic` in the manifest marks the supercars, which the site paints from a palette of
+their own and deals out at about one car in seven.
 
 The vehicles are modelled in metres and exported at SCALE, the same site scale as the houses.
 """
