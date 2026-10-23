@@ -60,9 +60,9 @@ const BEATS: Beat[] = [
   { id: 'dive', at: [0.655, 0.668, 0.69, 0.715], fov: 1.1, dutch: 4, bars: 0.6 },
   // the canyon floor: low over the wet street, leaning the other way
   { id: 'canyon', at: [0.7, 0.715, 0.735, 0.75], dutch: -2 },
-  // touchdown: the camera stops on the approach and drops to runway height, and the dart lands
-  // away from it, the lens tightening to hold it; then catches up through the office door
-  { id: 'touchdown', at: [0.922, 0.936, 0.956, 0.972], hold: 0.934, nudge: [0, -1.1, -1.4], fov: 0.8, bars: 1, bokeh: 2.4 },
+  // touchdown: the camera swings out to the runway edge at wheel height and waits there; the dart
+  // flares past it in profile and lands, then the lens catches up through the office door
+  { id: 'touchdown', at: [0.92, 0.936, 0.956, 0.972], holdAt: [263.5, 0.95, -4.0], fov: 0.9, bars: 1, bokeh: 2.4 },
   // the last push into the screen, the matte opening as the dart becomes the page
   { id: 'arrival', at: [0.962, 0.972, 0.982, 0.996], bars: 0.6, fov: 0.94 },
 ];
