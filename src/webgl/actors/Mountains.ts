@@ -8,6 +8,7 @@ import {
   Vector3,
 } from 'three';
 import type { SkyDome } from '../materials/SkyDome';
+import { erodesSkyVisibility } from '../materials/skyVisibility';
 import mountainsVert from '../shaders/mountains.vert.glsl';
 import mountainsFrag from '../shaders/mountains.frag.glsl';
 
@@ -44,6 +45,8 @@ export class Mountains {
       transparent: true,
       depthWrite: false,
     });
+    // a ridge in front of the sun blocks its light as well as its disc
+    erodesSkyVisibility(this.material);
     this.mesh = new Mesh(this.geometry, this.material);
     this.mesh.frustumCulled = false;
     // after the sky dome (-1), before everything with depth

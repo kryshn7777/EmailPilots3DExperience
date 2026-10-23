@@ -1,10 +1,11 @@
 import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry, Vector3 } from 'three';
+import type { CloudNoise } from '../bake/CloudNoise';
 import skyVert from '../shaders/sky.vert.glsl';
 import skyFrag from '../shaders/sky.frag.glsl';
 
 /**
- * Far-plane-pinned gradient dome. Follows the camera; uniforms are lerped
- * every frame from the chapter grade blend.
+ * Far-plane-pinned gradient dome with the sun and a high cloud layer. Follows the camera;
+ * uniforms are lerped every frame from the chapter grade blend.
  */
 export class SkyDome {
   readonly mesh: Mesh;
@@ -16,7 +17,7 @@ export class SkyDome {
   readonly sunColor = new Color();
   readonly sunDir = new Vector3(0, 1, 0);
 
-  constructor() {
+  constructor(noise: CloudNoise) {
     this.material = new ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
@@ -27,6 +28,10 @@ export class SkyDome {
         uSunDir: { value: this.sunDir },
         uSunIntensity: { value: 1 },
         uFlash: { value: 0 },
+        uTime: { value: 0 },
+        uCloud: { value: 0 },
+        uShape: { value: noise.shape },
+        uDetail: { value: noise.detail },
       },
       side: BackSide,
       depthWrite: false,
@@ -42,6 +47,15 @@ export class SkyDome {
 
   set flash(v: number) {
     this.material.uniforms.uFlash!.value = v;
+  }
+
+  /** how much of the high layer is cloud, 0 clear .. 1 overcast */
+  set cloud(v: number) {
+    this.material.uniforms.uCloud!.value = v;
+  }
+
+  set time(v: number) {
+    this.material.uniforms.uTime!.value = v;
   }
 
   followCamera(cameraPosition: Vector3): void {

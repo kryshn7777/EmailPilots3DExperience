@@ -19,6 +19,8 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Quality } from '../quality';
+import type { CloudNoise } from '../bake/CloudNoise';
+import { erodesSkyVisibility } from '../materials/skyVisibility';
 import { mulberry32 } from '../util';
 import spriteVert from '../shaders/cloudSprite.vert.glsl';
 import spriteFrag from '../shaders/cloudSprite.frag.glsl';
@@ -92,6 +94,8 @@ export class Clouds {
   readonly shadowColor = new Color('#b8c7e0');
   readonly fogColor = new Color('#b8c7e0');
   readonly sunDir = new Vector3(0.6, 0.25, 0.1);
+  /** the sky light the slab's shade is made of: the sky's own colour, so bellies are blue under a gold sun */
+  readonly skyColor = new Color('#8fa8cc');
 
   /**
    * The overnight deck's own light. The grade hands the city chapter an amber
@@ -106,7 +110,7 @@ export class Clouds {
 
   private atlas: WebGLRenderTarget;
 
-  constructor(center: Vector3, quality: Quality, rand: () => number, renderer: WebGLRenderer) {
+  constructor(center: Vector3, quality: Quality, rand: () => number, renderer: WebGLRenderer, private noise: CloudNoise) {
     this.atlas = bakeDensityAtlas(renderer);
     // shared uniform OBJECTS: the night deck's material spreads these same
     // references, so one grade/fog write per frame lands on both decks. Only
@@ -130,6 +134,7 @@ export class Clouds {
       transparent: true,
       depthWrite: false,
     });
+    erodesSkyVisibility(this.spriteMaterial);
 
     this.sprites = this.field(quality.cloudSprites, rand, (p, r) => {
       const spread = 108;
@@ -188,6 +193,7 @@ export class Clouds {
       transparent: true,
       depthWrite: false,
     });
+    erodesSkyVisibility(this.nightMaterial);
     this.night = this.field(
       quality.cloudSprites,
       nightRand,
@@ -212,9 +218,10 @@ export class Clouds {
     if (quality.volumetricClouds) {
       // the slab straddles the line too, so the raymarch is what the camera
       // is actually inside during the formation chapter
+      // tall enough for towers to stand over the flight line, not just a belt along it
       const box = new Box3(
-        new Vector3(center.x - 52, center.y - 4, center.z - 30),
-        new Vector3(center.x + 46, center.y + 9, center.z + 30),
+        new Vector3(center.x - 56, center.y - 5, center.z - 36),
+        new Vector3(center.x + 50, center.y + 16, center.z + 36),
       );
       this.volumeGeometry = new BoxGeometry(
         box.max.x - box.min.x,
@@ -225,11 +232,13 @@ export class Clouds {
         vertexShader: volumeVert,
         fragmentShader: volumeFrag,
         uniforms: {
+          uShape: { value: this.noise.shape },
+          uDetail: { value: this.noise.detail },
           uBoxMin: { value: box.min },
           uBoxMax: { value: box.max },
           uSunDir: { value: this.sunDir },
           uSunColor: { value: this.sunColor },
-          uShadowColor: { value: this.shadowColor },
+          uSkyColor: { value: this.skyColor },
           uFogColor: { value: this.fogColor },
           uFogNear: { value: 30 },
           uFogFar: { value: 220 },
@@ -241,6 +250,7 @@ export class Clouds {
         depthWrite: false,
         side: BackSide,
       });
+      erodesSkyVisibility(this.volumeMaterial);
       this.volume = new Mesh(this.volumeGeometry, this.volumeMaterial);
       // the slab is no longer symmetric about the anchor, so the shell must
       // sit on the BOX centre or the geometry and the raymarch bounds part
@@ -317,8 +327,10 @@ export class Clouds {
      * short on the way out, because leaving is motivated: the storm takes the
      * sky over at 0.36 and the beacon's own weather owns everything past 0.5.
      */
+    // with the raymarched slab to carry the mass, the billboards are only filler and haze at the edges
+    const spriteMax = this.volumeMaterial && this.noise.ready ? 0.14 : 0.26;
     const day =
-      0.26 *
+      spriteMax *
       MathUtils.smoothstep(t, 0.17, 0.26) *
       (1 - MathUtils.smoothstep(t, 0.53, 0.585));
     this.spriteMaterial.uniforms.uOpacity!.value = day;
@@ -331,9 +343,10 @@ export class Clouds {
       // the raymarch has no opacity — coverage IS its density, so thinning it
       // to nothing is how the slab arrives and leaves without a hard edge
       const slab =
-        MathUtils.smoothstep(t, 0.2, 0.28) * (1 - MathUtils.smoothstep(t, 0.4, 0.47));
-      this.volumeMaterial.uniforms.uCoverage!.value = 0.14 + 0.30 * slab;
-      this.volume!.visible = slab > 0.004;
+        MathUtils.smoothstep(t, 0.17, 0.25) * (1 - MathUtils.smoothstep(t, 0.4, 0.47));
+      this.volumeMaterial.uniforms.uCoverage!.value = 0.2 + 0.4 * slab;
+      // nothing to march until the worker has made the noise
+      this.volume!.visible = slab > 0.004 && this.noise.ready;
     }
   }
 
