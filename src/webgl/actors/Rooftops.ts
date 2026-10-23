@@ -22,10 +22,12 @@ import { PATH_POINTS } from '../rig/pathPoints.mjs';
 import { meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
+import { Hedges } from './Hedges';
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { Yards } from './Yards';
+import { applyLawns } from '../materials/Lawns';
 import { Pools } from './Pools';
 import { TownLight } from './TownLight';
 import { StreetFurniture } from './StreetFurniture';
@@ -60,6 +62,7 @@ export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
   private fences: Fences | null = null;
+  private hedges: Hedges | null = null;
   private cars: StreetCars | null = null;
   private yards: Yards | null = null;
   private pools: Pools | null = null;
@@ -124,6 +127,8 @@ export class Rooftops {
     ground.receiveShadow = shadows;
     ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
+    // every lot its own grass, mowing stripes, dry and lush patches (the cell alone repeats)
+    applyLawns(material, new Vector2(ground.position.x, ground.position.z));
 
     // the meadow and fields under the woodland, out past the edge of town
     const meadow = meadowTexture();
@@ -182,6 +187,10 @@ export class Rooftops {
     this.fences = new Fences(runs, isNear);
     this.fences.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.fences.group);
+    // clipped hedges down the lot lines that have no fence: the property lines, drawn in green
+    this.hedges = new Hedges(quality.tier);
+    this.hedges.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.hedges.group);
   }
 
   /** Soft contact shadows under every house and tree: grounds them on the lawn. */
@@ -242,7 +251,7 @@ export class Rooftops {
     // hotter than the city's. cloudEnv: homes in a cloud sea take their light
     // and reflections from the baked cloud environment.
     this.kitCity = new KitCity(lots as KitLot[], rings, manifest, {
-      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high',
+      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high', roofs: true,
     });
     // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
@@ -308,6 +317,7 @@ export class Rooftops {
     // Yard details for every house the flight passes over: beds, patios, pools,
     // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
     const yardReach = quality.tier === 'high' ? 90 : 50;
+    const richReach = quality.tier === 'high' ? 30 : 18;
     const at2 = new Vector3();
     this.yards = new Yards(
       lots,
@@ -319,6 +329,13 @@ export class Rooftops {
         return false;
       },
       quality.tier,
+      // the lots the camera passes close by get the full garden: beds round every wall, an
+      // ornamental tree, island beds, stepping stones, a bird bath, chairs on the lawn
+      (lot) => {
+        at2.set(lot.x, ROOFTOP_BASE_Y, lot.z);
+        for (const c of path) if (c.distanceToSquared(at2) < richReach * richReach) return true;
+        return false;
+      },
     );
     this.yards.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.yards.group);
@@ -358,6 +375,7 @@ export class Rooftops {
   dispose(): void {
     this.kitCity?.dispose();
     this.fences?.dispose();
+    this.hedges?.dispose();
     this.cars?.dispose();
     this.people?.dispose();
     this.yards?.dispose();

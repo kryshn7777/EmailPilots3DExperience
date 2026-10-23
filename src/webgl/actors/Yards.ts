@@ -44,14 +44,15 @@ import type { PoolSite } from './Pools';
 
 type Tile =
   | 'mulch' | 'flowers' | 'stripes' | 'blob' | 'veg' | 'patio' | 'water' | 'drive'
-  | 'wood' | 'sand' | 'leaves' | 'firepit' | 'dots' | 'gravel' | 'kiddie';
+  | 'wood' | 'sand' | 'leaves' | 'firepit' | 'dots' | 'gravel' | 'kiddie' | 'stone' | 'bed' | 'ring' | 'pavers';
 const TILES: Tile[] = [
   'mulch', 'flowers', 'stripes', 'blob', 'veg', 'patio', 'water', 'drive',
-  'wood', 'sand', 'leaves', 'firepit', 'dots', 'gravel', 'kiddie',
+  'wood', 'sand', 'leaves', 'firepit', 'dots', 'gravel', 'kiddie', 'stone',
+  'bed', 'ring', 'pavers',
 ];
 const TILE_PX = 128;
 const COLS = 8;
-const ROWS = 2;
+const ROWS = 3;
 
 function decalAtlas(): CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -266,6 +267,82 @@ function decalAtlas(): CanvasTexture {
         speckle(240, '100,96,90', 1, 3, 0.7);
         speckle(180, '210,204,194', 1, 2.4, 0.6);
         break;
+      case 'stone': {
+        // one flagstone: an irregular slab, a darker joint round it, a little lichen
+        ctx.fillStyle = 'rgba(70,64,56,0.55)';
+        const pts: [number, number][] = [];
+        for (let k = 0; k < 9; k++) {
+          const a = (k / 9) * Math.PI * 2;
+          const r = S * (0.4 + rnd() * 0.08);
+          pts.push([S / 2 + Math.cos(a) * r, S / 2 + Math.sin(a) * r]);
+        }
+        ctx.beginPath();
+        pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgb(196,188,172)';
+        ctx.beginPath();
+        pts.forEach(([x, y], k) => {
+          const px = S / 2 + (x - S / 2) * 0.9, py = S / 2 + (y - S / 2) * 0.9;
+          if (k) ctx.lineTo(px, py);
+          else ctx.moveTo(px, py);
+        });
+        ctx.closePath();
+        ctx.fill();
+        speckle(70, '150,142,128', 1, 3.5, 0.5);
+        speckle(16, '160,170,120', 2, 5, 0.35);
+        break;
+      }
+      case 'bed': {
+        // an organic planting bed: dark mulch with a soft edge and a spaded border
+        const g = ctx.createRadialGradient(S / 2, S / 2, S * 0.3, S / 2, S / 2, S * 0.5);
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.8, 'rgba(255,255,255,0.95)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        for (let k = 0; k <= 24; k++) {
+          const a = (k / 24) * Math.PI * 2;
+          const r = S * (0.42 + 0.06 * Math.sin(a * 3 + 1) + 0.03 * Math.sin(a * 5));
+          const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r;
+          if (k) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        }
+        ctx.fill();
+        speckle(200, '90,70,52', 1, 3, 0.5);
+        break;
+      }
+      case 'ring': {
+        // mulch under a tree: a disc fading out at the rim
+        const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.48);
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.75, 'rgba(255,255,255,0.95)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, S, S);
+        speckle(160, '80,62,46', 1, 3, 0.45);
+        break;
+      }
+      case 'pavers': {
+        // a herringbone of brick pavers with a soldier course round the edge
+        slab(2, 'rgb(150,92,70)', 3);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(8, 8, S - 16, S - 16);
+        ctx.clip();
+        for (let y = -S; y < S * 2; y += 8) {
+          for (let x = -S; x < S * 2; x += 16) {
+            const l = 0.82 + rnd() * 0.3;
+            ctx.fillStyle = `rgb(${172 * l},${104 * l},${78 * l})`;
+            ctx.fillRect(x + (y / 8) % 2 * 8, y, 15, 7);
+          }
+        }
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(70,46,34,0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(5, 5, S - 10, S - 10);
+        break;
+      }
       case 'kiddie':
         ctx.fillStyle = 'rgb(240,200,60)';
         ctx.beginPath();
@@ -355,7 +432,22 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
 }
 
 type PropKind = 'shrub' | 'hedge' | 'mailbox' | 'shed' | 'patioSet' | 'umbrellaSet' | 'bbq' | 'swing'
-  | 'trampoline' | 'woodpile' | 'pot' | 'bench' | 'tuft';
+  | 'trampoline' | 'woodpile' | 'pot' | 'bench' | 'tuft'
+  | 'conifer' | 'mound' | 'bloom' | 'trunk' | 'canopy' | 'birdbath' | 'raised' | 'chair';
+
+/** a lumpy ball of a few blobs, for canopies and flower heads */
+function blobs(n: number, spread: number, r: number, y: number, seed: number): BufferGeometry {
+  let a = seed;
+  const rnd = (): number => ((a = (a * 16807) % 2147483647) / 2147483647);
+  const parts: BufferGeometry[] = [];
+  for (let k = 0; k < n; k++) {
+    const ang = (k / n) * Math.PI * 2 + rnd();
+    const d = k === 0 ? 0 : spread * (0.6 + rnd() * 0.4);
+    parts.push(tinted(new IcosahedronGeometry(r * (0.75 + rnd() * 0.4), 1)
+      .translate(Math.cos(ang) * d, y + (rnd() - 0.4) * r * 0.6, Math.sin(ang) * d).toNonIndexed(), '#ffffff'));
+  }
+  return merge(parts);
+}
 
 /** Prop geometry, modelled at site scale (a person would be ~0.55 tall), in neutral colours the instance tint shifts. */
 function propGeometry(kind: PropKind): BufferGeometry {
@@ -450,6 +542,52 @@ function propGeometry(kind: PropKind): BufferGeometry {
         cyl(0.03, 0.05, 0, 0.025, 0, '#b4623a', 8),
         tinted(new IcosahedronGeometry(0.035, 0).translate(0, 0.075, 0).toNonIndexed(), '#4c8a3a'),
       ]);
+    case 'conifer':
+      // a clipped arborvitae or juniper: a cone on a stub of trunk
+      return merge([
+        cyl(0.05, 0.08, 0, 0.04, 0, '#ffffff', 6),
+        tinted(new ConeGeometry(0.5, 1, 9).translate(0, 0.58, 0).toNonIndexed(), '#ffffff'),
+      ]);
+    case 'mound':
+      // hosta, fern or a perennial's leaves: a low dome
+      return tinted(new IcosahedronGeometry(0.5, 1).scale(1, 0.55, 1).translate(0, 0.2, 0).toNonIndexed(), '#ffffff');
+    case 'bloom':
+      // the flower heads over a mound: small balls on the crown (the tint is the flower)
+      return blobs(7, 0.3, 0.11, 0.42, 77);
+    case 'trunk':
+      return merge([
+        cyl(0.045, 0.75, 0, 0.375, 0, '#5c4634', 6),
+        tinted(new CylinderGeometry(0.012, 0.03, 0.4, 5).rotateZ(0.7).translate(0.12, 0.62, 0).toNonIndexed(), '#5c4634'),
+        tinted(new CylinderGeometry(0.012, 0.03, 0.4, 5).rotateZ(-0.7).translate(-0.12, 0.6, 0.05).toNonIndexed(), '#5c4634'),
+      ]);
+    case 'canopy':
+      // an ornamental tree's crown: maple, crabapple, dogwood, redbud (the tint)
+      return blobs(5, 0.32, 0.36, 0.9, 311);
+    case 'birdbath':
+      return merge([
+        cyl(0.07, 0.03, 0, 0.015, 0, '#b9b2a4', 10),
+        cyl(0.035, 0.2, 0, 0.12, 0, '#c4bdb0', 8),
+        cyl(0.15, 0.04, 0, 0.24, 0, '#c4bdb0', 14),
+        cyl(0.125, 0.01, 0, 0.258, 0, '#5d7f92', 14),
+      ]);
+    case 'raised':
+      // a raised vegetable bed: a timber box of soil with rows of greens
+      return merge([
+        box(0.8, 0.1, 0.34, 0, 0.05, 0, '#8a6844'),
+        box(0.74, 0.02, 0.28, 0, 0.1, 0, '#3e2c20'),
+        ...[-0.27, -0.09, 0.09, 0.27].flatMap((x) => [-0.07, 0.07].map((z) =>
+          tinted(new IcosahedronGeometry(0.06, 0).scale(1, 0.7, 1).translate(x, 0.13, z).toNonIndexed(), '#5a9a3e'))),
+      ]);
+    case 'chair':
+      // an Adirondack chair: slatted back, broad arms
+      return merge([
+        box(0.1, 0.012, 0.1, 0, 0.05, 0, '#ffffff'),
+        tinted(new BoxGeometry(0.1, 0.012, 0.11).rotateX(-0.5).translate(0, 0.1, -0.06).toNonIndexed(), '#ffffff'),
+        box(0.016, 0.012, 0.11, 0.06, 0.08, 0, '#ffffff'),
+        box(0.016, 0.012, 0.11, -0.06, 0.08, 0, '#ffffff'),
+        box(0.012, 0.05, 0.012, 0.045, 0.025, 0.04, '#ffffff'),
+        box(0.012, 0.05, 0.012, -0.045, 0.025, 0.04, '#ffffff'),
+      ]);
     case 'bench':
       return merge([
         box(0.22, 0.012, 0.06, 0, 0.065, 0, '#8a6a44'),
@@ -483,6 +621,16 @@ const SHED_TINTS = ['#ffffff', '#cfe0c8', '#d8a89a', '#a9bfd6', '#d8d0a0', '#a8a
 const UMBRELLAS = ['#e84a3a', '#2f7ad8', '#f2c230', '#2fa86a', '#e8e4d8', '#d86aa8'];
 const PLAY = ['#d8402f', '#2f6ad8', '#e8a82a', '#2faa5a', '#9a4ad8'];
 const BODY_TINTS = ['#ffffff', '#f0ece4', '#e4ecf4', '#f4e8e8'];
+/** foundation evergreens: arborvitae, juniper blue, yew */
+const CONIFERS = ['#2c5230', '#3b5e46', '#46684a', '#2a4a2c', '#557a52'];
+/** hosta, fern and perennial leaf greens */
+const MOUNDS = ['#4e7f3a', '#6a9446', '#3c6a3a', '#7a9a5a', '#5f8a6a', '#8aa860'];
+/** ornamental trees in late season: japanese maple, crabapple, dogwood, redbud, a golden one */
+const ORNAMENTAL = ['#a3322a', '#c45a3a', '#d98aa0', '#e2ddcf', '#8c4a7c', '#d4a43a', '#4f7a35', '#b8422e'];
+const CHAIRS = ['#f2efe6', '#2f6a8a', '#c44a3a', '#3f7a4a', '#e8c25a'];
+
+/** what phones keep of the props: the planting, which carries the colour */
+const LOW_PROPS = new Set<PropKind>(['shrub', 'hedge', 'conifer', 'mound', 'bloom', 'trunk', 'canopy']);
 
 export class Yards {
   readonly group = new Group();
@@ -501,6 +649,8 @@ export class Yards {
     parked: { x: number; z: number; yaw: number }[],
     near: (lot: KitLot) => boolean,
     detail: 'high' | 'low',
+    /** lots the camera passes close by: these get the full garden (see `lush` below) */
+    rich: (lot: KitLot) => boolean = () => false,
   ) {
     const { d: cellD, lotD, street, lotW } = HOME_CELL;
     const rand = mulberry32(60317);
@@ -535,6 +685,10 @@ export class Yards {
         return true;
       };
       const claim = (u: number, v: number, r: number): void => { taken.push({ u, v, r }); };
+      const lush = rich(lot);
+      /** what the garden path leads to: the patio (u, v, w, d) and the shed (u, v), if any */
+      let patio: [number, number, number, number] | null = null;
+      let shed: [number, number] | null = null;
       const pick = <T,>(list: T[]): T => list[Math.floor(rand() * list.length)]!;
       const chance = (p: number): boolean => rand() < p;
       const between = (a: number, b: number): number => a + rand() * (b - a);
@@ -585,7 +739,7 @@ export class Yards {
       }
 
       // — foundation bed along the front of the house: mulch, shrubs, flowers
-      if (chance(0.72)) {
+      if (lush || chance(0.72)) {
         const w = hw * between(0.7, 1.0);
         const u0 = between(-0.12, 0.12) * hw;
         decal('mulch', u0, vF - 0.17, w, 0.3, 0, pick(MULCH), 1);
@@ -623,7 +777,7 @@ export class Yards {
       // — street side: mailbox at the curb, the light that shines on the walk
       if (chance(0.78)) prop('mailbox', (chance(0.5) ? -1 : 1) * between(2.5, 3.2), -0.2, 0, between(0.9, 1.15), pick(BODY_TINTS));
       if (chance(0.6)) lights.push({ ...worldLight(world, 0, vF - 0.05), y: 0.52, kind: 'porch' });
-      if (chance(0.55)) {
+      if (lush || chance(0.55)) {
         const n = 2 + Math.floor(rand() * 3);
         for (let k = 0; k < n; k++) {
           const v = 0.7 + ((k + 0.5) / n) * Math.max(vF - 1.1, 0.4);
@@ -662,34 +816,46 @@ export class Yards {
           }
           lights.push({ ...worldLight(world, p[0], p[1]), y: 0.02, kind: 'pool' });
         }
-      } else if (bigRoll < 0.62) {
+      } else if (bigRoll < 0.62 || lush) {
         // a patio or deck against the back of the house, usually with a table
         const w = between(1.0, 1.7), d = between(0.7, 1.0);
         const u = between(-hw / 2 + w / 2 - 0.2, hw / 2 - w / 2 + 0.2);
         if (free(u, vR + d / 2 + 0.1, d / 2, 'back') || chance(0.6)) {
           claim(u, vR + d / 2 + 0.08, Math.max(w, d) / 2);
-          decal(chance(0.4) ? 'wood' : 'patio', u, vR + d / 2 + 0.06, w, d, 0, chance(0.5) ? '#ffffff' : pick(['#e8e2d6', '#cfc8bc', '#d8d0c2']), 2);
-          if (chance(0.7)) {
+          const floor = lush ? pick(['wood', 'patio', 'pavers', 'pavers'] as Tile[]) : chance(0.4) ? 'wood' : 'patio';
+          decal(floor, u, vR + d / 2 + 0.06, w, d, 0, chance(0.5) ? '#ffffff' : pick(['#e8e2d6', '#cfc8bc', '#d8d0c2']), 2);
+          patio = [u, vR + d / 2 + 0.06, w, d];
+          if (lush || chance(0.7)) {
             const set = chance(0.55) ? 'umbrellaSet' : 'patioSet';
             prop(set, u + between(-0.15, 0.15), vR + d / 2 + 0.1, rand() * 3.14, between(0.9, 1.2), set === 'umbrellaSet' ? pick(UMBRELLAS) : pick(BODY_TINTS));
           }
           if (chance(0.4)) prop('bbq', u + w / 2 - 0.12, vR + 0.15, rand() * 3.14, between(0.9, 1.15));
         }
       }
-      // vegetable garden
-      if (chance(0.3)) {
+      // vegetable garden: a dug plot, or on the near lots a pair of raised beds
+      if (chance(lush ? 0.45 : 0.3)) {
         const w = between(0.9, 1.4), d = between(0.6, 0.9);
         const p = place(Math.max(w, d) / 2, 'back', [-2.1, 2.1], [vR + 0.6, lotD - 0.9]);
         if (p) {
           claim(p[0], p[1], Math.max(w, d) / 2);
-          decal('veg', p[0], p[1], w, d, chance(0.5) ? 0 : Math.PI / 2, '#ffffff', 2);
+          const turn = chance(0.5) ? 0 : Math.PI / 2;
+          if (lush && chance(0.6)) {
+            decal('gravel', p[0], p[1], w + 0.2, d + 0.2, turn, '#ffffff', 1);
+            for (const k of [-1, 1]) {
+              const off = k * d * 0.25;
+              prop('raised', p[0] + (turn ? off : 0), p[1] + (turn ? 0 : off), turn, [w / 0.8 * 0.9, 1, 1]);
+            }
+          } else {
+            decal('veg', p[0], p[1], w, d, turn, '#ffffff', 2);
+          }
         }
       }
       // a shed in a rear corner
-      if (chance(0.36)) {
+      if (chance(lush ? 0.5 : 0.36)) {
         const u = (chance(0.5) ? -1 : 1) * between(2.0, 2.8);
         if (free(u, lotD - 0.5, 0.32, 'back')) {
           claim(u, lotD - 0.5, 0.34);
+          shed = [u, lotD - 0.5];
           prop('shed', u, lotD - 0.5, toStreet > 0 ? Math.PI : 0, between(0.9, 1.2), pick(SHED_TINTS));
         }
       }
@@ -734,13 +900,13 @@ export class Yards {
       }
 
       // — more green: hedges, a thicker planting of shrubs, and grass where the mower misses
-      if (chance(0.24)) {
+      if (chance(lush ? 0.4 : 0.24)) {
         // a clipped hedge along the front, from a side toward the walk
         const side = chance(0.5) ? -1 : 1;
         const len = between(1.0, 2.4);
         prop('hedge', side * (3.3 - len / 2 - 0.1), 0.52, 0, [len, between(0.2, 0.32), 0.17], pick(GREENS));
       }
-      if (chance(0.3)) {
+      if (chance(lush ? 0.45 : 0.3)) {
         // a hedge down a property line, behind the house
         const side = chance(0.5) ? -1 : 1;
         const len = between(1.5, Math.max(lotD - vR - 0.6, 1.6));
@@ -753,8 +919,13 @@ export class Yards {
         claim(p[0], p[1], r);
         prop('shrub', p[0], p[1], rand() * 6, [r, r * between(0.6, 1.0), r], chance(0.2) ? pick(BLOOM_SHRUBS) : pick(GREENS));
       }
+      if (lush) this.garden(
+        { lotW, lotD, hw, vF, vR, toStreet }, nearbyTrees, patio, shed,
+        { decal, prop, place, claim, pick, chance, between, light: (u, v, y, kind) => lights.push({ ...worldLight(world, u, v), y, kind }) },
+      );
+
       // grass tufts: along the fence lines, up the walls of the house, and scattered
-      const tufts = 10 + Math.floor(rand() * 26);
+      const tufts = (lush ? 90 : 10) + Math.floor(rand() * (lush ? 70 : 26));
       for (let k = 0; k < tufts; k++) {
         const roll = rand();
         let u: number, v: number;
@@ -779,6 +950,161 @@ export class Yards {
     this.buildDecals(decals, detail === 'high');
     this.buildProps(props, detail);
     this.buildLights(lights);
+  }
+
+  /**
+   * The full garden, for the lots the camera passes close to: planting round every wall of the
+   * house (mulch beds of shrubs, clipped evergreens and flowering perennials, a gap at each door),
+   * mulch rings and hostas under the trees, an ornamental tree, island flower beds, a bird bath,
+   * chairs on the lawn, and a stepping-stone path from the back door or patio out to the shed or
+   * the bottom of the garden, lit by stake lights. Lot-local (u across, v from the street edge).
+   */
+  private garden(
+    lot: { lotW: number; lotD: number; hw: number; vF: number; vR: number; toStreet: number },
+    trees: { u: number; v: number; r: number }[],
+    patio: [number, number, number, number] | null,
+    shed: [number, number] | null,
+    f: {
+      decal: (tile: Tile, u: number, v: number, w: number, d: number, yaw: number, color: string, layer: number) => void;
+      prop: (kind: PropKind, u: number, v: number, yaw: number, s: number | [number, number, number], color?: string) => void;
+      place: (r: number, zone: 'front' | 'back' | 'any', uRange: [number, number], vRange: [number, number]) => [number, number] | null;
+      claim: (u: number, v: number, r: number) => void;
+      pick: <T>(list: T[]) => T;
+      chance: (p: number) => boolean;
+      between: (a: number, b: number) => number;
+      light: (u: number, v: number, y: number, kind: Light['kind']) => void;
+    },
+  ): void {
+    const { lotW, lotD, hw, vF, vR } = lot;
+    const { decal, prop, place, claim, pick, chance, between, light } = f;
+    const turn = (): number => between(0, Math.PI * 2);
+    const clear = (u: number, v: number, r: number): boolean =>
+      trees.every((t) => Math.hypot(u - t.u, v - t.v) > r + t.r * 0.55);
+    /** one plant of a mixed border: a shrub, a clipped evergreen, or a perennial in flower */
+    const plant = (u: number, v: number, scale = 1): void => {
+      const roll = between(0, 1);
+      if (roll < 0.42) {
+        const r = between(0.16, 0.27) * scale;
+        prop('shrub', u, v, turn(), [r, r * between(0.75, 1.1), r], chance(0.2) ? pick(BLOOM_SHRUBS) : pick(GREENS));
+      } else if (roll < 0.62) {
+        const r = between(0.13, 0.19) * scale;
+        prop('conifer', u, v, turn(), [r * 2, between(0.5, 0.95) * scale, r * 2], pick(CONIFERS));
+      } else {
+        const r = between(0.13, 0.2) * scale;
+        prop('mound', u, v, turn(), r * 2, pick(MOUNDS));
+        if (chance(0.8)) prop('bloom', u, v, turn(), r * 2, pick(FLOWERS));
+      }
+    };
+    /** a mulched border from (u0, v0) to (u1, v1), planted along its length, with gaps */
+    const border = (u0: number, v0: number, u1: number, v1: number, gap: (u: number, v: number) => boolean): void => {
+      const len = Math.hypot(u1 - u0, v1 - v0);
+      if (len < 0.5) return;
+      const du = (u1 - u0) / len, dv = (v1 - v0) / len;
+      decal('mulch', (u0 + u1) / 2, (v0 + v1) / 2, len + 0.1, 0.48, Math.abs(dv) > 0.5 ? Math.PI / 2 : 0, pick(MULCH), 1);
+      for (let t = between(0.12, 0.28); t < len - 0.08; t += between(0.32, 0.46)) {
+        const u = u0 + du * t, v = v0 + dv * t;
+        if (gap(u, v) || !clear(u, v, 0.12)) continue;
+        plant(u, v);
+      }
+    };
+
+    // planting round the house: the back (clear of the back door and a patio against the wall),
+    // and the sides wherever the side yard is wide enough to walk past it
+    const onPatio = (u: number, v: number): boolean =>
+      !!patio && Math.abs(u - patio[0]) < patio[2] / 2 + 0.12 && Math.abs(v - patio[1]) < patio[3] / 2 + 0.25;
+    border(-hw / 2 + 0.1, vR + 0.2, hw / 2 - 0.1, vR + 0.2, (u, v) => Math.abs(u) < 0.5 || onPatio(u, v));
+    if (lotW / 2 - hw / 2 > 0.5) {
+      for (const side of [-1, 1]) {
+        const u = side * (hw / 2 + 0.2);
+        border(u, vF + 0.15, u, vR - 0.15, () => false);
+      }
+    }
+    // a pair of clipped evergreens framing the front door
+    if (chance(0.5)) {
+      for (const side of [-1, 1]) prop('conifer', side * 0.55, vF - 0.18, 0, [0.26, between(0.5, 0.65), 0.26], pick(CONIFERS));
+    }
+
+    // mulch rings and shade planting under the trees in the lot
+    for (const t of trees) {
+      if (Math.abs(t.u) > lotW / 2 - 0.2 || t.v < 0.3 || t.v > lotD - 0.2) continue;
+      const ring = Math.min(t.r * 1.5, 1.3);
+      decal('ring', t.u, t.v, ring, ring, 0, pick(MULCH), 1);
+      const n = 3 + Math.floor(between(0, 3));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + between(0, 1);
+        const d = ring * between(0.28, 0.42);
+        prop('mound', t.u + Math.cos(a) * d, t.v + Math.sin(a) * d, turn(), between(0.18, 0.3), pick(MOUNDS));
+      }
+    }
+
+    // an ornamental tree: japanese maple, crabapple, dogwood, redbud
+    if (chance(0.7)) {
+      const p = place(0.5, 'any', [-2.7, 2.7], [0.6, lotD - 0.7]);
+      if (p) {
+        claim(p[0], p[1], 0.5);
+        const size = between(0.85, 1.3);
+        prop('trunk', p[0], p[1], turn(), size);
+        prop('canopy', p[0], p[1], turn(), [size * between(0.9, 1.2), size, size * between(0.9, 1.2)], pick(ORNAMENTAL));
+        decal('ring', p[0], p[1], 0.7 * size, 0.7 * size, 0, pick(MULCH), 1);
+      }
+    }
+
+    // island flower beds
+    for (let k = 0; k < 2 + Math.floor(between(0, 2)); k++) {
+      const w = between(1.1, 1.8), d = between(0.7, 1.1);
+      const p = place(Math.max(w, d) / 2, 'any', [-2.5, 2.5], [0.6, lotD - 0.6]);
+      if (!p) continue;
+      claim(p[0], p[1], Math.max(w, d) / 2);
+      const yaw = turn();
+      decal('bed', p[0], p[1], w, d, yaw, pick(MULCH), 1);
+      const n = 6 + Math.floor(between(0, 5));
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      for (let i = 0; i < n; i++) {
+        const a = between(0, Math.PI * 2), rr = Math.sqrt(between(0, 1)) * 0.36;
+        const lx = Math.cos(a) * rr * w, lz = Math.sin(a) * rr * d;
+        plant(p[0] + lx * c - lz * sn, p[1] - (lx * sn + lz * c), i === 0 ? 1.3 : 1);
+      }
+    }
+
+    // perennial borders along the back fence and down one side: mulch and a drift of plants
+    {
+      const a = between(-3.0, -1.2), b = between(1.2, 3.0);
+      border(a, lotD - 0.32, b, lotD - 0.32, (u, v) => !!shed && Math.hypot(u - shed[0], v - shed[1]) < 0.55);
+      const side = chance(0.5) ? -1 : 1;
+      if (chance(0.6)) border(side * (lotW / 2 - 0.3), Math.max(vR + 0.3, lotD - between(2.5, 4.5)), side * (lotW / 2 - 0.3), lotD - 0.6, () => false);
+    }
+
+    // a bird bath, and chairs out on the lawn
+    if (chance(0.4)) {
+      const p = place(0.16, 'any', [-2.8, 2.8], [0.5, lotD - 0.5]);
+      if (p) { claim(p[0], p[1], 0.16); prop('birdbath', p[0], p[1], 0, between(0.95, 1.2)); }
+    }
+    if (chance(0.45)) {
+      const p = place(0.3, 'back', [-2.4, 2.4], [vR + 0.6, lotD - 0.6]);
+      if (p) {
+        claim(p[0], p[1], 0.3);
+        const yaw = turn(), color = pick(CHAIRS);
+        for (const k of [-1, 1]) prop('chair', p[0] + Math.cos(yaw) * 0.13 * k, p[1] + Math.sin(yaw) * 0.13 * k, -yaw, 1, color);
+      }
+    }
+
+    // stepping stones from the back door (or the patio's far edge) to the shed or the garden's end
+    const from: [number, number] = patio ? [patio[0], patio[1] + patio[3] / 2 + 0.12] : [between(-0.3, 0.3), vR + 0.16];
+    const to: [number, number] = shed ? [shed[0] * 0.8, shed[1] - 0.4] : [between(-2.4, 2.4), lotD - between(0.6, 1.4)];
+    const len = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    if (len > 0.8) {
+      const bend = between(-0.5, 0.5);
+      let k = 0;
+      for (let t = 0.08; t < len; t += between(0.27, 0.33), k++) {
+        const f = t / len;
+        const nu = -(to[1] - from[1]) / len, nv = (to[0] - from[0]) / len;
+        const sway = Math.sin(f * Math.PI) * bend;
+        const u = from[0] + (to[0] - from[0]) * f + nu * sway, v = from[1] + (to[1] - from[1]) * f + nv * sway;
+        const sz = between(0.24, 0.3);
+        decal('stone', u, v, sz, sz * between(0.8, 1.0), turn(), pick(['#e2dccf', '#d0cabd', '#c8c0b0']), 2);
+        if (k % 3 === 1) light(u + nu * 0.18 * (k % 2 ? 1 : -1), v + nv * 0.18, 0.08, 'path');
+      }
+    }
   }
 
   // -- decals: one merged mesh, one draw -------------------------------------------------
@@ -829,7 +1155,7 @@ export class Yards {
     const byKind = new Map<PropKind, PropPlacement[]>();
     for (const p of props) {
       // phones keep the shrubs, which carry the colour, and skip the small furniture
-      if (detail === 'low' && p.kind !== 'shrub' && p.kind !== 'hedge') continue;
+      if (detail === 'low' && !LOW_PROPS.has(p.kind)) continue;
       const list = byKind.get(p.kind) ?? [];
       list.push(p);
       byKind.set(p.kind, list);

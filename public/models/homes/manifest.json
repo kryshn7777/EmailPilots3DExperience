@@ -23,7 +23,8 @@
       ],
       "height": 1.997,
       "tris0": 62,
-      "density": 13.88
+      "density": 13.88,
+      "roof": "#5e473a"
     },
     {
       "id": "home-colonial",
@@ -36,7 +37,8 @@
       ],
       "height": 2.879,
       "tris0": 72,
-      "density": 7.53
+      "density": 7.53,
+      "roof": "#3c3f45"
     },
     {
       "id": "home-ranch",
@@ -49,7 +51,8 @@
       ],
       "height": 1.894,
       "tris0": 38,
-      "density": 10.25
+      "density": 10.25,
+      "roof": "#4d5056"
     },
     {
       "id": "home-farmhouse",
@@ -62,7 +65,8 @@
       ],
       "height": 3.16,
       "tris0": 106,
-      "density": 8.95
+      "density": 8.95,
+      "roof": "#3f464b"
     },
     {
       "id": "home-craftsman",
@@ -75,7 +79,8 @@
       ],
       "height": 2.095,
       "tris0": 83,
-      "density": 11.29
+      "density": 11.29,
+      "roof": "#5e473a"
     },
     {
       "id": "home-victorian",
@@ -88,7 +93,8 @@
       ],
       "height": 3.642,
       "tris0": 86,
-      "density": 8.59
+      "density": 8.59,
+      "roof": "#4d5056"
     },
     {
       "id": "home-terrace",
@@ -101,7 +107,8 @@
       ],
       "height": 2.871,
       "tris0": 10,
-      "density": 8.0
+      "density": 8.0,
+      "roof": "#36363a"
     },
     {
       "id": "home-modern",
@@ -114,7 +121,8 @@
       ],
       "height": 2.046,
       "tris0": 20,
-      "density": 8.89
+      "density": 8.89,
+      "roof": "#9a9ca0"
     },
     {
       "id": "home-bungalow",
@@ -127,7 +135,8 @@
       ],
       "height": 2.062,
       "tris0": 82,
-      "density": 12.71
+      "density": 12.71,
+      "roof": "#4d5056"
     },
     {
       "id": "home-suburban",
@@ -140,7 +149,8 @@
       ],
       "height": 2.739,
       "tris0": 76,
-      "density": 8.92
+      "density": 8.92,
+      "roof": "#4d5056"
     },
     {
       "id": "home-tudor",
@@ -153,7 +163,8 @@
       ],
       "height": 3.762,
       "tris0": 24,
-      "density": 9.44
+      "density": 9.44,
+      "roof": "#5e473a"
     },
     {
       "id": "home-duplex",
@@ -166,7 +177,8 @@
       ],
       "height": 2.739,
       "tris0": 34,
-      "density": 10.31
+      "density": 10.31,
+      "roof": "#3c3f45"
     },
     {
       "id": "tree-oak",
@@ -233,7 +245,8 @@
       ],
       "height": 1.997,
       "tris0": 3926,
-      "density": 29.0
+      "density": 29.0,
+      "roof": "#5e473a"
     },
     {
       "id": "home-colonial-hero",
@@ -248,7 +261,8 @@
       ],
       "height": 2.879,
       "tris0": 6318,
-      "density": 20.29
+      "density": 20.29,
+      "roof": "#3c3f45"
     },
     {
       "id": "home-ranch-hero",
@@ -263,7 +277,8 @@
       ],
       "height": 1.894,
       "tris0": 4692,
-      "density": 22.5
+      "density": 22.5,
+      "roof": "#4d5056"
     },
     {
       "id": "home-farmhouse-hero",
@@ -278,7 +293,8 @@
       ],
       "height": 3.16,
       "tris0": 6404,
-      "density": 19.64
+      "density": 19.64,
+      "roof": "#3f464b"
     },
     {
       "id": "home-craftsman-hero",
@@ -293,7 +309,8 @@
       ],
       "height": 2.095,
       "tris0": 4223,
-      "density": 23.48
+      "density": 23.48,
+      "roof": "#5e473a"
     },
     {
       "id": "home-victorian-hero",
@@ -308,7 +325,8 @@
       ],
       "height": 3.642,
       "tris0": 6932,
-      "density": 18.3
+      "density": 18.3,
+      "roof": "#4d5056"
     },
     {
       "id": "home-terrace-hero",
@@ -323,7 +341,8 @@
       ],
       "height": 2.871,
       "tris0": 8278,
-      "density": 16.6
+      "density": 16.6,
+      "roof": "#36363a"
     },
     {
       "id": "home-modern-hero",
@@ -338,7 +357,8 @@
       ],
       "height": 2.046,
       "tris0": 2230,
-      "density": 19.5
+      "density": 19.5,
+      "roof": "#9a9ca0"
     },
     {
       "id": "home-bungalow-hero",
@@ -353,7 +373,8 @@
       ],
       "height": 2.062,
       "tris0": 3734,
-      "density": 27.05
+      "density": 27.05,
+      "roof": "#4d5056"
     },
     {
       "id": "home-suburban-hero",
@@ -368,7 +389,8 @@
       ],
       "height": 2.739,
       "tris0": 6262,
-      "density": 19.5
+      "density": 19.5,
+      "roof": "#4d5056"
     },
     {
       "id": "home-tudor-hero",
@@ -383,7 +405,8 @@
       ],
       "height": 3.762,
       "tris0": 3242,
-      "density": 20.66
+      "density": 20.66,
+      "roof": "#5e473a"
     },
     {
       "id": "home-duplex-hero",
@@ -398,7 +421,8 @@
       ],
       "height": 2.739,
       "tris0": 3692,
-      "density": 21.38
+      "density": 21.38,
+      "roof": "#3c3f45"
     },
     {
       "id": "tree-oak-hero",

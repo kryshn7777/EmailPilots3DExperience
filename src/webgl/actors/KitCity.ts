@@ -25,6 +25,7 @@ import { adoptGlassAttributes, windowGlassMaterial } from '../materials/WindowGl
 import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
+import { applyRoofs, roofAttributes } from '../materials/Roofs';
 
 export interface KitLot {
   x: number; z: number; w: number; d: number; h: number;
@@ -55,6 +56,8 @@ export interface KitModule {
   lean?: string;
   /** 'hero' replaces `lean` in the near ring (HIGH), 'detail' in the detail ring, 'lite' in the lite ring */
   lod?: 'hero' | 'detail' | 'lite';
+  /** a house's main roofing colour (sRGB hex), what the baked roof pattern is read against */
+  roof?: string;
 }
 /** One atlas: what is present depends on the sheet (hero trees have no normals or glow). */
 export interface SheetAtlas {
@@ -125,6 +128,11 @@ export interface KitOptions {
   cloudEnv?: boolean;
   /** real modules cast and receive the sun's shadows (HIGH, where the engine has a shadow map) */
   shadows?: boolean;
+  /**
+   * Give every house its own roof (materials/Roofs.ts): a roofing style and colour per lot,
+   * weathering, solar arrays and skylights. The neighbourhood seen from above wants it.
+   */
+  roofs?: boolean;
 }
 
 /**
@@ -320,7 +328,7 @@ export class KitCity {
     lots: KitLot[],
     rings: KitRingSet,
     manifest: KitManifest,
-    { tier = 'high', glow = 1, cloudEnv = false, shadows = false }: KitOptions = {},
+    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false }: KitOptions = {},
     private color = new Color(),
   ) {
     const modules = manifest.modules;
@@ -371,11 +379,17 @@ export class KitCity {
       byModule.set(id, arr);
     }
     const materials = new Map<string, MeshStandardMaterial>();
-    const materialFor = (sheet: string): MeshStandardMaterial => {
-      let m = materials.get(sheet);
+    // houses whose roofs the town dresses: one table of the modules' roofing colours, indexed per vertex
+    const roofBases = [...new Set(modules.filter((m) => m.kind === 'house' && m.roof).map((m) => m.roof!))];
+    const dressed = (mod: KitModule): boolean => roofs && mod.kind === 'house' && !!mod.roof;
+    const materialFor = (mod: KitModule): MeshStandardMaterial => {
+      const sheet = mod.sheet ?? 'main';
+      const key = dressed(mod) ? `${sheet}:roofs` : sheet;
+      let m = materials.get(key);
       if (!m) {
         m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
-        materials.set(sheet, m);
+        if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high');
+        materials.set(key, m);
       }
       return m;
     };
@@ -384,7 +398,7 @@ export class KitCity {
     for (const [moduleId, indices] of byModule) {
       const mod = modules.find((m) => m.id === moduleId);
       if (!mod) continue;
-      const material = materialFor(mod.sheet ?? 'main');
+      const material = materialFor(mod);
       loader.load(asset(`/models/${manifest.dir}/${mod.lod0}`), (gltf) => {
         let found: Mesh | null = null;
         let glassFound: Mesh | null = null;
@@ -404,6 +418,7 @@ export class KitCity {
         // bake any node transform into the geometry before measuring it, so the
         // fit below is made against what is actually drawn
         const geometry = dequantized(source.geometry).applyMatrix4(source.matrixWorld);
+        if (dressed(mod)) roofAttributes(geometry, roofBases.indexOf(mod.roof!));
         this.disposables.push(geometry);
         geometry.computeBoundingBox();
         const bounds = geometry.boundingBox!;

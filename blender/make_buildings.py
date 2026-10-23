@@ -33,6 +33,7 @@ from PIL import Image  # noqa: E402
 from bld import archetypes, atlas, foliage, hero_trees, homes  # noqa: E402
 from bld.bake import Baker  # noqa: E402
 from bld.bark import normal_map as bark_normals  # noqa: E402
+from bld.materials import PALETTE  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,7 +45,7 @@ SETS = {
                             groups=(('tower', archetypes.TOWERS), ('block', archetypes.BLOCKS))),
     }),
     'homes': dict(dir='homes', sheets={
-        'main': dict(layout='homes', kind='baked',
+        'main': dict(layout='homes', kind='baked', low=1024,
                      groups=(('house', homes.HOUSES), ('tree', homes.TREES))),
         'hero-trees': dict(layout='hero-trees', kind='trees'),
         'hero-houses': dict(layout='homes-hero', kind='hero-baked',
@@ -108,8 +109,9 @@ def atlas_names(sheet):
            {m: f'{pre}{m}-low.webp' for m in ('color', 'orm', 'emissive')}
 
 
-def save_maps(sheet, maps, out, debug, size_full):
-    """Write the full and half-size WebP maps. `maps` values are (H, W, 3|4) uint8."""
+def save_maps(sheet, maps, out, debug, size_full, low_cap=None):
+    """Write the full and half-size WebP maps. `maps` values are (H, W, 3|4) uint8.
+    `low_cap` sizes every phone map of the sheet to at most that many pixels instead."""
     full, low = atlas_names(sheet)
     sizes = {}
     for name, arr in maps.items():
@@ -122,6 +124,8 @@ def save_maps(sheet, maps, out, debug, size_full):
         # mush on a phone); the occlusion/roughness map halves, and a 1024 atlas is small enough
         # to keep whole
         low_size = size_full if (size_full <= 1024 or (sheet == 'main' and name in ('color', 'emissive'))) else size_full // 2
+        if low_cap:
+            low_size = min(size_full, low_cap)
         for variant, size in ((full, size_full), (low, low_size)):
             # phones skip the normal map entirely
             if name not in variant:
@@ -137,6 +141,13 @@ def save_maps(sheet, maps, out, debug, size_full):
                 sized.save(path, 'WEBP', quality=90, alpha_quality=100, method=6)
             sizes[os.path.basename(path)] = os.path.getsize(path)
     return sizes
+
+
+def _roof(model):
+    """A house's main roofing colour (sRGB hex): the runtime recolours its roofs per lot and
+    reads the baked course pattern relative to it (src/webgl/materials/Roofs.ts)."""
+    mat = getattr(model, 'roof_mat', None)
+    return dict(roof=PALETTE[mat]['c']) if mat else {}
 
 
 def build_baked(setname, sheet, cfg, args, out):
@@ -170,7 +181,7 @@ def build_baked(setname, sheet, cfg, args, out):
         entries.append(dict(
             id=model.id, kind=model.kind, sheet=sheet, lod0=f'{model.id}.lod0.glb',
             footprint=[round(dx * k, 3), round(dy * k, 3)], height=round(dz * k, 3),
-            tris0=model.tris(), density=round(model.density, 2),
+            tris0=model.tris(), density=round(model.density, 2), **_roof(model),
         ))
         print(f'{model.id:24s} {model.tris():4d} tris  {model.density:5.1f} px/m  '
               f'{dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s')
@@ -178,7 +189,7 @@ def build_baked(setname, sheet, cfg, args, out):
     if baker:
         m = baker.assemble(solids)
         sizes = save_maps(sheet, {k: m[k] for k in ('color', 'normal', 'orm', 'emissive')},
-                          out, args.debug, layout.size)
+                          out, args.debug, layout.size, cfg.get('low'))
     return entries, sizes, dict(normal=True, emissive=True, alpha=False)
 
 
@@ -267,7 +278,7 @@ def build_hero_baked(setname, sheet, cfg, args, out):
             id=f'{model.id}-hero', kind=model.kind, sheet=sheet, lean=model.id, lod='hero',
             lod0=f'{model.id}-hero.lod0.glb',
             footprint=[round(dx * k, 3), round(dy * k, 3)], height=round(dz * k, 3),
-            tris0=model.hero_tris(), density=round(model.density, 2),
+            tris0=model.hero_tris(), density=round(model.density, 2), **_roof(model),
         ))
         print(f'{model.id + "-hero":28s} {model.hero_tris():6d} tris  {model.density:5.1f} px/m  '
               f'{time.time() - t:5.1f}s')

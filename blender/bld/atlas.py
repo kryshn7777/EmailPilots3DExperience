@@ -6,8 +6,9 @@ every instanced module shares them.
 
   city   2048 px: eight 512x768 tiles for towers, four 512x448 tiles for the
          mid-rise blocks, a 64 px strip of flat-colour cells along the bottom.
-  homes  1024 px: twelve 256x256 tiles for houses, four 256x224 for trees and
-         outbuildings, a 32 px colour strip.
+  homes  2048 px: twelve 512x512 tiles for houses, four 512x448 for trees and
+         outbuildings, a 64 px colour strip (~25 px per metre on a house, so a roof
+         seen from the plane keeps its courses; phones get the 1024 px halves).
 
 Texel density is not uniform across modules on purpose. The site rescales every
 module so its largest dimension is the same on screen, so what matters is
@@ -116,12 +117,12 @@ CITY = Layout(
 )
 
 HOMES = Layout(
-    'homes', 1024,
+    'homes', 2048,
     tiles={
-        'house': [(256 * c, 256 * r, 256, 256) for r in range(3) for c in range(4)],
-        'tree': [(256 * c, 768, 256, 224) for c in range(4)],
+        'house': [(512 * c, 512 * r, 512, 512) for r in range(3) for c in range(4)],
+        'tree': [(512 * c, 1536, 512, 448) for c in range(4)],
     },
-    palette_origin=(0, 992), pitch=16, cols=64, pad=6, gutter=12, margin=6,
+    palette_origin=(0, 1984), pitch=32, cols=64, pad=12, gutter=24, margin=12,
     reach={'wall': (1.2, 2.6), 'roof': (2.6, 5.0)},
 )
 
