@@ -58,6 +58,9 @@ class Builder:
         # set by Model.ctx while a wall or roof is being built: the texture slot the
         # faces belong to, so the hero tier can sample the same baked pixels
         self.ctx = None
+        # every window pane, for the hero tier's glass: corners, outward normal, what the
+        # room behind it is (its material) and where it sits in its whole window
+        self.panes = []
 
     def slot(self, mat):
         if mat not in self.mats:
@@ -82,6 +85,18 @@ class Builder:
             [fr.p(u0, w, v0), fr.p(u1, w, v0), fr.p(u1, w, v1), fr.p(u0, w, v1)],
             mat, expect=fr.n, meta=meta,
         )
+
+    def pane(self, fr, u0, u1, v0, v1, w, mat, whole=None):
+        """A window pane: the quad the bake sees, recorded for the hero tier's glass too.
+        `whole` is the (u0, u1, v0, v1) of the window it belongs to, when a sash is split into
+        lights by muntins: every light then looks into the same room."""
+        self.fquad(fr, u0, u1, v0, v1, w, mat)
+        wu0, wu1, wv0, wv1 = whole or (u0, u1, v0, v1)
+        uv = lambda u, v: ((u - wu0) / (wu1 - wu0), (v - wv0) / (wv1 - wv0))
+        self.panes.append(dict(
+            pts=[fr.p(u0, w, v0), fr.p(u1, w, v0), fr.p(u1, w, v1), fr.p(u0, w, v1)],
+            uv=[uv(u0, v0), uv(u1, v0), uv(u1, v1), uv(u0, v1)],
+            n=fr.n.copy(), mat=mat, size=(wu1 - wu0, wv1 - wv0)))
 
     def fbox(self, fr, u0, u1, w0, w1, v0, v1, mat, skip=()):
         """Box in a wall frame. `skip` drops hidden faces: '-w', '+u', '-v' ..."""

@@ -152,3 +152,19 @@ HOMES_HERO = Layout(
     reach={'wall': (1.2, 2.6), 'roof': (2.6, 5.0)},
 )
 LAYOUTS['homes-hero'] = HOMES_HERO
+
+
+# Hero towers and blocks (the night city's canyon): the same twelve slots at twice the
+# lean sheet's size, so a close-up gets ~10 px per metre on a block and ~5 on a tower
+# instead of half that. Like the hero houses there is no normal map: mullions, reveals,
+# sills, awnings and fire escapes are geometry here.
+CITY_HERO = Layout(
+    'city-hero', 4096,
+    tiles={
+        'tower': [(1024 * c, 1536 * r, 1024, 1536) for r in range(2) for c in range(4)],
+        'block': [(1024 * c, 3072, 1024, 896) for c in range(4)],
+    },
+    palette_origin=(0, 3992), pitch=32, cols=128, pad=16, gutter=28, margin=16,
+    reach={'wall': (1.8, 3.6), 'roof': (3.6, 6.0)},
+)
+LAYOUTS['city-hero'] = CITY_HERO

@@ -26,6 +26,18 @@ export interface GradeParams {
    * which it thins out. Absent means ordinary distance fog.
    */
   mist?: { strength: number; boost: number; scale: number; base: 'ground' | 'sea' };
+  /**
+   * How much of the high cloud layer in the sky dome is cloud, 0 (clear) to 1 (overcast). The layer
+   * is what the god rays shine through, so it is worth setting where the sun is on screen.
+   */
+  cloud?: number;
+  /**
+   * How wet the ground reads to the traced reflections (post/SSR.ts), 0 dry .. 1 after rain:
+   * paving, asphalt and roofs mirror the lamps, the neon and the cars in patches. Default 0.25.
+   */
+  wet?: number;
+  /** strength of the one-bounce global illumination (post/SSGI.ts). Default 0.8. */
+  bounce?: number;
 }
 
 export interface RigParams {
@@ -46,6 +58,15 @@ export interface RigParams {
    * zero world distance there, gluing the camera to the plane.
    */
   offsetBack: number;
+  /** static dutch tilt in degrees (positive rolls the frame clockwise). Default 0. */
+  dutch?: number;
+  /** how much the camera banks with the flight line's turns, 0 (level horizon) .. 1. Default 0. */
+  bank?: number;
+  /**
+   * raise (+) or lower (−) the look target, world units: a camera riding low with a raised look
+   * target is a hero angle, the houses and towers climbing out of the frame. Default 0.
+   */
+  lookUp?: number;
 }
 
 export interface Chapter {
@@ -62,72 +83,74 @@ export const CHAPTERS: Chapter[] = [
     // ("SENDING EMAIL…") faces the viewer as the plane comes out of it; the
     // CH1→CH2 blend swings the camera around behind for the rest of the flight.
     id: 'desk', t0: 0.0, t1: 0.09,
-    rig: { fov: 38, camLag: 0.012, lookAhead: -0.002, turbAmp: 0.0, offsetUp: 1.45, offsetSide: 1.0, offsetBack: -4.4 },
-    grade: { zenith: '#0a0d18', horizon: '#1a1e2e', sunColor: '#ffb65c', sunIntensity: 0.35, sunDir: [0.3, 0.9, 0.3], fogColor: '#0a0d18', fogNear: 4, fogFar: 40, envIntensity: 0.25 },
+    rig: { fov: 38, camLag: 0.012, lookAhead: -0.002, turbAmp: 0.0, offsetUp: 1.45, offsetSide: 1.0, offsetBack: -4.4, bank: 0 },
+    grade: { zenith: '#0a0d18', horizon: '#1a1e2e', sunColor: '#ffb65c', sunIntensity: 0.35, sunDir: [0.3, 0.9, 0.3], fogColor: '#0a0d18', fogNear: 4, fogFar: 40, envIntensity: 0.25, cloud: 0.35, wet: 0.12, bounce: 1.0 },
   },
   {
     id: 'preflight', t0: 0.09, t1: 0.17,
     // rides high and looks flat, not up the climb: aiming far along a steeply
     // rising path pitched the lens at open sky just as the city should appear
-    rig: { fov: 42, camLag: 0.014, lookAhead: 0.001, turbAmp: 0.02, offsetUp: 2.6, offsetSide: 0.6, offsetBack: 1.8 },
+    rig: { fov: 42, camLag: 0.014, lookAhead: 0.001, turbAmp: 0.02, offsetUp: 2.6, offsetSide: 0.6, offsetBack: 1.8, bank: 0.3 },
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.5, 0.3, 0.35], fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5,
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.5, 0.3, 0.35], fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5, cloud: 0.6, wet: 0.35, bounce: 0.9,
       // fog belongs to the distance: clear streets below the window, the far town
       // sinking into the horizon (the mist term thickens it along the ground only)
       mist: { strength: 1, boost: 1.9, scale: 6, base: 'ground' } },
   },
   {
     id: 'takeoff', t0: 0.17, t1: 0.26,
-    rig: { fov: 55, camLag: 0.020, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 1.1, offsetSide: 0.2, offsetBack: 0.5 },
-    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#7f93b4', fogNear: 80, fogFar: 340, envIntensity: 0.45,
+    // low and closer than the other chapters: the street is a long zone, and at the old 0.020
+    // lag the camera rode eleven units back with the dart a speck between the lamps
+    rig: { fov: 58, camLag: 0.014, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 0.75, offsetSide: 0.45, offsetBack: 0.6, bank: 0.5, lookUp: 0.35 },
+    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#7f93b4', fogNear: 80, fogFar: 340, envIntensity: 0.45, cloud: 0.5, wet: 0.4, bounce: 0.9,
       mist: { strength: 1, boost: 2.1, scale: 7, base: 'ground' } },
   },
   {
     id: 'formation', t0: 0.26, t1: 0.36,
-    rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2 },
-    grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#dcc6a4', fogNear: 100, fogFar: 360, envIntensity: 0.6,
+    rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2, bank: 0.7 },
+    grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#dcc6a4', fogNear: 100, fogFar: 360, envIntensity: 0.6, cloud: 0.55, wet: 0.1, bounce: 0.6,
       mist: { strength: 0.6, boost: 1.4, scale: 6, base: 'ground' } },
   },
   {
     id: 'storm', t0: 0.36, t1: 0.48,
-    rig: { fov: 60, camLag: 0.016, lookAhead: 0.008, turbAmp: 0.55, offsetUp: 0.8, offsetSide: 0.0, offsetBack: 0.4 },
-    grade: { zenith: '#0f1220', horizon: '#3b2e4f', sunColor: '#8a7fb0', sunIntensity: 0.35, sunDir: [0.2, 0.6, -0.3], fogColor: '#1a1530', fogNear: 14, fogFar: 130, envIntensity: 0.2 },
+    rig: { fov: 60, camLag: 0.016, lookAhead: 0.008, turbAmp: 0.55, offsetUp: 0.8, offsetSide: 0.0, offsetBack: 0.4, dutch: 3, bank: 0.5 },
+    grade: { zenith: '#0f1220', horizon: '#3b2e4f', sunColor: '#8a7fb0', sunIntensity: 0.35, sunDir: [0.2, 0.6, -0.3], fogColor: '#1a1530', fogNear: 14, fogFar: 130, envIntensity: 0.2, cloud: 0.9, wet: 0.3, bounce: 0.45 },
   },
   {
     id: 'beacon', t0: 0.48, t1: 0.58,
-    rig: { fov: 46, camLag: 0.026, lookAhead: 0.014, turbAmp: 0.09, offsetUp: 1.8, offsetSide: 1.0, offsetBack: 1.5 },
+    rig: { fov: 46, camLag: 0.026, lookAhead: 0.014, turbAmp: 0.09, offsetUp: 1.8, offsetSide: 1.0, offsetBack: 1.5, bank: 0.35 },
     // fog reaches much further than the other night chapters on purpose: the
     // sea and the freighter standing off it are staged at 80–100 units, and
     // at the old far=115 the ship dissolved into fog colour instead of
     // reading as distance
-    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 40, fogFar: 380, envIntensity: 0.26,
+    grade: { zenith: '#060b12', horizon: '#0e2530', sunColor: '#7fe8d8', sunIntensity: 0.38, sunDir: [-0.2, 0.7, 0.4], fogColor: '#0a1a21', fogNear: 40, fogFar: 380, envIntensity: 0.26, cloud: 0.4, wet: 0.95, bounce: 0.7,
       // sea mist lies on the water; the lighthouse, the sky and the stars stand above it
       mist: { strength: 0.7, boost: 1.2, scale: 2.5, base: 'sea' } },
   },
   {
     id: 'no-fly', t0: 0.58, t1: 0.66,
-    rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.08, offsetUp: 3.6, offsetSide: 0.4, offsetBack: 1.6 },
-    grade: { zenith: '#0a0f1c', horizon: '#141c2e', sunColor: '#aab6d0', sunIntensity: 0.4, sunDir: [-0.3, 0.6, 0.2], fogColor: '#101318', fogNear: 20, fogFar: 200, envIntensity: 0.25 },
+    rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.08, offsetUp: 3.6, offsetSide: 0.4, offsetBack: 1.6, dutch: -1.5, bank: 0.4 },
+    grade: { zenith: '#0a0f1c', horizon: '#141c2e', sunColor: '#aab6d0', sunIntensity: 0.4, sunDir: [-0.3, 0.6, 0.2], fogColor: '#101318', fogNear: 20, fogFar: 200, envIntensity: 0.25, cloud: 0.3, wet: 0.25, bounce: 0.7 },
   },
   {
     id: 'city', t0: 0.66, t1: 0.78,
-    rig: { fov: 62, camLag: 0.018, lookAhead: 0.008, turbAmp: 0.12, offsetUp: 0.9, offsetSide: 0.3, offsetBack: 0.6 },
-    grade: { zenith: '#0b1024', horizon: '#2a2138', sunColor: '#ffc96b', sunIntensity: 0.3, sunDir: [-0.4, 0.5, 0.1], fogColor: '#151a33', fogNear: 14, fogFar: 170, envIntensity: 0.3 },
+    rig: { fov: 62, camLag: 0.018, lookAhead: 0.008, turbAmp: 0.12, offsetUp: 0.65, offsetSide: 0.35, offsetBack: 0.7, bank: 0.5, lookUp: 0.45 },
+    grade: { zenith: '#0b1024', horizon: '#2a2138', sunColor: '#ffc96b', sunIntensity: 0.3, sunDir: [-0.4, 0.5, 0.1], fogColor: '#151a33', fogNear: 14, fogFar: 170, envIntensity: 0.3, cloud: 0.3, wet: 0.85, bounce: 1.25 },
   },
   {
     id: 'copilot', t0: 0.78, t1: 0.88,
-    rig: { fov: 44, camLag: 0.024, lookAhead: 0.014, turbAmp: 0.05, offsetUp: 1.4, offsetSide: 1.2, offsetBack: 1.4 },
-    grade: { zenith: '#05070f', horizon: '#0a0f1c', sunColor: '#9be8ff', sunIntensity: 0.25, sunDir: [-0.5, 0.4, -0.2], fogColor: '#05070f', fogNear: 30, fogFar: 260, envIntensity: 0.15 },
+    rig: { fov: 40, camLag: 0.024, lookAhead: 0.014, turbAmp: 0.05, offsetUp: 1.4, offsetSide: 1.3, offsetBack: 1.6, bank: 0.45 },
+    grade: { zenith: '#05070f', horizon: '#0a0f1c', sunColor: '#9be8ff', sunIntensity: 0.25, sunDir: [-0.5, 0.4, -0.2], fogColor: '#05070f', fogNear: 30, fogFar: 260, envIntensity: 0.15, cloud: 0.1, wet: 0.3, bounce: 0.8 },
   },
   {
     id: 'landing', t0: 0.88, t1: 1.0,
     // tight lag and almost no trail: this chapter ends INSIDE a laptop screen,
     // and at the old 0.018 lag the camera stopped ten units short of it, in
     // the middle of the office, with the payoff a postage stamp in frame
-    rig: { fov: 40, camLag: 0.006, lookAhead: 0.004, turbAmp: 0.02, offsetUp: 0.55, offsetSide: 0.25, offsetBack: 0.5 },
-    grade: { zenith: '#4a5a80', horizon: '#ff9e7a', sunColor: '#ffe8c9', sunIntensity: 1.2, sunDir: [0.7, 0.27, 0.3], fogColor: '#c9a58f', fogNear: 25, fogFar: 200, envIntensity: 0.55 },
+    rig: { fov: 40, camLag: 0.006, lookAhead: 0.004, turbAmp: 0.02, offsetUp: 0.55, offsetSide: 0.25, offsetBack: 0.5, bank: 0.25 },
+    grade: { zenith: '#4a5a80', horizon: '#ff9e7a', sunColor: '#ffe8c9', sunIntensity: 1.2, sunDir: [0.7, 0.27, 0.3], fogColor: '#c9a58f', fogNear: 25, fogFar: 200, envIntensity: 0.55, cloud: 0.5, wet: 0.3, bounce: 1.0 },
   },
 ];
 
@@ -158,6 +181,9 @@ function lerpRig(a: RigParams, b: RigParams, u: number): RigParams {
     offsetUp: lerp(a.offsetUp, b.offsetUp, u),
     offsetSide: lerp(a.offsetSide, b.offsetSide, u),
     offsetBack: lerp(a.offsetBack, b.offsetBack, u),
+    dutch: lerp(a.dutch ?? 0, b.dutch ?? 0, u),
+    bank: lerp(a.bank ?? 0, b.bank ?? 0, u),
+    lookUp: lerp(a.lookUp ?? 0, b.lookUp ?? 0, u),
   };
 }
 

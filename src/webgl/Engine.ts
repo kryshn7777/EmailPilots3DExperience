@@ -30,7 +30,13 @@ import {
   SSAOEffect,
   VignetteEffect,
 } from 'postprocessing';
+import { GodRaysEffect } from './post/GodRays';
 import { ZoomBlurEffect } from './post/ZoomBlur';
+import { CinemaEffect } from './post/Cinema';
+import { SSREffect } from './post/SSR';
+import { SSGIEffect } from './post/SSGI';
+import { DepthNormals } from './post/viewSpace';
+import { ReflectionProbe } from './materials/ReflectionProbe';
 import {
   CONTRAIL_FROM,
   FOLD_WINDOW,
@@ -74,6 +80,9 @@ import { Tooltip } from './interact/Tooltip';
 import { DeliveryPopup } from './interact/DeliveryPopup';
 import { BatchHud } from './interact/BatchHud';
 import { SkyDome } from './materials/SkyDome';
+import { REFLECTED_LAYER } from './materials/PlanarReflection';
+import { windowLight } from './materials/WindowGlass';
+import { CloudNoise } from './bake/CloudNoise';
 import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
 import { asset } from './asset';
@@ -119,7 +128,9 @@ export class Engine {
   private flock!: Flock;
   private launchString = new LaunchString();
   private rig: CameraRig;
-  private sky = new SkyDome();
+  /** the 3D noise the sky layer and the cloud slab both read; filled by a worker a moment after boot */
+  private noise = new CloudNoise();
+  private sky = new SkyDome(this.noise);
   private sun = new DirectionalLight('#ffd9a0', 1);
   private hemi = new HemisphereLight('#8fa8cc', '#1a1e2e', 0.35);
   private desk: Desk;
@@ -137,6 +148,16 @@ export class Engine {
   private batch: BatchSend;
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
+  /** letterbox, grain, film curve; DoF + chromatic aberration on HIGH (post/Cinema.ts). Null under ?nocine */
+  private cinema: CinemaEffect | null = null;
+  private godRays: GodRaysEffect | null = null;
+  private ssr: SSREffect | null = null;
+  private ssgi: SSGIEffect | null = null;
+  private depthNormals: DepthNormals | null = null;
+  /** the live reflection of the surroundings that car paint and window glass mirror (HIGH) */
+  private envProbe: ReflectionProbe | null = null;
+  /** the grade's sun level this frame (0 dark .. ~1.6 noon): god rays follow it */
+  private sunLevel = 0;
   private blurLevel = 0;
   private scrubVel = 0;
   private city: City;
@@ -216,6 +237,8 @@ export class Engine {
       shadow.radius = 2.5;
     }
 
+    if (this.quality.tier === 'high' && !UNLIT) this.envProbe = new ReflectionProbe(256);
+
     this.fog = new Fog('#05070f', 10, 90);
     this.scene.fog = this.fog;
     this.camera = new PerspectiveCamera(45, 1, 0.1, 400);
@@ -264,13 +287,15 @@ export class Engine {
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
     this.mountains = new Mountains(this.sky);
-    this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer);
+    this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer, this.noise);
     this.envelopes = new Envelopes(this.raycast, this.tooltip);
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
+    // what the sea mirrors: the sky, and the lights that light the lighthouse and the ship in it
+    for (const o of [this.sky.mesh, this.sun, this.hemi]) o.layers.enable(REFLECTED_LAYER);
     this.city = new City(new Vector3(...CITY_ANCHOR), this.path, this.quality);
     this.copilot = new Copilot(new Vector3(...COPILOT_ANCHOR));
     // fixed roll-out point, not a story-t sample: the flight now turns off
@@ -316,7 +341,7 @@ export class Engine {
     );
     if (this.clouds.volume) this.scene.add(this.clouds.volume);
 
-    this.rig = new CameraRig(this.path, this.camera, this.plane);
+    this.rig = new CameraRig(this.path, this.camera, this.plane, { reducedMotion: this.options.reducedMotion });
 
     this.composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -330,6 +355,18 @@ export class Engine {
     if (this.quality.tier === 'high' && !UNLIT) {
       const normalPass = new NormalPass(this.scene, this.camera);
       this.composer.addPass(normalPass);
+      // Light the frame can see bounces off what it lands on (SSGI, before the occlusion takes its
+      // share back), and reflections are traced through the depth buffer (SSR, after it): the
+      // screen-space versions of what Lumen and hardware ray tracing do, built on the same normal
+      // buffer the ambient occlusion reads. ?nogi / ?nossr leave them out for an A/B.
+      const params = new URLSearchParams(location.search);
+      // both read normals rebuilt from depth (post/viewSpace.ts), shared and made once a frame
+      this.depthNormals = new DepthNormals();
+      if (!params.has('nogi')) {
+        this.ssgi = new SSGIEffect(this.camera, this.depthNormals);
+        effects.push(this.ssgi);
+      }
+      this.ssr = params.has('nossr') ? null : new SSREffect(this.camera, this.depthNormals);
       effects.push(
         new SSAOEffect(this.camera, normalPass.texture, {
           blendFunction: BlendFunction.MULTIPLY,
@@ -346,14 +383,28 @@ export class Engine {
           fade: 0.02,
         }),
       );
+      if (this.ssr) effects.push(this.ssr);
     }
     // bloom is a mip chain over the whole frame and it exists to sell light —
     // blockout mode keeps only the scroll blur and the vignette
     if (!UNLIT) {
       effects.push(new BloomEffect({ luminanceThreshold: 0.85, intensity: 1.1, mipmapBlur: true }));
     }
+    // sun shafts go in before the zoom blur, so a fast scrub streaks them with everything else
+    if (this.quality.godRays && !new URLSearchParams(location.search).has('norays')) {
+      this.godRays = new GodRaysEffect(this.quality.godRays);
+      effects.push(this.godRays);
+    }
     effects.push(this.zoomBlur, new VignetteEffect({ darkness: 0.55 }));
+    // the lens and the film stock (post/Cinema.ts), last in the chain: letterbox, grain and a highlight
+    // shoulder on every tier, merged into this pass for free; HIGH adds depth of field and chromatic
+    // aberration, which read neighbouring pixels and so take one more pass. ?nocine leaves it out.
+    if (!UNLIT && !new URLSearchParams(location.search).has('nocine')) {
+      this.cinema = new CinemaEffect({ optics: this.quality.tier === 'high' });
+      if (!this.cinema.optics) effects.push(this.cinema);
+    }
     this.composer.addPass(new EffectPass(this.camera, ...effects));
+    if (this.cinema?.optics) this.composer.addPass(new EffectPass(this.camera, this.cinema));
 
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -499,6 +550,8 @@ export class Engine {
     this.sky.horizon.copy(this.colorA);
 
     const sunLevel = num((g) => g.sunIntensity);
+    this.sunLevel = sunLevel;
+    this.sky.cloud = num((g) => g.cloud ?? 0);
     // clouds dim with the sun so the storm reads dark, not milky
     const cloudBrightness = MathUtils.clamp(0.3 + (sunLevel / 1.6) * 0.7, 0.3, 1);
 
@@ -506,6 +559,8 @@ export class Engine {
     this.sky.sunColor.copy(this.colorA);
     this.sun.color.copy(this.colorA);
     this.clouds.sunColor.copy(this.colorA).multiplyScalar(cloudBrightness);
+
+    this.clouds.skyColor.copy(this.sky.zenith).lerp(this.sky.horizon, 0.3);
 
     this.blend(from.fogColor, to.fogColor, u);
     this.fog.color.copy(this.colorA);
@@ -559,9 +614,15 @@ export class Engine {
       MathUtils.lerp(lo.scale, hi.scale, u),
       MathUtils.lerp(lo.boost, hi.boost, u),
     );
+    if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
+    if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
     // materials with their own envMap ignore the line above
     KitCity.setEnvIntensity(this.scene.environmentIntensity);
+    // the rooms behind the close-up windows: daylight through the glass, and their lamps, which
+    // are only worth seeing once the day has gone (by day a lit room is a faint warmth)
+    windowLight.day.value = MathUtils.smoothstep(sunLevel, 0.4, 1.4);
+    windowLight.lamp.value = 0.3 + 0.7 * this.lampLevel;
   }
 
   /**
@@ -666,6 +727,8 @@ export class Engine {
     shot.position.set(147.6, 24.2, 0.9);
     shot.look.copy(this.lanternCentre);
 
+    // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
+    this.rig.jolt = this.idlePreset ? 0 : this.storm.flash;
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -704,6 +767,15 @@ export class Engine {
       this.maneuverPulse = 0;
     }
 
+    // the lens: bars and focus come from the rig's shot list (none on the sub-page orbits); the
+    // corners split a little more while a fast scrub streaks the frame
+    if (this.cinema) {
+      const idle = this.idlePreset !== null;
+      this.cinema.letterbox = idle ? 0 : this.rig.cine.bars;
+      const focus = idle ? this.camera.position.distanceTo(this.plane.group.position) : this.rig.cine.focus;
+      this.cinema.frame(focus, idle ? 1.2 : this.rig.cine.bokeh, 1.4 + this.blurLevel * 14);
+    }
+
     // sun follows the plane so the directional light never runs out of range
     this.sun.target.position.copy(this.rig.planeWorldPos);
     if (this.sun.castShadow) {
@@ -720,6 +792,7 @@ export class Engine {
 
     this.sky.followCamera(this.camera.position);
     this.sky.flash = this.storm.flash;
+    this.sky.time = time;
 
     // sun direction in view space for the sprite lighting gradient
     this.tmpV.copy(this.sunDirWorld).transformDirection(this.camera.matrixWorldInverse);
@@ -844,9 +917,11 @@ export class Engine {
     if (hook) {
       this.camera.position.set(hook.p[0]!, hook.p[1]!, hook.p[2]!);
       this.camera.lookAt(hook.l[0]!, hook.l[1]!, hook.l[2]!);
+      this.sky.followCamera(this.camera.position);
     }
     // the delivery readout, pinned to the lamp
     this.camera.updateMatrixWorld();
+    this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
     this.city.update(t, time, this.rig.planeWorldPos);
@@ -872,7 +947,16 @@ export class Engine {
     }
     this.airTrail.update(t, time, this.path, this.plane.group.position);
 
+    this.beacon.renderReflection(this.renderer, this.scene, this.camera);
+    this.depthNormals?.invalidate();
     this.composer.render();
+    // The probe works where there is something wet or glossy to mirror it: the town, the city, and the
+    // rain-soaked lighthouse.
+    // It draws after the frame, when every light that just came into view has its shadow map (the
+    // probe's own renders do not redraw them).
+    const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
+      : t > 0.46 && t < 0.6 ? this.beacon.group.position.y + 1.5 : null;
+    this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
 
     if (this.warming) return; // silent warm-up frames: no chrome events
     if (!this.firstFrameDone) {
@@ -883,6 +967,38 @@ export class Engine {
   }
 
   private firstFrameDone = false;
+
+  /** what hangs in front of the probe and must stay out of the reflections it gives */
+  private get probeHidden(): Object3D[] {
+    return [
+      this.plane.group, this.trail.line, this.airTrail.mesh, this.flock.group, this.launchString.line,
+      this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
+    ];
+  }
+
+  private sunNdc = new Vector3();
+  private sunUv = new Vector2();
+
+  /**
+   * Points the shaft pass at the sun. Strength is how much of the sun there is to see: it needs a bright
+   * grade (night chapters have a moon, not a sun), it must be in front of the lens, and it fades out as it
+   * slips off the edge of the frame — shafts reach well past the edge, so it is a long fade.
+   */
+  private updateGodRays(): void {
+    if (!this.godRays) return;
+    const camera = this.camera;
+    this.tmpV.copy(camera.position).addScaledVector(this.sunDirWorld, 200).project(camera);
+    const ndc = this.sunNdc.copy(this.tmpV);
+    camera.getWorldDirection(this.tmpV2);
+    const facing = this.tmpV2.dot(this.sunDirWorld);
+    const offscreen = Math.max(Math.abs(ndc.x), Math.abs(ndc.y));
+    const strength =
+      MathUtils.smoothstep(this.sunLevel, 0.55, 1.1) *
+      MathUtils.smoothstep(facing, 0.05, 0.4) *
+      (1 - MathUtils.smoothstep(offscreen, 1.2, 2.2));
+    this.sunUv.set(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
+    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5);
+  }
 
   private loop = (): void => {
     if (this.disposed) return;
@@ -941,6 +1057,7 @@ export class Engine {
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.composer.setSize(clientWidth, clientHeight);
+    if (this.cinema) this.cinema.pixelRatio = dpr;
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     if (this.options.reducedMotion) this.composer.render();
@@ -963,6 +1080,9 @@ export class Engine {
     this.deliveryPopup.dispose();
     this.batchHud.dispose();
     this.composer.dispose();
+    this.envProbe?.dispose();
+    this.depthNormals?.dispose();
+    this.noise.dispose();
     this.plane.dispose();
     this.trail.dispose();
     this.airTrail.dispose();

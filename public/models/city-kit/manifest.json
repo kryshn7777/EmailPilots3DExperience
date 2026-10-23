@@ -13,6 +13,186 @@
   },
   "modules": [
     {
+      "id": "skyscraper-glass-a-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-glass-a",
+      "lod": "hero",
+      "lod0": "skyscraper-glass-a-hero.lod0.glb",
+      "footprint": [
+        0.519,
+        0.427
+      ],
+      "height": 2.9,
+      "tris0": 17536,
+      "density": 10.43
+    },
+    {
+      "id": "skyscraper-glass-b-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-glass-b",
+      "lod": "hero",
+      "lod0": "skyscraper-glass-b-hero.lod0.glb",
+      "footprint": [
+        0.523,
+        0.393
+      ],
+      "height": 2.8,
+      "tris0": 19016,
+      "density": 9.63
+    },
+    {
+      "id": "skyscraper-deco-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-deco",
+      "lod": "hero",
+      "lod0": "skyscraper-deco-hero.lod0.glb",
+      "footprint": [
+        0.539,
+        0.436
+      ],
+      "height": 2.9,
+      "tris0": 98898,
+      "density": 9.35
+    },
+    {
+      "id": "skyscraper-stone-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-stone",
+      "lod": "hero",
+      "lod0": "skyscraper-stone-hero.lod0.glb",
+      "footprint": [
+        0.61,
+        0.61
+      ],
+      "height": 2.6,
+      "tris0": 164664,
+      "density": 12.03
+    },
+    {
+      "id": "skyscraper-twin-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-twin",
+      "lod": "hero",
+      "lod0": "skyscraper-twin-hero.lod0.glb",
+      "footprint": [
+        0.667,
+        0.445
+      ],
+      "height": 2.7,
+      "tris0": 20010,
+      "density": 10.05
+    },
+    {
+      "id": "skyscraper-slab-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-slab",
+      "lod": "hero",
+      "lod0": "skyscraper-slab-hero.lod0.glb",
+      "footprint": [
+        1.15,
+        0.66
+      ],
+      "height": 2.3,
+      "tris0": 56088,
+      "density": 11.0
+    },
+    {
+      "id": "skyscraper-needle-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-needle",
+      "lod": "hero",
+      "lod0": "skyscraper-needle-hero.lod0.glb",
+      "footprint": [
+        0.31,
+        0.31
+      ],
+      "height": 2.9,
+      "tris0": 22066,
+      "density": 10.3
+    },
+    {
+      "id": "skyscraper-crown-hero",
+      "kind": "tower",
+      "sheet": "hero-towers",
+      "lean": "skyscraper-crown",
+      "lod": "hero",
+      "lod0": "skyscraper-crown-hero.lod0.glb",
+      "footprint": [
+        0.506,
+        0.506
+      ],
+      "height": 2.7,
+      "tris0": 130182,
+      "density": 10.17
+    },
+    {
+      "id": "block-brick-hero",
+      "kind": "block",
+      "sheet": "hero-towers",
+      "lean": "block-brick",
+      "lod": "hero",
+      "lod0": "block-brick-hero.lod0.glb",
+      "footprint": [
+        0.816,
+        0.612
+      ],
+      "height": 1.35,
+      "tris0": 34092,
+      "density": 16.06
+    },
+    {
+      "id": "block-podium-hero",
+      "kind": "block",
+      "sheet": "hero-towers",
+      "lean": "block-podium",
+      "lod": "hero",
+      "lod0": "block-podium-hero.lod0.glb",
+      "footprint": [
+        1.03,
+        0.773
+      ],
+      "height": 1.7,
+      "tris0": 17924,
+      "density": 11.8
+    },
+    {
+      "id": "block-loft-hero",
+      "kind": "block",
+      "sheet": "hero-towers",
+      "lean": "block-loft",
+      "lod": "hero",
+      "lod0": "block-loft-hero.lod0.glb",
+      "footprint": [
+        0.721,
+        0.577
+      ],
+      "height": 1.25,
+      "tris0": 23178,
+      "density": 17.83
+    },
+    {
+      "id": "block-mansard-hero",
+      "kind": "block",
+      "sheet": "hero-towers",
+      "lean": "block-mansard",
+      "lod": "hero",
+      "lod0": "block-mansard-hero.lod0.glb",
+      "footprint": [
+        0.894,
+        0.543
+      ],
+      "height": 1.15,
+      "tris0": 18738,
+      "density": 18.96
+    },
+    {
       "id": "skyscraper-glass-a",
       "kind": "tower",
       "sheet": "main",
@@ -168,5 +348,19 @@
       "tris0": 48,
       "density": 9.47
     }
-  ]
+  ],
+  "sheets": {
+    "hero-towers": {
+      "atlas": {
+        "color": "atlas-hero-towers-color.webp",
+        "orm": "atlas-hero-towers-orm.webp",
+        "low": {
+          "color": "atlas-hero-towers-color-low.webp",
+          "orm": "atlas-hero-towers-orm-low.webp",
+          "emissive": "atlas-hero-towers-emissive-low.webp"
+        },
+        "emissive": "atlas-hero-towers-emissive.webp"
+      }
+    }
+  }
 }

@@ -14,9 +14,10 @@
     "setup:assets": "node scripts/fetch-hdri.mjs",
     "bake:city": "node scripts/bake-city.mjs",
     "bake:rings": "node scripts/bake-city-rings.mjs",
-    "build:buildings": "python blender/make_buildings.py --set city && python blender/make_buildings.py --set homes",
+    "build:buildings": "python blender/make_buildings.py --set city && python blender/make_buildings.py --set homes && node scripts/compress-models.mjs",
     "build:ground": "python blender/make_ground.py",
-    "build:clouds": "python blender/make_cloud_env.py"
+    "build:clouds": "python blender/make_cloud_env.py",
+    "compress:models": "node scripts/compress-models.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.2",

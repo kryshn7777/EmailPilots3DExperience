@@ -27,6 +27,11 @@ void main() {
   const vec4 W4 = vec4(82.0, 12.5, 0.20, 0.66);
   const vec4 W5 = vec4(40.0, 12.0, 0.15, 0.60);
 
+  // the swell comes in groups: gusts and lulls drifting across the sea, so it never looks like one even pattern
+  float gust = 0.82
+             + 0.18 * sin(dot(p, vec2(0.0113, 0.0071)) + uTime * 0.05)
+             + 0.1 * sin(dot(p, vec2(-0.017, 0.013)) - uTime * 0.037);
+
   vec3 disp = vec3(0.0);
   float nx = 0.0, nz = 0.0, ny = 0.0;
   float jxx = 0.0, jzz = 0.0, jxz = 0.0;
@@ -41,7 +46,7 @@ void main() {
     float omega = 1.0 * sqrt(6.5 * k);
     float phase = k * dot(d, p) - omega * uTime + float(i) * 1.7;
     float s = sin(phase), c = cos(phase);
-    float A = w.z, Q = w.w;
+    float A = w.z * gust, Q = w.w;
 
     disp.x += Q * A * d.x * c;
     disp.z += Q * A * d.y * c;

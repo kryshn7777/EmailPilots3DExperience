@@ -80,6 +80,11 @@ export class CityStreet {
   private disposables: { dispose(): void }[] = [];
   /** plaza rectangles (centre, size, side), exposed for the lights and the cars */
   readonly plazas: { x0: number; x1: number; z0: number; z1: number }[] = [];
+  /**
+   * Where the street trees stand. They are real trees from the homes set (branching trunks and
+   * leaf cards, see City `buildTrees`), so this only decides where; `s` is a size factor.
+   */
+  readonly trees: { x: number; z: number; yaw: number; s: number }[] = [];
 
   constructor(footprints: Footprint[], quality: Quality) {
     const rand = mulberry32(8855);
@@ -188,13 +193,14 @@ export class CityStreet {
     }
 
     // ---- prop geometry -----------------------------------------------------------------------
+    this.trees.push(...place.tree!);
+    // a grate of iron in the paving at the foot of every street tree
+    place.grate = place.tree!.map((t) => ({ x: t.x, z: t.z, yaw: 0, s: 1 }));
     const kinds: Record<string, BufferGeometry> = {
-      tree: prop([
-        [cyl(0.03, 0.05, 0.62, 0, 0.31, 0, 6), '#4a3626'],
-        [new IcosahedronGeometry(0.4, 1).scale(1, 0.85, 1).translate(0, 0.95, 0), '#2f5a33'],
-        [new IcosahedronGeometry(0.28, 1).translate(0.25, 0.78, 0.12), '#3b6b3a'],
-        [new IcosahedronGeometry(0.26, 1).translate(-0.22, 0.82, -0.14), '#285030'],
-        [new IcosahedronGeometry(0.24, 1).translate(0.04, 1.28, -0.04), '#3f7040'],
+      grate: prop([
+        [box(0.62, 0.012, 0.62, 0, 0.012, 0), '#2a2c30'],
+        [box(0.5, 0.016, 0.5, 0, 0.014, 0), '#1b1c20'],
+        [box(0.16, 0.02, 0.16, 0, 0.016, 0), '#3a3026'],
       ]),
       bench: prop([
         [box(0.6, 0.025, 0.17, 0, 0.17, 0), '#74502f'],

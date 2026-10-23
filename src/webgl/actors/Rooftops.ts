@@ -24,9 +24,13 @@ import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCi
 import { Fences } from './Fences';
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
+import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { Yards } from './Yards';
 import { Pools } from './Pools';
 import { TownLight } from './TownLight';
+import { StreetFurniture } from './StreetFurniture';
+import { Pedestrians } from './Pedestrians';
+import { townCrowd } from './PedestrianPlans';
 import { mulberry32 } from '../util';
 import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
@@ -60,6 +64,8 @@ export class Rooftops {
   private yards: Yards | null = null;
   private pools: Pools | null = null;
   private townLight: TownLight | null = null;
+  private furniture: StreetFurniture | null = null;
+  private people: Pedestrians | null = null;
   private lamps: Streetlights | null = null;
   private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
@@ -208,11 +214,13 @@ export class Rooftops {
   /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
   update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
+    KitCity.tick(time);
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
     // the pools of lamplight painted on the streets fade with the lamps
     if (this.groundMaterial) this.groundMaterial.emissiveIntensity = 0.5 * night;
     this.cars?.update(time);
+    this.people?.update(time);
     this.yards?.update(time);
     this.pools?.update(time, night);
     if (eye) this.townLight?.update(night, eye);
@@ -249,6 +257,7 @@ export class Rooftops {
     };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
     this.buildCars(lots as KitLot[], kinds, quality);
+    this.buildFurniture(quality);
     // the wet-night look: lamps doubled in the road, puddles that mirror the sky, window light on the
     // lawns (HIGH tier)
     if (quality.tier === 'high' && this.lamps && this.sites) {
@@ -290,8 +299,11 @@ export class Rooftops {
       });
     }
     this.cars = new StreetCars(quality, spots);
+    // paint, chrome and windscreens mirror the street itself (the live probe, HIGH)
+    if (ReflectionProbe.current) this.cars.setEnvMap(ReflectionProbe.current.texture);
     this.cars.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.cars.group);
+    this.buildPeople(lots, kinds, spots, quality);
 
     // Yard details for every house the flight passes over: beds, patios, pools,
     // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
@@ -318,13 +330,40 @@ export class Rooftops {
     }
   }
 
+  /** Hydrants, stop signs, bins out for collection, bus shelters: the street's own furniture. */
+  private buildFurniture(quality: Quality): void {
+    if (!this.sites) return;
+    const path = this.pathSamples();
+    const reach = quality.tier === 'high' ? 80 : 45;
+    const at = new Vector3();
+    this.furniture = new StreetFurniture(this.sites.houses, (x, z) => {
+      at.set(x, ROOFTOP_BASE_Y, z);
+      for (const c of path) if (c.distanceToSquared(at) < reach * reach) return true;
+      return false;
+    }, quality.tier);
+    this.furniture.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.furniture.group);
+  }
+
+  /**
+   * People on the sidewalks near the flight (thickest on the street it flies down), up and down
+   * front walks, on porches and by their cars (see PedestrianPlans.townCrowd).
+   */
+  private buildPeople(lots: KitLot[], kinds: Map<string, string>, spots: { x: number; z: number; yaw: number }[], quality: Quality): void {
+    this.people = new Pedestrians(quality, townCrowd(lots, kinds, spots, this.pathSamples(), quality));
+    this.people.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.people.group);
+  }
+
   dispose(): void {
     this.kitCity?.dispose();
     this.fences?.dispose();
     this.cars?.dispose();
+    this.people?.dispose();
     this.yards?.dispose();
     this.pools?.dispose();
     this.townLight?.dispose();
+    this.furniture?.dispose();
     this.lamps?.dispose();
     for (const d of this.disposables) d.dispose();
   }

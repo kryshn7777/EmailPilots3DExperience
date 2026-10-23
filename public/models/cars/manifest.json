@@ -5,21 +5,22 @@
    "file": "sedan.glb",
    "hi": "sedan-hi.glb",
    "tris": 1472,
-   "hiTris": 7420,
+   "hiTris": 10820,
    "length": 1.551,
    "width": 0.601,
    "height": 0.482,
    "wheelbase": 0.908,
    "nose": 0.776,
    "tail": -0.776,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.759,
+     0.785,
      0.21,
      0.222
     ],
     "tail": [
-     -0.759,
+     -0.785,
      0.222,
      0.265
     ]
@@ -54,21 +55,22 @@
    "file": "hatch.glb",
    "hi": "hatch-hi.glb",
    "tris": 1424,
-   "hiTris": 7428,
+   "hiTris": 10540,
    "length": 1.304,
    "width": 0.574,
    "height": 0.488,
    "wheelbase": 0.809,
    "nose": 0.652,
    "tail": -0.652,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.635,
+     0.662,
      0.201,
      0.216
     ],
     "tail": [
-     -0.635,
+     -0.662,
      0.212,
      0.264
     ]
@@ -103,21 +105,22 @@
    "file": "suv.glb",
    "hi": "suv-hi.glb",
    "tris": 1424,
-   "hiTris": 7900,
+   "hiTris": 11804,
    "length": 1.584,
    "width": 0.634,
    "height": 0.568,
    "wheelbase": 0.941,
    "nose": 0.792,
    "tail": -0.792,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.776,
+     0.802,
      0.222,
      0.273
     ],
     "tail": [
-     -0.776,
+     -0.802,
      0.234,
      0.432
     ]
@@ -152,21 +155,22 @@
    "file": "pickup.glb",
    "hi": "pickup-hi.glb",
    "tris": 1472,
-   "hiTris": 7744,
+   "hiTris": 10660,
    "length": 1.749,
    "width": 0.647,
    "height": 0.574,
    "wheelbase": 1.073,
    "nose": 0.875,
    "tail": -0.875,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.858,
+     0.884,
      0.226,
      0.283
     ],
     "tail": [
-     -0.858,
+     -0.884,
      0.239,
      0.267
     ]
@@ -201,23 +205,24 @@
    "file": "van.glb",
    "hi": "van-hi.glb",
    "tris": 1400,
-   "hiTris": 7386,
+   "hiTris": 10214,
    "length": 1.766,
    "width": 0.667,
    "height": 0.706,
    "wheelbase": 1.089,
    "nose": 0.883,
    "tail": -0.883,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.866,
+     0.893,
      0.233,
      0.282
     ],
     "tail": [
-     -0.866,
+     -0.893,
      0.247,
-     0.294
+     0.327
     ]
    },
    "wheelRadius": 0.1155,
@@ -250,21 +255,22 @@
    "file": "taxi.glb",
    "hi": "taxi-hi.glb",
    "tris": 1484,
-   "hiTris": 7504,
+   "hiTris": 9904,
    "length": 1.551,
    "width": 0.601,
    "height": 0.482,
    "wheelbase": 0.908,
    "nose": 0.776,
    "tail": -0.776,
+   "exotic": false,
    "lamp": {
     "head": [
-     0.759,
+     0.785,
      0.21,
      0.222
     ],
     "tail": [
-     -0.759,
+     -0.785,
      0.222,
      0.265
     ]
@@ -291,6 +297,156 @@
      -0.4538,
      0.1089,
      0.2376
+    ]
+   ]
+  },
+  {
+   "id": "supercar",
+   "file": "supercar.glb",
+   "hi": "supercar-hi.glb",
+   "tris": 1532,
+   "hiTris": 12684,
+   "length": 1.492,
+   "width": 0.653,
+   "height": 0.383,
+   "wheelbase": 0.865,
+   "nose": 0.746,
+   "tail": -0.746,
+   "exotic": true,
+   "lamp": {
+    "head": [
+     0.706,
+     0.242,
+     0.185
+    ],
+    "tail": [
+     -0.756,
+     0.229,
+     0.276
+    ]
+   },
+   "wheelRadius": 0.1122,
+   "wheelWidth": 0.0908,
+   "wheelOffsets": [
+    [
+     0.4323,
+     0.1122,
+     -0.2722
+    ],
+    [
+     0.4323,
+     0.1122,
+     0.2722
+    ],
+    [
+     -0.4323,
+     0.1122,
+     -0.2722
+    ],
+    [
+     -0.4323,
+     0.1122,
+     0.2722
+    ]
+   ]
+  },
+  {
+   "id": "gt",
+   "file": "gt.glb",
+   "hi": "gt-hi.glb",
+   "tris": 1568,
+   "hiTris": 12534,
+   "length": 1.551,
+   "width": 0.65,
+   "height": 0.422,
+   "wheelbase": 0.898,
+   "nose": 0.776,
+   "tail": -0.776,
+   "exotic": true,
+   "lamp": {
+    "head": [
+     0.729,
+     0.241,
+     0.205
+    ],
+    "tail": [
+     -0.785,
+     0.25,
+     0.269
+    ]
+   },
+   "wheelRadius": 0.1172,
+   "wheelWidth": 0.0875,
+   "wheelOffsets": [
+    [
+     0.4488,
+     0.1172,
+     -0.269
+    ],
+    [
+     0.4488,
+     0.1172,
+     0.269
+    ],
+    [
+     -0.4488,
+     0.1172,
+     -0.269
+    ],
+    [
+     -0.4488,
+     0.1172,
+     0.269
+    ]
+   ]
+  },
+  {
+   "id": "hyper",
+   "file": "hyper.glb",
+   "hi": "hyper-hi.glb",
+   "tris": 1616,
+   "hiTris": 12048,
+   "length": 1.518,
+   "width": 0.647,
+   "height": 0.393,
+   "wheelbase": 0.881,
+   "nose": 0.759,
+   "tail": -0.759,
+   "exotic": true,
+   "lamp": {
+    "head": [
+     0.719,
+     0.246,
+     0.172
+    ],
+    "tail": [
+     -0.769,
+     0.259,
+     0.281
+    ]
+   },
+   "wheelRadius": 0.1155,
+   "wheelWidth": 0.0924,
+   "wheelOffsets": [
+    [
+     0.4405,
+     0.1155,
+     -0.269
+    ],
+    [
+     0.4405,
+     0.1155,
+     0.269
+    ],
+    [
+     -0.4405,
+     0.1155,
+     -0.269
+    ],
+    [
+     -0.4405,
+     0.1155,
+     0.269
     ]
    ]
   }

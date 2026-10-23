@@ -14,7 +14,7 @@ SCALE = 0.33   # site units per metre
 def S(wall, **kw):
     """A wall spec with the house defaults."""
     return dict(dict(wall=wall, found=(0.5, 'concrete_d'), floor_h=2.7, trim='trim_white',
-                     lit=0.32), **kw)
+                     lit=0.32, grille=(2, 2), boxes=0.0), **kw)
 
 
 def gable_end(wall, L, floors=1, fh=2.7, **kw):
@@ -35,8 +35,8 @@ def cottage():
     wall = 'siding_cream'
     house_block(
         m, 0, 0, w, d, 0, ze,
-        dict(S=S(wall, openings=[win(1.5, w=1.1, shutters=True), door(w / 2),
-                                 win(w - 1.5, w=1.1, shutters=True)]),
+        dict(S=S(wall, boxes=0.9, openings=[win(1.5, w=1.1, shutters=True), door(w / 2),
+                                            win(w - 1.5, w=1.1, shutters=True)]),
              E=gable_end(wall, d), W=gable_end(wall, d),
              N=S(wall, openings=row(w, 3, 0, w=1.0))),
         dict(kind='gable', mat='shingle_brn_hi', pitch=pitch, oh=0.45, rake=0.3), 'b')
@@ -51,7 +51,7 @@ def colonial():
     ze = 2 * fh
     wall = 'brick_h_red'
     sh = dict(shutters=True, w=1.0, h=1.5)
-    front = S(wall, floor_h=fh, openings=(
+    front = S(wall, floor_h=fh, grille=(3, 2), boxes=0.5, openings=(
         [win(u, 0, **sh) for u in (1.9, 3.6, 7.4, 9.1)] + [door(w / 2, mat='door_blue')] +
         [win(u, 1, **sh) for u in (1.9, 3.6, w / 2, 7.4, 9.1)]))
     back = S(wall, floor_h=fh, openings=row(w, 4, 0, w=1.0) + row(w, 4, 1, w=1.0))
@@ -69,8 +69,9 @@ def ranch():
     m = Model('home-ranch', 'house', scale=SCALE)
     w, d, ze, pitch = 11.0, 8.0, 2.9, 0.36
     wall = 'siding_gray'
-    front = S(wall, openings=[win(1.7, w=1.1), win(4.2, w=1.9, h=1.5), door(7.2, mat='door_red'),
-                              win(9.6, w=1.1)], shutter='shutter')
+    front = S(wall, grille=None, boxes=0.4, openings=[win(1.7, w=1.1), win(4.2, w=1.9, h=1.5),
+                                                      door(7.2, mat='door_red'), win(9.6, w=1.1)],
+              shutter='shutter')
     house_block(m, 0, 0, w, d, 0, ze,
                 dict(S=front, E=plain(wall, openings=[win(d / 2)]), W=plain(wall),
                      N=S(wall, openings=row(w, 4, 0, w=1.0))),
@@ -90,7 +91,7 @@ def farmhouse():
     w, d, fh, pitch = 9.0, 7.5, 2.7, 0.75
     ze = 2 * fh
     wall = 'siding_white'
-    front = S(wall, floor_h=fh, attic=True, openings=(
+    front = S(wall, floor_h=fh, attic=True, boxes=0.5, openings=(
         [win(2.0, 0, w=1.0, h=1.6), door(w / 2, mat='door_green'), win(7.0, 0, w=1.0, h=1.6)] +
         [win(u, 1, w=0.9, h=1.5) for u in (2.2, w / 2, 6.8)]))
     side = gable_end(wall, d, floors=2, fh=fh)
@@ -110,7 +111,7 @@ def craftsman():
     m = Model('home-craftsman', 'house', scale=SCALE)
     w, d, ze, pitch = 12.0, 8.5, 3.2, 0.38
     wall = 'siding_sage'
-    front = S(wall, found=(1.0, 'fieldstone'), floor_h=3.0, trim='trim_white', openings=[
+    front = S(wall, found=(1.0, 'fieldstone'), floor_h=3.0, trim='trim_white', grille=(3, 1, 'top'), openings=[
         win(1.8, w=1.8, h=1.5, sill=1.0), win(4.0, w=1.8, h=1.5, sill=1.0),
         door(7.4, mat='door_red'), win(10.3, w=1.1, h=1.5, sill=1.0)])
     house_block(m, 0, 0, w, d, 0, ze,
@@ -129,7 +130,7 @@ def victorian():
     w, d, fh, pitch = 8.5, 7.5, 2.9, 0.95
     ze = 2 * fh
     tall = dict(w=0.9, h=1.8, sill=0.55)
-    front = S('siding_blue', floor_h=fh, attic=True, openings=(
+    front = S('siding_blue', floor_h=fh, attic=True, grille=(1, 2), boxes=0.4, openings=(
         [win(1.8, 0, **tall), door(w / 2, mat='door_red'), win(w - 1.8, 0, **tall)] +
         [win(u, 1, **tall) for u in (1.8, w / 2, w - 1.8)]))
     side = gable_end('siding_blue', d, floors=2, fh=fh)
@@ -172,20 +173,20 @@ def terrace():
 
 def modern():
     m = Model('home-modern', 'house', scale=SCALE)
-    lower = S('stucco_white', floor_h=3.1, trim='trim_dark', corners=False, found=(0.3, 'concrete_d'),
+    lower = S('stucco_white', floor_h=3.1, trim='trim_dark', corners=False, found=(0.3, 'concrete_d'), grille=None,
               openings=[win(2.4, w=3.2, h=2.3, sill=0.3), door(6.4, w=1.2, mat='door_blue'),
                         win(10.6, w=3.2, h=2.3, sill=0.3)], lit=0.5)
     flat = dict(kind='flat', flat=dict(parapet=0.35, mat='roof_membrane', margin=0.8,
                                        items=dict(solar=2.0, vent=1.5, skylight=1.5)))
     house_block(m, 0, 0, 14, 9, 0, 3.1,
-                dict(S=lower, E=plain('stucco_white', openings=[win(4.5, w=2.2, h=2.0, sill=0.5)]),
+                dict(S=lower, E=plain('stucco_white', grille=None, openings=[win(4.5, w=2.2, h=2.0, sill=0.5)]),
                      W=plain('stucco_white'),
-                     N=plain('stucco_white', openings=row(14, 3, 0, w=2.2, h=2.0, sill=0.5))),
+                     N=plain('stucco_white', grille=None, openings=row(14, 3, 0, w=2.2, h=2.0, sill=0.5))),
                 flat, 'b')
-    upper = S('deck_wood', floor_h=3.1, trim='trim_dark', corners=False, found=(0.0, 'deck_wood'),
+    upper = S('deck_wood', floor_h=3.1, trim='trim_dark', corners=False, found=(0.0, 'deck_wood'), grille=None,
               openings=[win(4.2, 0, w=5.6, h=1.5, sill=0.9)], lit=0.55)
     house_block(m, 1.5, -2.0, 9, 8, 3.1, 6.2,
-                dict(S=upper, E=plain('deck_wood', found=(0.0, 'deck_wood'),
+                dict(S=upper, E=plain('deck_wood', found=(0.0, 'deck_wood'), grille=None,
                                       openings=[win(4, 0, w=3.0, h=1.5, sill=0.9)]),
                      W=plain('deck_wood', found=(0.0, 'deck_wood')),
                      N=plain('deck_wood', found=(0.0, 'deck_wood'))),
@@ -198,8 +199,8 @@ def bungalow():
     w, d, ze, pitch = 8.5, 7.0, 2.8, 0.6
     wall = 'siding_ochre'
     house_block(m, 0, 0, w, d, 0, ze,
-                dict(S=S(wall, attic=True, openings=[win(1.6, w=1.1), door(w / 2, mat='door_green'),
-                                                    win(w - 1.6, w=1.1)]),
+                dict(S=S(wall, attic=True, boxes=0.8, grille=(3, 1, 'top'),
+                         openings=[win(1.6, w=1.1), door(w / 2, mat='door_green'), win(w - 1.6, w=1.1)]),
                      E=S(wall, openings=row(d, 2, 0, w=1.0)), W=S(wall, openings=row(d, 2, 0, w=1.0)),
                      N=plain(wall, attic=True)),
                 dict(kind='gable', mat='shingle_gray', pitch=pitch, oh=0.6, rake=0.35), 'b',
@@ -214,7 +215,7 @@ def suburban():
     w, d, fh = 10.0, 8.0, 2.65
     ze = 2 * fh
     wall = 'siding_sage'
-    front = S(wall, floor_h=fh, openings=(
+    front = S(wall, floor_h=fh, boxes=0.4, openings=(
         [win(1.8, 0, w=1.4), door(5.6, mat='door_red'), win(8.4, 0, w=1.0)] +
         [win(u, 1, w=1.0, h=1.4) for u in (1.8, 4.1, 6.4, 8.6)]), shutter='shutter')
     house_block(m, 0, 0, w, d, 0, ze,
@@ -236,7 +237,7 @@ def tudor():
     w, d, fh, pitch = 10.0, 8.5, 2.9, 1.0
     ze = 2 * fh
     stucco = 'stucco_cream'
-    front = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True, openings=(
+    front = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True, grille=(3, 3), boxes=0.6, openings=(
         [win(2.0, 0, w=1.2, h=1.5), door(w / 2, mat='door_red', w=1.1), win(8.0, 0, w=1.2, h=1.5)] +
         [win(u, 1, w=1.0, h=1.4, sill=0.5) for u in (2.0, 4.0, 6.0, 8.0)]))
     side = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True,

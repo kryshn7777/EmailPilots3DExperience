@@ -113,6 +113,9 @@ const CANYON_CLEAR = 2.75;
 /** and from a cross street's centre line: half its width plus a pavement */
 const CROSS_CLEAR = 1.6;
 export function cityRecipes(modules, canyonZ = 0) {
+  // a module that carries `lean` is a hero tier the rings swap in, never a lot of its own (and
+  // picking from it would reshuffle the whole city whenever a hero sheet is added)
+  modules = modules.filter((m) => !m.lean);
   const lots = [];
   const rand = mulberry32(CITY_SEED + 7);
   for (const b of cityLayout(canyonZ)) {

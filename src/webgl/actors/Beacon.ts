@@ -11,15 +11,19 @@ import {
   Group,
   Material,
   MathUtils,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  type Object3D,
   PlaneGeometry,
   Points,
   PointsMaterial,
   RepeatWrapping,
   RingGeometry,
   ShaderMaterial,
+  type PerspectiveCamera,
+  type Scene,
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
@@ -27,9 +31,11 @@ import {
   TextureLoader,
   Vector2,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import type { Quality } from '../quality';
 import type { SkyDome } from '../materials/SkyDome';
+import { PlanarReflection, REFLECTED_LAYER } from '../materials/PlanarReflection';
 import { asset } from '../asset';
 import { fogHeight } from '../fog';
 import type { Raycast } from '../interact/Raycast';
@@ -41,8 +47,8 @@ import beamVert from '../shaders/beam.vert.glsl';
 import beamFrag from '../shaders/beam.frag.glsl';
 import oceanVert from '../shaders/ocean.vert.glsl';
 import oceanFrag from '../shaders/ocean.frag.glsl';
-import rainVert from '../shaders/rain.vert.glsl';
-import rainFrag from '../shaders/rain.frag.glsl';
+import { Rain, type RainLight } from './Rain';
+import { ReflectionProbe } from '../materials/ReflectionProbe';
 
 /**
  * CH6: the lighthouse in weather. A banded lighthouse on a rock islet in a
@@ -100,7 +106,14 @@ export class Beacon {
   private beamMaterial: ShaderMaterial;
   private oceanMaterial: ShaderMaterial;
   private sea: Mesh;
-  private rainMaterial: ShaderMaterial;
+  /** the picture of the lighthouse, the ship and the sky the water shows (HIGH tier only) */
+  private reflection: PlanarReflection | null = null;
+  private rain: Rain;
+  private rainLight: RainLight = {
+    lamp: new Vector3(), lampColor: new Color('#d6f7ef'), beamDir: new Vector3(1, 0, 0),
+    beamColor: new Color('#bff6ee'), beamPower: 0,
+  };
+  private rainSky = new Color();
   private splash: Points;
   private splashGeometry = new BufferGeometry();
   private splashMaterial: PointsMaterial;
@@ -161,6 +174,10 @@ export class Beacon {
     const normalMap = mapOf('ocean-normal.webp');
     const foamMap = mapOf('ocean-foam.webp');
     this.disposables.push(normalMap, foamMap);
+    if (quality.tier === 'high') {
+      this.reflection = new PlanarReflection(REFLECTED_LAYER, 0.5);
+      this.disposables.push(this.reflection);
+    }
     this.oceanMaterial = new ShaderMaterial({
       vertexShader: oceanVert,
       fragmentShader: oceanFrag,
@@ -188,6 +205,11 @@ export class Beacon {
         uFogHeight: fogHeight,
         uCamPos: { value: new Vector3() },
         uReveal: { value: 0 },
+        uReflection: { value: this.reflection?.texture ?? null },
+        uReflMatrix: { value: this.reflection?.matrix ?? new Matrix4() },
+        uReflect: { value: 0 },
+        uPlaneY: { value: this.group.position.y + 0.15 },
+        uRain: { value: 0 },
       },
       transparent: true,
     });
@@ -231,40 +253,14 @@ export class Beacon {
     this.group.add(this.splash);
     this.disposables.push(this.splashGeometry, this.splashMaterial);
 
-    // — local rain over the sea —
-    const rainCount = Math.floor(quality.rainCount * 0.6);
-    const rainGeometry = new BufferGeometry();
-    const boxMin = new Vector3(this.group.position.x - 26, 0, this.group.position.z - 20);
-    const boxSize = new Vector3(52, 24, 40);
-    const rp = new Float32Array(rainCount * 3);
-    const rphase = new Float32Array(rainCount);
-    for (let i = 0; i < rainCount; i++) {
-      rp[i * 3] = boxMin.x + rand() * boxSize.x - this.group.position.x;
-      rp[i * 3 + 1] = boxMin.y + rand() * boxSize.y;
-      rp[i * 3 + 2] = boxMin.z + rand() * boxSize.z - this.group.position.z;
-      rphase[i] = rand();
-    }
-    rainGeometry.setAttribute('position', new Float32BufferAttribute(rp, 3));
-    rainGeometry.setAttribute('aPhase', new Float32BufferAttribute(rphase, 1));
-    // rain box is in group-local space: min/size shifted to local origin
-    this.rainMaterial = new ShaderMaterial({
-      vertexShader: rainVert,
-      fragmentShader: rainFrag,
-      uniforms: {
-        uTime: { value: 0 },
-        uBoxMin: { value: new Vector3(-26, 0, -20) },
-        uBoxSize: { value: boxSize },
-        uSpeed: { value: 14 },
-        uColor: { value: new Color('#a5c4c9') },
-        uOpacity: { value: 0 },
-      },
-      transparent: true,
-      depthWrite: false,
-    });
-    const rain = new Points(rainGeometry, this.rainMaterial);
-    rain.frustumCulled = false;
-    this.group.add(rain);
-    this.disposables.push(rainGeometry, this.rainMaterial);
+    // — the downpour: lit streaks around the camera, splash rings on the water (see Rain.ts) —
+    this.rain = new Rain(
+      Math.round(quality.rainCount * 3.5), quality.tier === 'high' ? 700 : 220, rand, this.group.position.y + 0.17,
+    );
+    this.group.add(this.rain.drops, this.rain.splashes);
+    // the sea mirrors the falling rain as well (its planar reflection draws this layer)
+    this.mirrored(this.rain.drops);
+    this.disposables.push(this.rain);
 
     // — sweeping beam (unchanged core) —
     this.beamMaterial = new ShaderMaterial({
@@ -292,6 +288,7 @@ export class Beacon {
     this.beamPivot.rotation.z = -0.26;
     this.beamPivot.add(this.beam);
     this.group.add(this.beamPivot);
+    this.mirrored(this.beamPivot);
     this.disposables.push(beamGeometry, this.beamMaterial);
 
     // — lantern flare: blooms only when the sweep points at the camera —
@@ -308,6 +305,7 @@ export class Beacon {
     this.flare.position.set(0, 12.2 * TOWER_SCALE, 0);
     this.flare.scale.setScalar(5 * TOWER_SCALE);
     this.group.add(this.flare);
+    this.mirrored(this.flare);
     this.disposables.push(this.flareMaterial);
 
     this.buildShip();
@@ -389,6 +387,12 @@ export class Beacon {
       if (spec.emissive) {
         m.emissive = new Color(spec.emissive);
         m.emissiveIntensity = spec.emissiveIntensity ?? 1;
+      } else if ((spec.metalness ?? 0) < 0.5) {
+        // rain-soaked: stone, rock, slate and paint go darker and glossy, and mirror the live probe
+        // (the lamp, the beam, the sea) where the screen-space trace cannot reach
+        m.color.multiplyScalar(0.78);
+        m.roughness = Math.max(0.14, spec.roughness * 0.42);
+        ReflectionProbe.adopt(m, 0.9);
       }
       materials.set(name, m);
       this.disposables.push(m);
@@ -402,6 +406,24 @@ export class Beacon {
       this.disposables.push(mesh.geometry);
     });
     this.tower.add(gltf.scene);
+    this.mirrored(gltf.scene);
+  }
+
+  /** puts an object (and everything under it) in the picture the sea reflects */
+  private mirrored(root: Object3D): void {
+    if (this.reflection) root.traverse((o) => o.layers.enable(REFLECTED_LAYER));
+  }
+
+  /**
+   * Draws what the sea reflects, as seen from under it. The engine calls this once a frame, just
+   * before the main render, while the group is on screen.
+   */
+  renderReflection(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): void {
+    const on = !!this.reflection && this.group.visible && this.sea.visible;
+    this.oceanMaterial.uniforms.uReflect!.value = on ? 1 : 0;
+    if (!on) return;
+    if (!renderer.autoClear) renderer.clear();
+    this.reflection!.render(renderer, scene, camera, this.group.position.y + 0.15);
   }
 
   /**
@@ -446,6 +468,7 @@ export class Beacon {
       const point = new Points(g, m);
       point.frustumCulled = false;
       this.ship.add(point);
+      this.mirrored(point);
       this.disposables.push(g, m);
     };
 
@@ -464,6 +487,7 @@ export class Beacon {
       // the nodes that only marked a place are no longer needed
       for (const name of Object.keys(marks)) root.getObjectByName(name)?.removeFromParent();
       this.ship.add(root);
+      this.mirrored(root);
       lampAt(marks.nav_red!, '#ff5a5a', 0.55);
       lampAt(marks.nav_green!, '#6dff9a', 0.55);
       lampAt(marks.nav_mast!, '#eafcff', 0.6);
@@ -477,6 +501,7 @@ export class Beacon {
       radar.position.y += 0.02;
       this.disposables.push(radar.geometry);
       this.ship.add(radar);
+      this.mirrored(radar);
       this.radar = radar;
       requestCompile(root);
     });
@@ -548,8 +573,15 @@ export class Beacon {
     // weather intensity follows the chapter window
     const beaconness =
       MathUtils.smoothstep(t, 0.45, 0.5) * (1 - MathUtils.smoothstep(t, 0.57, 0.605));
-    this.rainMaterial.uniforms.uTime!.value = time;
-    this.rainMaterial.uniforms.uOpacity!.value = beaconness * 0.85;
+    this.oceanMaterial.uniforms.uRain!.value = beaconness;
+    // the beam's world direction: the pivot turns about y and tips the beam down by its z tilt
+    const tilt = this.beamPivot.rotation.z;
+    this.rainLight.beamDir.set(Math.cos(this.beamYaw) * Math.cos(tilt), Math.sin(tilt), -Math.sin(this.beamYaw) * Math.cos(tilt));
+    this.rainLight.beamPower = this.beamMaterial.uniforms.uIntensity!.value / 0.8;
+    this.rainLight.lamp.copy(this.towerTop);
+    this.rainSky.set(fogColor ?? '#0a1a21').multiplyScalar(2.2).addScalar(0.02);
+    this.rain.update(time, camera, beaconness, this.rainLight, this.rainSky,
+      innerHeight * Math.min(devicePixelRatio, 2));
     // The sea is gone before the no-fly map develops — overlapping them put
     // red exclusion circles on the water, and the sea plane is wide enough to
     // reach right over the CH7 map.

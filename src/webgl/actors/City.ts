@@ -32,7 +32,10 @@ import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
+import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { CityStreet, type Footprint } from './CityStreet';
+import { Pedestrians } from './Pedestrians';
+import { cityCrowd } from './PedestrianPlans';
 import { pavingMaps } from '../bake/RoomTextures';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
@@ -163,6 +166,8 @@ export class City {
     });
     this.street = new CityStreet(footprints, quality);
     this.group.add(this.street.group);
+    void this.buildTrees(this.street.trees, path, quality);
+    this.buildPeople(this.street.plazas, quality);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
@@ -304,6 +309,7 @@ export class City {
 
   private trafficMaterial: ShaderMaterial | null = null;
   private streetCars: StreetCars | null = null;
+  private people: Pedestrians | null = null;
   private street: CityStreet | null = null;
   private streetlights: Streetlights | null = null;
 
@@ -420,6 +426,8 @@ export class City {
         { z: 1.1, dir: 1, x0, x1, count: n },
       ],
     });
+    // paint, chrome and windscreens mirror the canyon itself (the live probe, HIGH)
+    if (ReflectionProbe.current) this.streetCars.setEnvMap(ReflectionProbe.current.texture);
     this.group.add(this.streetCars.group);
     this.disposables.push(this.streetCars);
   }
@@ -608,6 +616,45 @@ export class City {
     }
   }
 
+  private trees: KitCity | null = null;
+
+  /**
+   * The street trees are the homes set's own trees (branching trunks, bark, leaf cards that sway
+   * in the wind), not stand-ins: the ones the dive brushes past get the close-up model on HIGH,
+   * the rest the mid-detail one, which phones can afford as well. No pines on a city street.
+   */
+  private async buildTrees(spots: CityStreet['trees'], path: FlightPath, quality: Quality): Promise<void> {
+    if (!spots.length) return;
+    const manifest = await fetch(asset('/models/homes/manifest.json'), { cache: 'no-cache' }).then(
+      (r) => r.json() as Promise<KitManifest>,
+    );
+    const species = manifest.modules.filter((m) => m.kind === 'tree' && !m.lean && !/pine/.test(m.id));
+    if (!species.length) return;
+    const rand = mulberry32(6607);
+    const lots: KitLot[] = spots.map((t) => {
+      const mod = species[Math.floor(rand() * species.length)]!;
+      const k = (2.1 * t.s) / mod.height;
+      return {
+        x: t.x, z: t.z, w: mod.footprint[0] * k, d: mod.footprint[1] * k, h: mod.height * k,
+        yaw: t.yaw, tint: '#ffffff', moduleId: mod.id,
+      };
+    });
+    // the dive, sampled in world space: trees within a few units of it are seen up close
+    const line: Vector3[] = [];
+    for (let t = 0.64; t <= 0.8; t += 0.002) line.push(path.storyPoint(t).clone());
+    const at = new Vector3();
+    const near: number[] = [];
+    const rest: number[] = [];
+    lots.forEach((lot, i) => {
+      at.set(lot.x + this.group.position.x, lot.h * 0.6, lot.z + this.group.position.z);
+      const close = quality.tier === 'high' && line.some((c) => c.distanceToSquared(at) < 7 * 7);
+      (close ? near : rest).push(i);
+    });
+    const rings: KitRingSet = { near, mid: rest, far: [], detail: rest };
+    this.trees = new KitCity(lots, rings, manifest, { tier: quality.tier, glow: 0, cloudEnv: false });
+    this.group.add(this.trees.group);
+  }
+
   update(t: number, time = 0, focus?: Vector3): void {
     if (!this.group.visible) return;
     this.streetlights?.setLevel(1);
@@ -616,6 +663,8 @@ export class City {
     // or without scroll (scroll-coupled surge removed by request)
     if (this.trafficMaterial) this.trafficMaterial.uniforms.uTime!.value = time;
     this.streetCars?.update(time);
+    this.people?.update(time);
+    KitCity.tick(time);
     this.street?.update(time);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
@@ -691,8 +740,16 @@ export class City {
     if (colorsDirty && this.windows.instanceColor) this.windows.instanceColor.needsUpdate = true;
   }
 
+  /** People on the canyon sidewalks, round the corners and in the plazas, at the cars' 1.35x (see PedestrianPlans.cityCrowd). */
+  private buildPeople(plazas: CityStreet['plazas'], quality: Quality): void {
+    this.people = new Pedestrians(quality, cityCrowd(plazas, quality));
+    this.group.add(this.people.group);
+  }
+
   dispose(): void {
     this.kitCity?.dispose();
+    this.trees?.dispose();
+    this.people?.dispose();
     this.street?.dispose();
     for (const landing of this.planeLandings) landing.plane.dispose();
     for (const d of this.disposables) d.dispose();

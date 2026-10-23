@@ -82,12 +82,26 @@ def _window(hp, fr, o, z0, spec, rng):
     z = z0 + o['floor'] * spec.get('floor_h', 2.7) + o['sill']
     z1 = z + h
     trim, depth = spec.get('trim', 'trim_white'), 0.22
-    hp.fquad(fr, u0, u1, z, z1, -depth + 0.02, _room_light(hp, rng, spec))
+    hp.pane(fr, u0, u1, z, z1, -depth + 0.02, _room_light(hp, rng, spec))
     _frame4(hp, fr, u0, u1, z, z1, -depth, depth + 0.03, 0.07, trim)
     zm = z + h * 0.52
     hp.fbox(fr, u0, u1, -depth, -depth + 0.1, zm - 0.03, zm + 0.03, trim, skip=('-w',))
     if w > 1.15:
         hp.fbox(fr, uc - 0.03, uc + 0.03, -depth, -depth + 0.1, z, z1, trim, skip=('-w',))
+    grille = spec.get('grille')
+    if grille and w <= 1.6:
+        # muntins: the sashes divided into lights, bars a couple of centimetres proud of the glass
+        cols, rows, *which = grille
+        sashes = [(zm, z1)] if which == ['top'] else [(z, zm), (zm, z1)]
+        for s0, s1 in sashes:
+            for k in range(1, cols):
+                u = u0 + (u1 - u0) * k / cols
+                hp.fbox(fr, u - 0.014, u + 0.014, -depth + 0.03, -depth + 0.055, s0, s1, trim, skip=('-w',))
+            for k in range(1, rows):
+                v = s0 + (s1 - s0) * k / rows
+                hp.fbox(fr, u0, u1, -depth + 0.03, -depth + 0.055, v - 0.014, v + 0.014, trim, skip=('-w',))
+    if o['floor'] == 0 and rng.random() < spec.get('boxes', 0.0):
+        _flower_box(hp, fr, u0, u1, z - 0.08, rng)
     hp.fbox(fr, u0 - 0.08, u1 + 0.08, -depth, 0.13, z - 0.08, z, trim, skip=('-w', '-v'))
     hp.fbox(fr, u0 - 0.1, u1 + 0.1, -depth, 0.06, z1, z1 + 0.1, trim, skip=('-w',))
     if o['shutters']:
@@ -101,11 +115,38 @@ def _window(hp, fr, o, z0, spec, rng):
                 hp.fbox(fr, a + 0.05, b - 0.05, 0.06, 0.075, zs, zs + 0.07, mat, skip=('-w',))
 
 
+FLOWERS = ['flower_red', 'flower_pink', 'flower_yellow', 'flower_white', 'flower_purple']
+
+
+def _flower_box(hp, fr, u0, u1, z, rng):
+    """A planter under a window sill, spilling leaves and a few heads of one colour."""
+    hp.fbox(fr, u0 - 0.05, u1 + 0.05, 0.13, 0.36, z - 0.24, z, 'trim_white')
+    bloom = rng.choice(FLOWERS)
+    n = max(3, int((u1 - u0) / 0.2))
+    for k in range(n):
+        p = fr.p(u0 + (u1 - u0) * (k + 0.5) / n, 0.25 + rng.uniform(-0.03, 0.03), z + 0.02)
+        hp.sphere(p.x, p.y, p.z, 0.11, 0.09, 0.08, 'leaf_oak_dk', subdiv=1)
+        if rng.random() < 0.75:
+            q = fr.p(u0 + (u1 - u0) * (k + rng.random()) / n, 0.27 + rng.uniform(-0.05, 0.05), z + 0.08)
+            hp.sphere(q.x, q.y, q.z, 0.055, 0.055, 0.045, bloom, subdiv=1)
+
+
+def _lantern(hp, fr, u, z):
+    """A wall lantern: back plate, a glowing glass box under a little roof, a finial."""
+    hp.fbox(fr, u - 0.06, u + 0.06, 0.0, 0.03, z - 0.2, z + 0.12, 'trim_dark', skip=('-w',))
+    hp.fbox(fr, u - 0.015, u + 0.015, 0.03, 0.13, z + 0.02, z + 0.05, 'trim_dark')
+    hp.fbox(fr, u - 0.065, u + 0.065, 0.1, 0.23, z - 0.17, z + 0.02, 'lamp_glow')
+    for a, b in ((u - 0.075, u - 0.06), (u + 0.06, u + 0.075)):
+        hp.fbox(fr, a, b, 0.09, 0.24, z - 0.18, z + 0.03, 'trim_dark', skip=('-v',))
+    hp.fbox(fr, u - 0.09, u + 0.09, 0.075, 0.255, z + 0.03, z + 0.06, 'trim_dark')
+    hp.fbox(fr, u - 0.05, u + 0.05, 0.115, 0.215, z + 0.06, z + 0.1, 'trim_dark')
+
+
 def _attic(hp, fr, uc, z, spec, rng):
     """Small gable-end window. The gable is a single surface, so unlike a real
     opening this one stands in FRONT of it (a recessed pane would be hidden)."""
     w, h = 0.7, 0.9
-    hp.fquad(fr, uc - w / 2, uc + w / 2, z, z + h, 0.02, _room_light(hp, rng, spec))
+    hp.pane(fr, uc - w / 2, uc + w / 2, z, z + h, 0.02, _room_light(hp, rng, spec))
     _frame4(hp, fr, uc - w / 2, uc + w / 2, z, z + h, 0.02, 0.06, 0.07, spec.get('trim', 'trim_white'))
 
 
@@ -115,8 +156,8 @@ def _door(hp, fr, o, z0, spec, rng):
     trim = spec.get('trim', 'trim_white')
     hp.fquad(fr, u0, u1, z0, z0 + h, -0.10, o['mat'])
     _frame4(hp, fr, u0 - 0.05, u1 + 0.05, z0, z0 + h + 0.08, -0.22, 0.28, 0.1, trim)
-    hp.fquad(fr, u0 + w * 0.18, u1 - w * 0.18, z0 + h * 0.58, z0 + h * 0.9, -0.085,
-             rng.choice(WARM) if (o['lit'] or rng.random() < 0.4) else 'glass_dark')
+    hp.pane(fr, u0 + w * 0.18, u1 - w * 0.18, z0 + h * 0.58, z0 + h * 0.9, -0.085,
+            rng.choice(WARM) if (o['lit'] or rng.random() < 0.4) else 'glass_dark')
     hp.fbox(fr, u0 - 0.3, u1 + 0.3, 0, 0.95, z0, z0 + 0.2, 'concrete', skip=('-w',))
     # raised panels (two over four) and a knob: the geometry of a real door
     pm, gap = 0.13, 0.07
@@ -130,6 +171,15 @@ def _door(hp, fr, o, z0, spec, rng):
                 hp.fbox(fr, px0, px0 + pw, -0.10, -0.075, z0 + r0, z0 + r1, o['mat'], skip=('-w',))
     hp.fbox(fr, u1 - 0.17, u1 - 0.09, -0.10, -0.03, z0 + h * 0.46, z0 + h * 0.46 + 0.08, 'frame_light',
             skip=('-w',))
+    # a lantern each side of the door (they light the step at night), a mailbox and a number
+    for u in (u0 - 0.38, u1 + 0.38):
+        _lantern(hp, fr, u, z0 + 1.85)
+    hp.fbox(fr, u1 + 0.25, u1 + 0.6, 0.0, 0.14, z0 + 1.05, z0 + 1.32, 'trim_dark', skip=('-w',))
+    hp.fbox(fr, u1 + 0.24, u1 + 0.61, 0.0, 0.16, z0 + 1.3, z0 + 1.34, 'trim_dark', skip=('-w',))
+    hp.fbox(fr, u0 - 0.55, u0 - 0.22, 0.0, 0.02, z0 + 1.4, z0 + 1.52, 'trim_dark', skip=('-w',))
+    for k in range(3):
+        a = u0 - 0.52 + k * 0.1
+        hp.fbox(fr, a, a + 0.065, 0.02, 0.028, z0 + 1.42, z0 + 1.5, 'frame_light', skip=('-w',))
 
 
 def _garage(hp, fr, o, z0, spec, rng):
@@ -189,6 +239,14 @@ def house_wall(hp, fr, L, z0, z1, spec, rng):
                 z = z0 + v0 + k * 0.17
                 hp.fbox(fr, u0, u1, 0.0, 0.022, z, z + 0.15, spec['wall'], skip=('-w', '-u', '+u'))
     trim = spec.get('trim', 'trim_white')
+    if found_h >= 0.4 and L > 2.5:
+        # crawl-space vents in the foundation, between the openings
+        for k in range(max(1, int(L / 3.2))):
+            u = L * (k + 0.5) / max(1, int(L / 3.2))
+            if any(r[0] - 0.4 < u < r[1] + 0.4 and r[2] < found_h for _, r in items):
+                continue
+            hp.fbox(fr, u - 0.22, u + 0.22, -0.02, 0.005, z0 + found_h * 0.3, z0 + found_h * 0.3 + 0.16,
+                    'louver', skip=('-w',))
     # clapboard wants corner boards; brick, stucco and stone turn the corner themselves
     if spec.get('corners', not spec['wall'].startswith(('brick', 'stucco', 'fieldstone'))):
         for u in (0.0, L - 0.12):
@@ -236,6 +294,9 @@ def house_block(m, cx, cy, w, d, z0, ze, walls, roof, name, ridge='x', skip=()):
                 # a downspout at each end of the long walls
                 for u in (0.2, L - 0.3):
                     m.hp.fbox(fr, u, u + 0.09, 0.0, 0.1, z0 + 0.35, ze - 0.02, 'frame_light', skip=('-w',))
+            if kind != 'flat':
+                # frieze board: the trim band the eaves sit on
+                m.hp.fbox(fr, 0, L, -0.05, 0.035, ze - 0.3, ze - 0.06, spec.get('trim', 'trim_white'), skip=('-w',))
             if gable:
                 m.hp.face([fr.p(0, 0, ze), fr.p(L, 0, ze), fr.p(L / 2, 0, zr)], spec['wall'],
                           expect=fr.n)
@@ -248,6 +309,16 @@ def house_block(m, cx, cy, w, d, z0, ze, walls, roof, name, ridge='x', skip=()):
                                       spec['wall'], skip=('-w', '-u', '+u'))
                 if spec.get('attic'):
                     _attic(m.hp, fr, L / 2, ze + rise * 0.3, spec, m.rng(key + ':attic'))
+    if name == 'b' and z0 == 0 and 'E' not in skip:
+        # the air-conditioning condenser on its pad beside the east wall
+        rng = m.rng('condenser')
+        if rng.random() < 0.7:
+            a, b = Vector(poly[1]), Vector(poly[2])
+            fr = Frame(a, b - a)
+            p = fr.p(min((b - a).length - 1.0, 1.4), 0.75, 0)
+            m.hp.box(p.x, p.y, 1.0, 1.0, 0.0, 0.1, 'concrete')
+            m.hp.box(p.x, p.y, 0.8, 0.8, 0.1, 0.82, 'frame_light')
+            m.hp.cylinder(p.x, p.y, 0.3, 0.82, 0.84, 12, 'louver', smooth=False)
     if kind == 'gable':
         _gable_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name)
     elif kind == 'hip':
@@ -325,6 +396,20 @@ def _gable_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name):
         _gutter(m, (ex0.x, ex0.y), (ex1.x, ex1.y), ze_e)
     ridge_fr = Frame((W(-half, 0, 0).x, W(-half, 0, 0).y), wd(1, 0))
     m.hp.fbox(ridge_fr, 0, 2 * half, -0.14, 0.14, zr - 0.04, zr + 0.1, mat, skip=('-v',))
+    _roof_gear(m, W, half, ye, ze_e, zr, name)
+
+
+def _roof_gear(m, W, half, ye, ze_e, zr, name):
+    """What pokes out of the back slope: a plumbing stack with its flashing, a box vent."""
+    if half < 2.0:
+        return
+    at = lambda x, f: (W(x, ye * f, 0), zr - (zr - ze_e) * f)
+    p, z = at(half * 0.35, 0.45)
+    m.hp.cylinder(p.x, p.y, 0.16, z - 0.03, z + 0.03, 10, 'metal_roof', smooth=False)
+    m.hp.cylinder(p.x, p.y, 0.055, z - 0.05, z + 0.42, 10, 'trim_dark')
+    p, z = at(-half * 0.4, 0.55)
+    m.hp.box(p.x, p.y, 0.5, 0.5, z - 0.12, z + 0.16, 'metal_roof')
+    m.hp.box(p.x, p.y, 0.62, 0.62, z + 0.16, z + 0.2, 'metal_roof')
 
 
 def _hip_roof(m, cx, cy, w, d, ze, zr, pitch, roof, ridge, name):
@@ -441,6 +526,12 @@ def porch(m, cx, cy, w, d, ze, posts=2, roof_mat='shingle_gray', z0=0.0):
         px = cx - w / 2 + 0.2 + (w - 0.4) * i / (n - 1)
         m.hp.box(px, cy - d / 2 + 0.2, 0.3, 0.3, z0 + 0.4, z0 + 0.52, 'trim_white')
         m.hp.box(px, cy - d / 2 + 0.2, 0.3, 0.3, ze - 0.12, ze, 'trim_white')
+    # the porch ceiling and its light
+    m.hp.face([(cx - w / 2, cy - d / 2, ze - 0.2), (cx + w / 2, cy - d / 2, ze - 0.2),
+               (cx + w / 2, cy + d / 2, ze - 0.2), (cx - w / 2, cy + d / 2, ze - 0.2)], 'trim_white', expect=-Z)
+    m.hp.cylinder(cx, cy, 0.16, ze - 0.3, ze - 0.2, 10, 'lamp_glow', smooth=False)
+    m.hp.face([(cx - 0.12, cy - 0.12, ze - 0.305), (cx + 0.12, cy - 0.12, ze - 0.305),
+               (cx + 0.12, cy + 0.12, ze - 0.305), (cx - 0.12, cy + 0.12, ze - 0.305)], 'lamp_glow', expect=-Z)
 
 
 def dormer(m, x, main_cy, main_d, ze, pitch, name, roof_mat, wall_mat='siding_white', width=1.5):

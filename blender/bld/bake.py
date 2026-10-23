@@ -148,7 +148,10 @@ class Baker:
             lin = np.array([_to_lin(c) for c in srgb(spec['c'])])
             color[y0:y0 + pitch, x0:x0 + pitch] = lin
             orm[y0:y0 + pitch, x0:x0 + pitch] = (1.0, spec['r'], spec['m'])
-            emit[y0:y0 + pitch, x0:x0 + pitch] = 0.0
+            # a glowing material keeps its glow as a flat colour too: the sides of a sign box,
+            # a blade sign or a canopy downlight in the hero tier are palette faces
+            glow = spec.get('glow')
+            emit[y0:y0 + pitch, x0:x0 + pitch] = [_to_lin(c) for c in srgb(glow)] if glow else 0.0
             normal[y0:y0 + pitch, x0:x0 + pitch] = (0.5, 0.5, 1.0)
 
         to8 = lambda a: np.clip(a * 255 + 0.5, 0, 255).astype(np.uint8)

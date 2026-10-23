@@ -1,3 +1,5 @@
+import type { GodRaysQuality } from './post/GodRays';
+
 export type Tier = 'high' | 'low';
 
 /**
@@ -29,6 +31,8 @@ export interface Quality {
   cloudSprites: number;
   rainCount: number;
   dustCount: number;
+  /** sun shafts: march length and buffer size, or null for none */
+  godRays: GodRaysQuality | null;
 }
 
 const HIGH: Quality = {
@@ -37,20 +41,22 @@ const HIGH: Quality = {
   renderScale: 1,
   volumetricClouds: true,
   /**
-   * 22 dithered steps + the thin-sample sun-tap skip.
+   * 26 steps, spread densely near the lens and sparsely far away.
    *
-   * Briefly 32 as part of the max-fidelity pass, and that is what made the
-   * formation chapter lag: the slab is a fullscreen raymarch and the camera
-   * flies INSIDE it, so every step is paid on every pixel of the frame. The
-   * step count is the one term that scales that cost linearly. Every pass
-   * still renders — AO, bloom, the slab itself — this is only the march.
+   * It was 22 for the simplex-noise raymarch, and briefly 32 as part of the max-fidelity pass, which is
+   * what made the formation chapter lag: the slab is a fullscreen raymarch and the camera flies INSIDE
+   * it, so every step is paid on every pixel of the frame. The march now reads two baked 3D textures
+   * instead of evaluating noise, which measures about a third cheaper per step on the same frame, so
+   * 26 steps of it still cost less than the old 22 (see cloudVolume.frag.glsl). Every pass still
+   * renders — AO, bloom, the slab itself.
    */
-  cloudSteps: 22,
+  cloudSteps: 26,
   // density comes from COUNT, not from fog: thickening the haze instead just
   // turned the climb to flat milk and took the staging with it
   cloudSprites: 640,
   rainCount: 2600,
   dustCount: 250,
+  godRays: { samples: 48, scale: 0.25 },
 };
 
 const LOW: Quality = {
@@ -65,6 +71,7 @@ const LOW: Quality = {
   cloudSprites: 360,
   rainCount: 900,
   dustCount: 90,
+  godRays: { samples: 24, scale: 0.2 },
 };
 
 /**
@@ -77,7 +84,8 @@ export function detectQuality(gpuString: string): Quality {
   const forced = new URLSearchParams(location.search).get('q');
   // the raymarched slab is the single heaviest thing in the frame and it is
   // a lighting effect — blockout mode does without it
-  const tier = (q: Quality): Quality => (UNLIT ? { ...q, volumetricClouds: false, cloudSteps: 0 } : q);
+  const tier = (q: Quality): Quality =>
+    UNLIT ? { ...q, volumetricClouds: false, cloudSteps: 0, godRays: null } : q;
   if (forced === 'low') return tier(LOW);
   if (forced === 'high') return tier(HIGH);
 
