@@ -32,6 +32,7 @@ import {
 } from 'postprocessing';
 import { GodRaysEffect } from './post/GodRays';
 import { ZoomBlurEffect } from './post/ZoomBlur';
+import { CinemaEffect } from './post/Cinema';
 import { SSREffect } from './post/SSR';
 import { SSGIEffect } from './post/SSGI';
 import { DepthNormals } from './post/viewSpace';
@@ -147,6 +148,8 @@ export class Engine {
   private batch: BatchSend;
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
+  /** letterbox, grain, film curve; DoF + chromatic aberration on HIGH (post/Cinema.ts). Null under ?nocine */
+  private cinema: CinemaEffect | null = null;
   private godRays: GodRaysEffect | null = null;
   private ssr: SSREffect | null = null;
   private ssgi: SSGIEffect | null = null;
@@ -338,7 +341,7 @@ export class Engine {
     );
     if (this.clouds.volume) this.scene.add(this.clouds.volume);
 
-    this.rig = new CameraRig(this.path, this.camera, this.plane);
+    this.rig = new CameraRig(this.path, this.camera, this.plane, { reducedMotion: this.options.reducedMotion });
 
     this.composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -393,7 +396,15 @@ export class Engine {
       effects.push(this.godRays);
     }
     effects.push(this.zoomBlur, new VignetteEffect({ darkness: 0.55 }));
+    // the lens and the film stock (post/Cinema.ts), last in the chain: letterbox, grain and a highlight
+    // shoulder on every tier, merged into this pass for free; HIGH adds depth of field and chromatic
+    // aberration, which read neighbouring pixels and so take one more pass. ?nocine leaves it out.
+    if (!UNLIT && !new URLSearchParams(location.search).has('nocine')) {
+      this.cinema = new CinemaEffect({ optics: this.quality.tier === 'high' });
+      if (!this.cinema.optics) effects.push(this.cinema);
+    }
     this.composer.addPass(new EffectPass(this.camera, ...effects));
+    if (this.cinema?.optics) this.composer.addPass(new EffectPass(this.camera, this.cinema));
 
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -716,6 +727,8 @@ export class Engine {
     shot.position.set(147.6, 24.2, 0.9);
     shot.look.copy(this.lanternCentre);
 
+    // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
+    this.rig.jolt = this.idlePreset ? 0 : this.storm.flash;
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -752,6 +765,15 @@ export class Engine {
       this.maneuverPulse *= Math.exp(-3.5 * dt);
     } else {
       this.maneuverPulse = 0;
+    }
+
+    // the lens: bars and focus come from the rig's shot list (none on the sub-page orbits); the
+    // corners split a little more while a fast scrub streaks the frame
+    if (this.cinema) {
+      const idle = this.idlePreset !== null;
+      this.cinema.letterbox = idle ? 0 : this.rig.cine.bars;
+      const focus = idle ? this.camera.position.distanceTo(this.plane.group.position) : this.rig.cine.focus;
+      this.cinema.frame(focus, idle ? 1.2 : this.rig.cine.bokeh, 1.4 + this.blurLevel * 14);
     }
 
     // sun follows the plane so the directional light never runs out of range
@@ -1035,6 +1057,7 @@ export class Engine {
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.composer.setSize(clientWidth, clientHeight);
+    if (this.cinema) this.cinema.pixelRatio = dpr;
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     if (this.options.reducedMotion) this.composer.render();

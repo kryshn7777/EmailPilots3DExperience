@@ -67,6 +67,21 @@ sun-visibility alpha.
 `__engine.ssr.debug = 1` shows the reflections alone (2 the reflectivity, 3 how far each ray went)
 and `__engine.ssgi.debug = 1` the bounce light.
 
+## Camera direction and the lens
+
+The camera is directed per chapter and per beat, all keyed to story-t so a scrub always lands on the same frame.
+
+| piece | where | what it does |
+| :-- | :-- | :-- |
+| Chapter lens | `story/chapters.ts` (`rig`) | Lag, offsets, fov, plus `dutch` (a fixed tilt), `bank` (how far the horizon leans into the flight line's turns) and `lookUp` (a raised look target for low hero angles: the street and the city canyon). |
+| Shot list | `webgl/rig/CameraRig.ts` (`BEATS`) | Directed moments laid over the chase cam: the matted title opening and the push-in on the laptop, the camera stopping in the window while the dart drops into the town, the low hold in the street as it climbs away, the cloud-deck breath, the storm, the lighthouse wide and delivery, the tilted dive into the city, the held touchdown, the push into the screen. A beat can push or widen the lens, hold the camera (at a world point or where the chase cam stood at some t), tilt it, mat the frame and soften the background. |
+| Lightning jolt | `CameraRig.jolt` | Each storm strike gives the lens a short shake and a small focal kick. |
+| The lens | `webgl/post/Cinema.ts` | Letterbox bars (eased in by the beats, ~2.2:1 on 16:9, thinner on portrait phones), film grain in CSS pixels that also dithers the sky gradients, and a highlight shoulder with a gentle S-curve (there is no tone mapping, so lamps and neon clipped hard before). HIGH adds a depth-of-field gather focused on the dart (or the lantern during the delivery; the sky stays sharp) and chromatic aberration in the frame's corners that grows while a fast scrub streaks the frame. |
+
+Cost: on LOW the lens merges into the existing effect pass (a few ALU ops, no texture reads). On HIGH it is one extra
+fullscreen pass of about 18 texture reads a pixel, and only background pixels pay for the defocus. Reduced motion keeps
+the holds and the bars but drops the rolls, the jolts and the focal pushes. `?nocine` leaves the lens out for an A/B.
+
 ## 🧞 Commands
 
 All commands are run from the root of the project, from a terminal:
