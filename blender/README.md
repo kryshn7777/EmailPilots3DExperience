@@ -6,17 +6,25 @@ are *code*: change a number, re-run, get new buildings.
 
 ```sh
 pip install -r blender/requirements.txt          # bpy is Blender as a Python module (Python 3.13)
-npm run build:buildings                          # towers+blocks (city); houses+trees and their hero tiers (homes)
+npm run build:buildings                          # towers+blocks and their hero tier (city); houses+trees and theirs (homes); then compresses them
+npm run compress:models                          # weld + quantize + meshopt the city-kit/homes GLBs after a partial rebuild
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
-python blender/make_cars.py                      # the six road vehicles, lean and close-up
+python blender/make_cars.py                      # the nine road vehicles (six family cars, three supercars), lean and close-up
+python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
-rebuilds one module and dumps every texture map as a PNG. The same scripts run
+rebuilds one module and dumps every texture map as a PNG; `--sheet hero-towers` builds one
+sheet of a set (the others keep their manifest entries), and `--reuse-maps` re-exports a
+hero sheet's meshes against the atlas already on disk, without baking (only while the modules'
+slots and materials are unchanged). Building a sheet writes plain GLBs; `npm run compress:models`
+(`scripts/compress-models.mjs`) then packs every one not yet packed (KitCity decodes meshopt): the
+hero towers' faces are each on vertices of their own, and a 165k-triangle tower is 13 MB unpacked,
+2 MB packed. The same scripts run
 inside the Blender UI: `blender -b -P blender/make_buildings.py -- --set city`.
 `blender/blend/*.blend` hold the low-poly shells (open them to look at the models).
 
@@ -52,29 +60,52 @@ The shipped low-poly shells are the mid and far tiers. Lots nearest the camera s
 
 | sheet | what | tris each |
 | --- | --- | --- |
-| `hero-trees` (`lod: hero`) | recursive branching trunk and boughs (bark strips, constant texel density), 1.4-2k leaf cards in overlapping lobes (front/back pairs with radial normals, so each lobe shades like a volume), pine whorls and skirt; 512 px cards, 512x1024 bark | 8.7 to 10k |
-| `hero-trees` (`lod: detail`) | the same trees with the twig level dropped and a few hundred larger cards: for trees the camera sees clearly but not up close | 2 to 3.4k |
-| `hero-houses` | the high-poly twin itself: lap-siding boards, shingle courses, louvred shutters, raised door panels, gutters, downspouts, porch steps, balusters, chimney caps and pots | 2 to 5k |
+| `hero-trees` (`lod: hero`) | recursive branching trunk, boughs and a twig level (bark strips at constant texel density with a normal map cut from the bark's own furrows), 2.3-3.3k small leaf cards in 10-11 overlapping lobes (front/back pairs with radial normals, so each lobe shades like a volume), pine whorls and a dense skirt; 512 px cards, 512x1024 bark | 13.5 to 19k |
+| `hero-trees` (`lod: detail`) | the same trees with the twig levels dropped and a few hundred larger cards: for trees the camera sees clearly but not up close (also the night city's street trees) | 2 to 3.4k |
+| `hero-houses` | the high-poly twin itself: lap-siding boards, shingle courses, louvred shutters, muntins dividing the sashes, flower boxes, raised door panels with a lantern either side, a mailbox and a house number, frieze boards, gutters, downspouts, foundation vents, a condenser on its pad, plumbing stacks and box vents on the back slope, porch steps, balusters, a porch ceiling light, chimney caps and pots; plus the window glass (below) | 2.2 to 8.3k |
+| `hero-towers` (city) | the towers' and blocks' high-poly twins: curtain-wall mullions, recessed punched windows with sills and lintels, cornices, louvres, rooftop plant, and at street level shopfronts with doors, canvas awnings, lit sign boxes and blade signs, tower lobbies under canopies with downlights, fire escapes (landings, balusters, stairs) and window air conditioners on the walk-ups; plus the window glass | 18 to 35k (blocks, curtain walls), 56 to 165k (the masonry towers) |
 
-Hero houses sample the **same baked slot pixels** as the lean shell wherever a face
+Hero buildings sample the **same baked slot pixels** as the lean shell wherever a face
 points the way its wall or roof slot does (the bake was projected along that normal, so
-the pixel at a recessed pane is the pane), at 512-px tiles (about 20 to 29 px per metre).
-Every other face (reveals, trim sides, board edges, tops) takes the flat colour of its
-material from the palette strip, and there is no normal map: the relief is geometry.
-Faces that coincide back to back are dropped, and the wall slabs leave their outer
-ends open (they sit in the neighbouring wall's plane).
+the pixel at a recessed pane is the pane), at 512-px tiles for houses (about 17 to 29 px per
+metre) and twice the lean city's tiles for towers (about 9 to 16 px per metre). Every other
+face (reveals, trim sides, board edges, awning tops) takes the flat colour of its material from
+the palette strip, which also carries a glowing material's glow (the sides of a sign box, a
+blade sign, a canopy downlight), and there is no normal map: the relief is geometry. Faces
+that coincide back to back are dropped, and wall slabs leave their outer ends open (they sit
+in the neighbouring wall's plane, where a second skin z-fights).
 
 Each hero entry in `manifest.json` carries `lean: <module id>` (what it replaces) and
-`sheet: <sheet name>`; the sheets' atlases live under `sheets{}`. `bake-city-rings.mjs`
-decides per lot which tier it gets from its distance to the camera path: houses get
-hero inside `near`; trees get hero inside `treeNear`, detail out to `treeDetail`
-(`rings.detail`, a subset of `mid`), lean beyond. Phones always get the lean module.
+`sheet: <sheet name>`; the sheets' atlases live under `sheets{}`. A hero building is fitted
+to its lot by its lean shell's size (the manifest records it for both), so awnings, cornices
+and fire escapes stand proud of the plot instead of shrinking the building. `bake-city-rings.mjs`
+decides per lot which tier it gets from its distance to the camera path: houses get hero inside
+`near`; trees get hero inside `treeNear`, detail out to `treeDetail` (`rings.detail`, a subset
+of `mid`), lean beyond; the night city keeps a wide `near` for its neon and billboards and
+swaps only the lots inside `hero` (12 units, ~70 lots) to the hero towers. Phones always get
+the lean module.
+
+### Window glass
+
+Every window pane of a hero building is also exported as a second mesh, `glass`, a quad 4 mm
+in front of the baked pane (`Builder.pane` records them; `Model.glass_object` writes them).
+Its first UV set runs 0..1 across the whole window (a sash split by muntins looks into one
+room), the second holds the room's code (`PANE_CODES` in `model.py`: plain, blinds, lit warm,
+dim warm, white, cool, dim cool, from the pane's material) plus a random fraction, the third
+the window's size in metres. `src/webgl/materials/WindowGlass.ts` draws it: a near-mirror
+physical surface (sky and sun in it by Fresnel, weak face-on, strong at a grazing angle) with
+the room behind added as transmitted light, found by **interior mapping**: the view ray is
+traced into a box behind the glass, so each window shows walls, a floor and a ceiling with real
+parallax. Homes look into living rooms (papered walls, a sofa and a picture, a rug, a doorway,
+curtains drawn to the sides or a sheer, blinds); towers into open-plan offices under a grid of
+ceiling panels. The Engine sets the daylight that reaches the rooms and the lamp level from the
+chapter's sun.
 
 ## Other generated assets
 
 | script | writes | notes |
 | --- | --- | --- |
-| `make_cars.py` | `public/models/cars/` | six vehicles (sedan, hatch, suv, pickup, van, taxi), each twice: `<type>.glb`, a lean lofted shell (~1.4k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius` and `wheelOffsets`; the runtime is `StreetCars.ts` |
+| `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each twice: `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets` and `exotic`; the runtime is `StreetCars.ts`. 3.6 MB for all eighteen files |
 | `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
 | `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
 
@@ -86,14 +117,34 @@ z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, to
 The lean cars are cheap on purpose. The camera sails 8 to 30 units over the streets, though,
 where a car is 100 to 200 px long, so `StreetCars.ts` swaps every car inside 28 units of the
 camera (33 on the way back, so it never flickers) to the model from `build_hi`. HIGH only.
-Four meshes per `<type>-hi.glb` (5 to 8k tris counting the four wheels):
+
+| type | tris, lean / close-up | what |
+| --- | --- | --- |
+| `sedan`, `taxi` | 1.47k / 10.8k, 9.9k | four-door saloon, twin-spoke rims, chrome window frames; the taxi adds the roof sign, checks and plastic wheel covers |
+| `hatch` | 1.42k / 10.5k | five-door hatch: roof spoiler with a brake light, rear wiper, five broad spokes |
+| `suv` | 1.42k / 11.8k | roof rails, arch cladding, roof spoiler, rear wiper, six Y-spoke rims |
+| `pickup` | 1.47k / 10.7k | crew cab and bed, gunmetal six-spoke rims, tow hitch |
+| `van` | 1.40k / 10.2k | panel van: pressed steel wheels with vents and a cap, sliding-door rail, roof aerial |
+| `supercar` | 1.53k / 12.7k | mid-engine wedge (Huracan / 720S): cab-forward canopy, steep-raked screen, louvred engine deck, scoops pressed into the flanks behind the doors, slim corner lamps with a Y of LED, carbon splitter, skirts and diffuser strakes, twin centre pipes, yellow calipers over drilled ceramic discs, Y-spoke 20" rims on 30-series tyres |
+| `gt` | 1.57k / 12.5k | front-engine grand tourer (812 / DB11): long hood with two vents, cabin set back, fastback to a ducktail, chromed gills behind the front wheels, wide low grille, quad round tail lamps, quad pipes, ten-spoke forged rims, tan leather |
+| `hyper` | 1.62k / 12.0k | track hypercar (P1 / Chiron): teardrop canopy in bare carbon, roof snorkel and dorsal fin, wing on swan-neck struts, canards, a huge diffuser under a full-width light bar, one big centre pipe, centre-lock turbine rims, orange calipers |
+
+The exotics are flagged `exotic` (in `SPECS` and the manifest); their bodies are shaped by
+extras in `HI` that the family cars leave at zero: `tumble` pulls the glasshouse in from the
+shoulders (a function of x on the hypercar, so its canopy tapers to a teardrop), `fender`
+raises crowns over the wheels above the shoulder line, `waist` pinches the flanks between the
+wheels, `pinch` rounds the nose and tail off harder in plan, and `intake` presses a scoop into
+the flank that deepens from the door to its back wall. The wing, snorkel, flank scoops and
+gills also exist as a few boxes in the lean model, so the silhouette holds across the swap.
+
+Four meshes per `<type>-hi.glb` (10 to 13k tris counting the four wheels):
 
 | mesh | what |
 | --- | --- |
-| `paint` | the body skin (a 24-point ring lofted along about 60 sections, wheel arches cut into the flanks), mirror housings, door handles' neighbours, tailgate and roof ribs: tinted per instance, `MeshPhysicalMaterial` with clearcoat |
+| `paint` | the body skin (a 24-point ring lofted along 60 to 75 sections, wheel arches cut into the flanks), mirror housings (and the exotics' stalks), the hatchbacks' roof spoiler, the hypercar's snorkel and fin, van roof ribs, pickup tailgate: tinted per instance, `MeshPhysicalMaterial` with clearcoat (a glossier one for the exotics) |
 | `glass` | one sheet per window, inset 1.6 cm from the skin, drawn tinted and see-through so the interior shows (a black rubber seal lines each opening) |
-| `detail` | interior (headlined shell, dash, wheel, seats, console), lamps with bezels and lenses, grille slats, intakes, fog lamps, plates, exhaust tips, calipers, door shut lines, chrome beltline, hood and deck lines, wipers, taxi sign and checks, roof rails, pickup bed ribs and liner |
-| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z: tyre (sidewall, shoulder, tread ribs and grooves), alloy rim with 5 to 8 spokes, hub cap, brake disc |
+| `detail` | interior (headlined shell, dash, wheel, seats, bolstered buckets in the exotics, console), lamps with bezels, lenses and LED running-light strips, grille slats, intakes, fog lamps, plates, badges and the model's name in chrome letters, exhaust tips, calipers (curved round the disc, painted), door and bumper shut lines, gloss-black pillars between the side windows, window frames and beltline, mirror stalks and repeaters, fuel flap, tow-eye covers, hood, frunk and deck lines, wipers, rear wiper, shark-fin antenna, taxi sign and checks, roof rails, van door rail and aerial, pickup bed ribs, liner and hitch; on the exotics the carbon splitter, skirts, diffuser and strakes, engine louvres, wing, canards and canopy |
+| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z, 24 segments round: tyre (bulged sidewall with a ring of raised lettering, squared shoulder, two ribs either side of a groove, a sipe across the shoulder rib every segment; 30 to 35-series on the exotics), rim lip and barrel with one of eight face designs on a concave dish (broad `star` or `six` spokes, thin `multi` spokes, `twin` pairs, `y` forks, twisted `blade`s, a pressed `steel` dish, a plastic `cover`), five lug nuts or a centre-lock nut, hub cap, a ventilated disc (vanes between its plates; drilled carbon-ceramic on the exotics) |
 
 The runtime instances `wheel` four times per car (`wheelOffsets` in the manifest, the right-hand
 pair turned half way round) and sets each instance's rotation from the distance the car has
@@ -101,16 +152,77 @@ rolled, so the wheels turn while the body instances keep one shape.
 
 `detail` and `wheel` share one material, and the vertex colour's **alpha is not opacity**: it
 holds the material class (`K_*` in `cars.py`: plastic, chrome, rubber, alloy, fabric, head lamp,
-tail lamp, plate, brake disc, indicator, gloss black, liner), which `StreetCars.ts` turns into
-roughness, metalness and emission per vertex. The tail-lamp lens also takes a per-instance
-brake level, so it burns brighter as the car brakes.
+tail lamp, plate, brake disc, indicator, gloss black, liner, carbon fibre, LED light guide,
+enamel; 15 of the 16 slots), which `StreetCars.ts` turns into roughness, metalness and emission
+per vertex (`CLASS_TABLE`). The tail-lamp lens also takes a per-instance brake level, so it
+burns brighter as the car brakes.
 
 Everything that sits on the skin (lamps, grille, plates, shut lines, mirrors) is fitted from the
 same `_Body.ring(x)` description the skin is lofted from, so changing a profile in `SPECS`
-(or the extras in `HI`) moves the parts with it. The close-up builds reuse `SPECS` for the
-envelope, so the lean and close-up cars of a type have the same size and silhouette.
+(or the extras in `HI`) moves the parts with it. `_patch` lays a sheet on the skin over a range
+of sections and ring rows (`_on_skin` gives the point and normal at any fractional row), which
+is how the corner lamps, window frames, louvres, gills and skirts follow the body. The close-up
+builds reuse `SPECS` for the envelope, so the lean and close-up cars of a type have the same
+size and silhouette.
 
-## Layout of the code
+`StreetCars.ts` paints the exotics from a palette of their own (rosso, arancio, lime, giallo,
+deep blue, white, black, purple, gunmetal, racing green) and deals them out at about one car in
+seven, in traffic and parked alike: `TRAFFIC` and `PARKED` weight every type, and the exotics'
+share of the weights is handed out by a running tally rather than drawn, so every street has
+its few. On HIGH every car mesh but the glass casts into and takes the sun's shadow map (and
+casts into the streetlights' spots), and `setEnvMap` hands a reflection probe's map to the
+paint, glass and close-up detail.
+
+## People
+
+`make_people.py` writes `public/models/people/people.glb` (one mesh per variant, 461 KB in all)
+and its `manifest.json`; the figures are built in `bld/people.py`, the runtime is
+`src/webgl/actors/Pedestrians.ts` (where people go: `PedestrianPlans.ts`).
+
+| variant | tris (with every option) | what |
+| --- | --- | --- |
+| `man-casual` | 1.92k (2.38k) | tee with short sleeves, jeans, sneakers; cap, backpack, cross-body bag, beard |
+| `man-jacket` | 1.89k (2.44k) | jacket over a shirt (open collar), trousers, shoes; beanie, bag, backpack, beard, scarf |
+| `man-coat` | 2.13k (2.59k) | knee-length coat with a stand-up collar and swinging tails; beanie, scarf, bag, beard |
+| `woman-dress` | 2.12k (2.57k) | blouse and A-line skirt (a dress when both take one colour), bare legs or tights, flats; ponytail, bun, long hair, bag, scarf |
+| `woman-casual` | 1.95k (2.59k) | three-quarter sleeves, trousers, sneakers; ponytail, bun, long hair, bag, backpack, beanie |
+| `woman-coat` | 2.16k (2.79k) | coat, tights, boots; ponytail, bun, long hair, beanie, scarf, bag |
+| `child` | 1.98k (2.35k) | about eight: bigger head, tee and shorts; cap, backpack, ponytail |
+| `jogger` | 1.98k (2.26k) | lean build, tee, running shorts, sneakers; cap, ponytail |
+| `dog` | 0.99k | a medium dog: two-part legs, floppy ears, collar, tail |
+
+A figure is closed tubes lofted round a skeleton (torso through superellipse sections, limbs along
+their bones with knee, calf and forearm bulges, mitten hands with a thumb, a head shaped ring by
+ring with a nose, ears, eyes and brows, a hair shell, lofted shoes with a sole band), in metres,
+facing +x, exported at `SCALE`. The parts only overlap, never join, so a limb turns about its joint
+without tearing. Clothes are mostly regions of those surfaces (a sleeve is the top of the arm tube,
+a little looser, ending in a hem: two rings at one height, so the hem is a lip and the colour edge
+is crisp); skirts and coat tails are open lofts hanging from the waist. Hats, bags, backpacks,
+scarves, beards and the longer hair styles are options: always in the mesh, drawn per person.
+
+Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
+
+| byte | holds |
+| --- | --- |
+| 0 | `bone * 16 + region`. Bones (`B_*`): root (pelvis), chest, head, upper arm and forearm each side, thigh, shin and foot each side, skirt, bag (the dog uses the limb slots for its legs, and tail). Regions (`R_*`): skin, hair, top, bottom, shoes, accessory, under (a shirt under a jacket, tights) take per-instance colours; dark (soles, eyes) and light (sneaker soles) are fixed |
+| 1 | option: 0 is always drawn, k only when bit k-1 of the instance's option mask is set (`options` in the manifest is the bit order) |
+| 2 | weight x 255: how much of its own bone's turn the vertex takes (half at a knee or elbow ring so the joint bends; a skirt hem takes some of its side's thigh swing) |
+| 3 | occlusion x 255: ambient occlusion baked by casting rays against the body |
+
+Normals are signed bytes (`KHR_mesh_quantization`); positions stay floats. The manifest carries each
+variant's rig in glTF frame and site units: a pivot per bone, thigh and shin length, the heel and
+toe from the ankle, and the right palm (where a leash is held).
+
+`Pedestrians.ts` draws one `InstancedMesh` per variant and poses every vertex in the shader, turning
+it about its joint and every joint above it (no skinning data). The legs are solved: the stance
+foot's ankle slides back under the hip at a constant speed, a two-bone solve gives the thigh angle
+for the knee's flex, the foot rolls heel, flat, toe, and the pelvis drops until the lower foot is
+on the ground; the runtime advances each walker's phase by the distance walked, so feet stay
+planted. Joggers run the same rig (short stance, high knee fold, pumping arms, flight); standing
+people sway, look about, talk with their hands in turns or read a phone. Colours (seven per person,
+packed sRGB), gait and pose are per-instance attributes, and the far cull happens in the shader.
+On HIGH the figures cast real shadows through posed depth materials; a soft blob sits under each.
+
 
 ```
 make_buildings.py   entry point: build -> UV -> bake -> export (one --set / --sheet at a time)
@@ -120,15 +232,18 @@ bld/
   geo.py            wall-local frames, boxes, quads, cylinders, spheres
   materials.py      the material table + the bake-pass swaps (see below)
   facade.py         tower facades: curtain wall, punched, deco, ribbon, steel, louvre, shopfront
+                    (awnings, signs, lobbies), fire escapes, window air conditioners
   roofs.py          flat roofs: parapets, plant, skylights, solar rows, helipads
   house.py          house walls with real openings, gable/hip roofs, porches, chimneys, dormers
-  homes.py          the twelve houses     trees.py   the four trees (lean)
+  homes.py          the twelve houses (per-house muntin and flower-box styles)
+  trees.py          the four trees (lean)
   hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
-  bark.py           periodic procedural bark strips
+  bark.py           periodic procedural bark strips and their normal maps
   cars.py           road vehicles: the lean lofted shells (`build`) and the close-up models (`build_hi`)
+  people.py         pedestrians and a dog: lofted figures, clothing regions, options, the rig attribute
   lighthouse.py, lh_geo.py, lh_tex.py   the lighthouse, its builders and its maps
   archetypes.py     the eight towers and four blocks
-  model.py          the low/high pair, UV assignment, bake proxies
+  model.py          the low/high pair, UV assignment, bake proxies, the hero mesh and its glass
   atlas.py          sheet layouts and the rectangle packer
   bake.py           the Cycles passes and map assembly
 ```

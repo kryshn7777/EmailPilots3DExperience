@@ -38,18 +38,21 @@ const OFFSETS = {
 // real boughs and leaf cards out to a radius where a lean 60-triangle blob would still read as
 // one. Beyond `lite` the lean module stands. Houses only have the hero tier. `detail` and `lite`
 // are subsets of `mid`. Phones (low) have no hero tier but do get detail and lite.
+// `hero` (city): the lots inside `near` that get the full-geometry hero towers and blocks
+// (blender `--sheet hero-towers`, 18-170k triangles each), which only the lots the canyon flies
+// past can justify; `near` itself still decides the neon and billboard dressing in City.ts.
 const RINGS = {
-  city: { high: { near: 18, mid: 1e6 }, low: { near: 8, mid: 45 } },
+  city: { high: { near: 18, mid: 1e6, hero: 12 }, low: { near: 8, mid: 45 } },
   rooftops: {
-    high: { near: 11, mid: 110, treeNear: 12, treeDetail: 24, treeLite: 78, streetDetail: 14, streetLite: 42 },
+    high: { near: 11, mid: 110, treeNear: 15, treeDetail: 28, treeLite: 78, streetDetail: 16, streetLite: 42 },
     low: { near: 10, mid: 55, treeNear: 0, treeDetail: 15, treeLite: 36, streetDetail: 9, streetLite: 24 },
   },
 };
 
 const partition = (lots, offset, radii, kindOf = () => undefined) => {
   const out = {
-    high: { near: [], mid: [], far: [], detail: [], lite: [] },
-    low: { near: [], mid: [], far: [], detail: [], lite: [] },
+    high: { near: [], mid: [], far: [], detail: [], lite: [], hero: [] },
+    low: { near: [], mid: [], far: [], detail: [], lite: [], hero: [] },
   };
   lots.forEach((lot, i) => {
     let best = Infinity;
@@ -77,12 +80,15 @@ const partition = (lots, offset, radii, kindOf = () => undefined) => {
       const detailTo = lot.street ? Math.min(r.treeDetail ?? 0, r.streetDetail ?? 22) : r.treeDetail;
       const liteTo = lot.street ? Math.min(r.treeLite ?? 0, r.streetLite ?? 30) : r.treeLite;
       (best < near ? out[tier].near : best < r.mid ? out[tier].mid : out[tier].far).push(i);
+      if (r.hero !== undefined && best < Math.min(r.hero, near)) out[tier].hero.push(i);
       if (isTree && best >= near && best < r.mid) {
         if (detailTo !== undefined && best < detailTo) out[tier].detail.push(i);
         else if (liteTo !== undefined && best < liteTo) out[tier].lite.push(i);
       }
     }
   });
+  // a set without a hero radius swaps its whole near ring (the homes), so it carries no list
+  for (const tier of ['high', 'low']) if (radii[tier].hero === undefined) delete out[tier].hero;
   return out;
 };
 
@@ -107,7 +113,8 @@ for (const [key, lots] of [['city', cityLots], ['rooftops', roofLots]]) {
     key,
     'high near/mid/far:',
     rings[key].high.near.length, rings[key].high.mid.length, rings[key].high.far.length,
-    `(detail ${rings[key].high.detail.length}, lite ${rings[key].high.lite.length})`,
+    `(detail ${rings[key].high.detail.length}, lite ${rings[key].high.lite.length}` +
+      `${rings[key].high.hero ? `, hero ${rings[key].high.hero.length}` : ''})`,
     '· low:',
     rings[key].low.near.length, rings[key].low.mid.length, rings[key].low.far.length,
     `(detail ${rings[key].low.detail.length}, lite ${rings[key].low.lite.length})`,

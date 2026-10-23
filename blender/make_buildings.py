@@ -12,6 +12,7 @@ runtime):
   main         the lean modules, baked from high-poly twins (every set has one)
   hero-trees   close-up trees: bark tubes and leaf cards, built directly (homes only)
   hero-houses  close-up houses: the high-poly twin itself on a denser bake (homes only)
+  hero-towers  close-up towers and blocks for the night city's canyon, the same way (city only)
 
 Building a single sheet merges its modules and atlas into the existing manifest, so
 a hero sheet can be rebuilt in seconds without re-baking the lean one.
@@ -31,6 +32,7 @@ from PIL import Image  # noqa: E402
 
 from bld import archetypes, atlas, foliage, hero_trees, homes  # noqa: E402
 from bld.bake import Baker  # noqa: E402
+from bld.bark import normal_map as bark_normals  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -38,6 +40,8 @@ SETS = {
     'city': dict(dir='city-kit', sheets={
         'main': dict(layout='city', kind='baked',
                      groups=(('tower', archetypes.TOWERS), ('block', archetypes.BLOCKS))),
+        'hero-towers': dict(layout='city-hero', kind='hero-baked',
+                            groups=(('tower', archetypes.TOWERS), ('block', archetypes.BLOCKS))),
     }),
     'homes': dict(dir='homes', sheets={
         'main': dict(layout='homes', kind='baked',
@@ -77,13 +81,19 @@ def parse():
     p.add_argument('--debug', help='also dump full-size PNGs of every map here')
     p.add_argument('--blend', help='save the low-poly models as a .blend here')
     p.add_argument('--no-bake', action='store_true', help='build and export geometry only')
+    p.add_argument('--reuse-maps', action='store_true',
+                   help='hero sheets: re-export the meshes against the atlas already on disk (no bake); '
+                        'only valid while the modules\' slots and materials are unchanged')
     return p.parse_args(argv)
 
 
 def export_glb(obj, path):
+    """Write one object, or a list of them (the first is the active one), to a GLB."""
+    objs = obj if isinstance(obj, (list, tuple)) else [obj]
     bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
     bpy.ops.export_scene.gltf(
         filepath=path, export_format='GLB', use_selection=True, export_apply=False,
         export_materials='NONE', export_texcoords=True, export_normals=True,
@@ -118,8 +128,11 @@ def save_maps(sheet, maps, out, debug, size_full):
                 continue
             path = os.path.join(out, variant[name])
             sized = im if size == size_full else im.resize((size, size), Image.LANCZOS)
-            if name == 'normal':
+            if name == 'normal' and sheet == 'main':
                 sized.save(path, 'WEBP', lossless=True, method=6)
+            elif name == 'normal':
+                # a hero sheet's normals are bark noise over a flat field: lossy holds up there
+                sized.save(path, 'WEBP', quality=92, method=6)
             else:
                 sized.save(path, 'WEBP', quality=90, alpha_quality=100, method=6)
             sizes[os.path.basename(path)] = os.path.getsize(path)
@@ -180,15 +193,20 @@ def build_trees(setname, sheet, cfg, args, out):
     color = np.zeros((n, n, 4), np.uint8)
     orm = np.zeros((n, n, 3), np.uint8)
     orm[...] = (255, 204, 0)
+    # the cards keep their soft radial lighting normals (a flat normal map there); the bark
+    # gets the relief of its own furrows, which is what a trunk at arm's length is made of
+    normal = np.zeros((n, n, 3), np.uint8)
+    normal[...] = (128, 128, 255)
     for key, rect in layout.cards.items():
         x, y, w, h = rect
         color[y:y + h, x:x + w] = cards[key]
     for sp, rect in layout.bark.items():
         x, y, w, h = rect
-        rgb, o = barks[sp]
+        rgb, o, height = barks[sp]
         color[y:y + h, x:x + w, :3] = rgb
         color[y:y + h, x:x + w, 3] = 255
         orm[y:y + h, x:x + w] = o
+        normal[y:y + h, x:x + w] = bark_normals(height, 9.0)
 
     entries = []
     for mid, (species, lean, lod) in HERO_TREES.items():
@@ -205,8 +223,8 @@ def build_trees(setname, sheet, cfg, args, out):
             height=round(dz * homes.SCALE, 3), tris0=tree.tris(),
         ))
         print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s')
-    sizes = save_maps(sheet, dict(color=color, orm=orm), out, args.debug, n)
-    return entries, sizes, dict(normal=False, emissive=False, alpha=True)
+    sizes = save_maps(sheet, dict(color=color, orm=orm, normal=normal), out, args.debug, n)
+    return entries, sizes, dict(normal=True, emissive=False, alpha=True)
 
 
 def build_hero_baked(setname, sheet, cfg, args, out):
@@ -229,18 +247,22 @@ def build_hero_baked(setname, sheet, cfg, args, out):
     cells = layout.palette_cells(names)
     print(f'[{sheet}] {len(models)} models, {len(names)} palette colours')
 
-    baker = Baker(layout)
+    baker = None if args.reuse_maps else Baker(layout)
     entries = []
     for model in models:
         t = time.time()
         model.assign_uv(layout, layout.tile_rect(model.kind, model.tile_index), cells)
         dx, dy, dz = model.dims()
-        k = model.scale
-        hp = model.hp_object()
-        baker.bake(model, hp)
-        bpy.data.objects.remove(hp)
+        # houses are exported at a fixed scale, towers normalised to their target size
+        k = model.scale if model.scale else model.target / max(dx, dy, dz)
+        if baker:
+            hp = model.hp_object()
+            baker.bake(model, hp)
+            bpy.data.objects.remove(hp)
         hero = model.hero_object(k)
-        export_glb(hero, os.path.join(out, f'{model.id}-hero.lod0.glb'))
+        # the panes go along as a second mesh, `glass`, drawn with the window shader
+        glass = model.glass_object(k)
+        export_glb([hero] + ([glass] if glass else []), os.path.join(out, f'{model.id}-hero.lod0.glb'))
         entries.append(dict(
             id=f'{model.id}-hero', kind=model.kind, sheet=sheet, lean=model.id, lod='hero',
             lod0=f'{model.id}-hero.lod0.glb',
@@ -249,9 +271,11 @@ def build_hero_baked(setname, sheet, cfg, args, out):
         ))
         print(f'{model.id + "-hero":28s} {model.hero_tris():6d} tris  {model.density:5.1f} px/m  '
               f'{time.time() - t:5.1f}s')
-    m = baker.assemble(names)
-    sizes = save_maps(sheet, {n: m[n] for n in ('color', 'orm', 'emissive')}, out, args.debug,
-                      layout.size)
+    sizes = {}
+    if baker:
+        m = baker.assemble(names)
+        sizes = save_maps(sheet, {n: m[n] for n in ('color', 'orm', 'emissive')}, out, args.debug,
+                          layout.size)
     return entries, sizes, dict(normal=False, emissive=True, alpha=False)
 
 

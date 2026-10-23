@@ -3,7 +3,8 @@
 A tube's u runs once around its circumference, so the strip must wrap in x. Furrows
 run along the trunk (stretched noise), ridges catch lighter, the occlusion map
 darkens the furrows, and a species can add moss or the dark horizontal lenticels of
-a poplar. Returns sRGB colour plus an occlusion/roughness/metalness strip.
+a poplar. Returns sRGB colour, an occlusion/roughness/metalness strip, and the height
+field the furrows were cut from (for the hero sheet's normal map).
 """
 import numpy as np
 
@@ -46,7 +47,7 @@ def hex_rgb(h):
 
 
 def bark(w, h, tint, seed, moss=0.0, lenticels=0.0, furrow=1.0):
-    """(rgb uint8 (h, w, 3), orm uint8 (h, w, 3)) for one species."""
+    """(rgb uint8 (h, w, 3), orm uint8 (h, w, 3), height float (h, w)) for one species."""
     # ridged noise: stretched along y so furrows run up the trunk
     ridge = 1.0 - np.abs(_fbm(w, h, 10, 5, 4, seed) * 2 - 1)
     ridge = ridge ** (1.6 * furrow)
@@ -72,4 +73,17 @@ def bark(w, h, tint, seed, moss=0.0, lenticels=0.0, furrow=1.0):
     ao = 0.45 + 0.55 * np.clip(height * 1.4, 0, 1)
     orm = np.stack([ao, np.full_like(ao, 0.92), np.zeros_like(ao)], axis=-1)
     to8 = lambda a: np.clip(a * 255 + 0.5, 0, 255).astype(np.uint8)
-    return to8(_srgb(col)), to8(orm)
+    return to8(_srgb(col)), to8(orm), height
+
+
+def normal_map(height, strength):
+    """Tangent-space normals (OpenGL: +x along u, +y along v, which runs up the image) from a
+    height field that wraps in x, as uint8 RGB."""
+    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
+    dy = np.zeros_like(height)
+    dy[1:-1] = (height[2:] - height[:-2]) * 0.5
+    nx, ny = -dx * strength, dy * strength
+    nz = np.ones_like(height)
+    n = np.stack([nx, ny, nz], axis=-1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    return np.clip((n * 0.5 + 0.5) * 255 + 0.5, 0, 255).astype(np.uint8)

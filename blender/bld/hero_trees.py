@@ -28,23 +28,23 @@ TEXEL = 200.0                # bark pixels per metre
 # lens[d] is the length of a depth-d branch; kids[d] children spawn on a depth-d branch.
 PARAMS = {
     'oak': dict(
-        trunk_r=(0.50, 0.20), lens=[4.6, 3.4, 2.3, 1.5], kids=[6, 4, 3], kid_t=(0.5, 1.0),
-        angle=(38, 72), wobble=0.26, up=0.10, taper=0.62, sides=(12, 8, 6, 4),
-        centre=(0, 0, 7.8), radii=(4.7, 4.7, 3.8), cards=2000, size=(0.62, 1.0),
+        trunk_r=(0.50, 0.20), lens=[4.6, 3.4, 2.3, 1.5, 0.8], kids=[6, 4, 3, 2], kid_t=(0.5, 1.0),
+        angle=(38, 72), wobble=0.26, up=0.10, taper=0.62, sides=(16, 10, 7, 5, 4),
+        centre=(0, 0, 7.8), radii=(4.7, 4.7, 3.8), cards=3300, size=(0.48, 0.84), lobes=11,
         bark=dict(tint='#5b4a3a', moss=0.55, furrow=1.0)),
     'maple': dict(
-        trunk_r=(0.42, 0.18), lens=[4.0, 2.8, 1.9, 1.2], kids=[5, 4, 3], kid_t=(0.5, 1.0),
-        angle=(34, 64), wobble=0.24, up=0.12, taper=0.62, sides=(12, 8, 6, 4),
-        centre=(0, 0, 6.8), radii=(3.9, 3.9, 3.9), cards=1700, size=(0.55, 0.92),
+        trunk_r=(0.42, 0.18), lens=[4.0, 2.8, 1.9, 1.2, 0.65], kids=[5, 4, 3, 2], kid_t=(0.5, 1.0),
+        angle=(34, 64), wobble=0.24, up=0.12, taper=0.62, sides=(16, 10, 7, 5, 4),
+        centre=(0, 0, 6.8), radii=(3.9, 3.9, 3.9), cards=2800, size=(0.44, 0.78), lobes=10,
         bark=dict(tint='#6a5646', moss=0.3, furrow=0.8)),
     'poplar': dict(
-        trunk_r=(0.34, 0.07), lens=[10.0, 1.9, 1.2, 0.8], kids=[11, 3, 2], kid_t=(0.22, 0.98),
-        angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(10, 6, 5, 4),
-        centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=1400, size=(0.5, 0.82),
+        trunk_r=(0.34, 0.07), lens=[10.0, 1.9, 1.2, 0.8, 0.45], kids=[11, 3, 2, 2], kid_t=(0.22, 0.98),
+        angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(14, 7, 5, 4, 4),
+        centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=2300, size=(0.4, 0.7), lobes=10,
         bark=dict(tint='#c9c3b2', moss=0.0, lenticels=0.6, furrow=0.35)),
     'pine': dict(
-        trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.56), branches=8, reach=2.7,
-        cards_per_branch=8, size=(1.0, 1.5), skirt=14,
+        trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.5), branches=9, reach=2.7,
+        cards_per_branch=11, size=(0.85, 1.3), skirt=20,
         bark=dict(tint='#5b3f2f', moss=0.15, furrow=1.2)),
 }
 

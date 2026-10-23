@@ -20,6 +20,12 @@ from .roofs import flat_roof, pyramid_hp
 
 X, Y = Vector((1, 0, 0)), Vector((0, 1, 0))
 
+# what the room behind a pane is, from the pane's material: 0 plain glass (a dim room), 1 blinds
+# drawn, then the lit rooms (warm, dim warm, white, cool, dim cool). The site's window shader
+# reads it from the glass mesh's second UV set (see KitCity `windowMaterial`).
+PANE_CODES = {'glass_blinds': 1, 'lit_warm': 2, 'lit_warm_dim': 3, 'lit_white': 4, 'lit_cool': 5,
+              'lit_cool_dim': 6}
+
 
 def _solid_uv(face, uv, normal, cx, cy, spread, A):
     """UVs for a flat-colour face: planar-fit into the middle of its palette cell.
@@ -122,7 +128,9 @@ class Model:
             self.lp.face(
                 [fr.p(0, 0, z0), fr.p(L, 0, z0), fr.p(L, 0, z1), fr.p(0, 0, z1)], 'lp',
                 expect=fr.n, meta=dict(slot=key, kind='wall', o=fr.p(0, 0, z0), a=fr.u, b=Z))
-            build_wall(self.hp, fr, L, z0, z1, style, self.rng(key))
+            # the hero tier samples this slot's baked pixels on every face that looks out of the wall
+            with self.ctx(key, fr.p(0, 0, z0), fr.u, Z, fr.n):
+                build_wall(self.hp, fr, L, z0, z1, style, self.rng(key))
         # roof=False: something (a mansard, a crown) sits on the whole top, so
         # a roof face here would only spend texture space on pixels nobody sees
         if roof is not False:
@@ -276,21 +284,22 @@ class Model:
             pts = [(a0.x, a0.y, z0), (b0.x, b0.y, z0), (b1.x, b1.y, z1), (a1.x, a1.y, z1)]
             self.lp.face(pts, 'lp', expect=tilt,
                          meta=dict(slot=key, kind='wall', o=Vector(pts[0]), a=fr.u, b=up_slope))
-            self.hp.face(pts, wall_mat, expect=tilt)
-            rng = self.rng(key)
-            count = dormers[i % 2]
-            for k in range(count):
-                u = L * (k + 0.5) / count
-                t = 0.42
-                w0 = -inset * t
-                zc = z0 + rise * t
-                self.hp.fbox(fr, u - 0.75, u + 0.75, w0 - 0.4, w0 + 0.9, zc - 0.7, zc + 0.9,
-                             'limestone', skip=('-w',))
-                lit = rng.choice(['lit_warm', 'glass_dark', 'glass_mid', 'lit_warm_dim'])
-                self.hp.fquad(fr, u - 0.5, u + 0.5, zc - 0.45, zc + 0.65, w0 + 0.92, lit)
-                self.hp.face([fr.p(u - 0.85, w0 + 1.0, zc + 0.9), fr.p(u + 0.85, w0 + 1.0, zc + 0.9),
-                              fr.p(u + 0.85, w0 - 0.4, zc + 1.55), fr.p(u - 0.85, w0 - 0.4, zc + 1.55)],
-                             wall_mat, expect=Z + fr.n * 0.4)
+            with self.ctx(key, pts[0], fr.u, up_slope, tilt):
+                self.hp.face(pts, wall_mat, expect=tilt)
+                rng = self.rng(key)
+                count = dormers[i % 2]
+                for k in range(count):
+                    u = L * (k + 0.5) / count
+                    t = 0.42
+                    w0 = -inset * t
+                    zc = z0 + rise * t
+                    self.hp.fbox(fr, u - 0.75, u + 0.75, w0 - 0.4, w0 + 0.9, zc - 0.7, zc + 0.9,
+                                 'limestone', skip=('-w',))
+                    lit = rng.choice(['lit_warm', 'glass_dark', 'glass_mid', 'lit_warm_dim'])
+                    self.hp.pane(fr, u - 0.5, u + 0.5, zc - 0.45, zc + 0.65, w0 + 0.92, lit)
+                    self.hp.face([fr.p(u - 0.85, w0 + 1.0, zc + 0.9), fr.p(u + 0.85, w0 + 1.0, zc + 0.9),
+                                  fr.p(u + 0.85, w0 - 0.4, zc + 1.55), fr.p(u - 0.85, w0 - 0.4, zc + 1.55)],
+                                 wall_mat, expect=Z + fr.n * 0.4)
         self._roof(inner, z1, roof or {'parapet': 0.0, 'margin': 0.8}, f'{name}')
         self.volumes.append((cx - w / 2, cy - d / 2, cx + w / 2, cy + d / 2, z0))
 
@@ -329,6 +338,8 @@ class Model:
         shift = Vector((-(min(xs) + max(xs)) / 2, -(min(ys) + max(ys)) / 2, 0.0))
         for b in (self.lp.bm, self.hp.bm):
             bmesh.ops.translate(b, verts=b.verts, vec=shift)
+        for p in self.hp.panes:
+            p['pts'] = [q + shift for q in p['pts']]
         for m in self.lp.meta:
             if 'o' in m:
                 m['o'] = m['o'] + shift
@@ -465,6 +476,39 @@ class Model:
         bm.to_mesh(mesh)
         bm.free()
         obj = bpy.data.objects.new(f'{self.id}.hero', mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        return obj
+
+    def glass_object(self, scale):
+        """The hero tier's window glass: one quad per pane, 4 mm proud of the baked pane.
+
+        UVMap runs 0..1 across the whole window the pane belongs to; `Pane` holds the room
+        code plus a random fraction in x (u is the one coordinate the glTF exporter leaves
+        alone); `Size` is the window's width and height in metres, for the room's proportions.
+        """
+        panes = self.hp.panes
+        if not panes:
+            return None
+        rng = self.rng('panes')
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new('UVMap')
+        info = bm.loops.layers.uv.new('Pane')
+        size = bm.loops.layers.uv.new('Size')
+        for p in panes:
+            pts = [q + p['n'] * 0.004 for q in p['pts']]
+            uvs = p['uv']
+            if _newell_normal(pts).dot(p['n']) < 0:
+                pts, uvs = pts[::-1], uvs[::-1]
+            f = bm.faces.new([bm.verts.new(q * scale) for q in pts])
+            code = PANE_CODES.get(p['mat'], 0) + rng.random() * 0.999
+            for loop, (u, v) in zip(f.loops, uvs):
+                loop[uv].uv = (u, v)
+                loop[info].uv = (code, 0.0)
+                loop[size].uv = p['size']
+        mesh = bpy.data.meshes.new(f'{self.id}.glass')
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new('glass', mesh)
         bpy.context.scene.collection.objects.link(obj)
         return obj
 

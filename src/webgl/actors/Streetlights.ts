@@ -18,11 +18,16 @@ import {
   PointsMaterial,
   Quaternion,
   ShaderMaterial,
+  SpotLight,
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { glowTexture } from '../bake/CanvasTextures';
 import type { Tier } from '../quality';
+import { LAMP_CASTER_LAYER } from '../layers';
+
+/** how many of each street's lent lights are shadow-casting spots */
+const SHADOW_SPOTS = 3;
 
 export interface Lamp {
   x: number;
@@ -58,8 +63,12 @@ export class Streetlights {
   private lens: MeshBasicMaterial;
   private cone: ShaderMaterial | null = null;
   private halo: PointsMaterial;
-  /** a few real lights, lent to whichever lamps are nearest the flight (HIGH only) */
-  private pool: PointLight[] = [];
+  /**
+   * a few real lights, lent to whichever lamps are nearest the flight (HIGH only): the first
+   * SHADOW_SPOTS are spotlights that cast shadows (of the LAMP_CASTER layer: cars, people, street
+   * furniture, the posts themselves), the rest plain point lights
+   */
+  private pool: (PointLight | SpotLight)[] = [];
   private spots: { x: number; z: number }[] = [];
   private reach = 0;
   private scale = 1;
@@ -110,6 +119,7 @@ export class Streetlights {
     });
     bodies.frustumCulled = lenses.frustumCulled = false;
     bodies.castShadow = tier === 'high';
+    bodies.layers.enable(LAMP_CASTER_LAYER);
     this.group.add(bodies, lenses);
     this.disposables.push(bodies, lenses);
 
@@ -131,6 +141,22 @@ export class Streetlights {
       }));
       this.reach = 5.2 * scale * scale;
       for (let i = 0; i < 6; i++) {
+        if (i < SHADOW_SPOTS) {
+          // a downlight with a shadow: the cars, people and posts under the nearest lamps throw
+          // shadows across the road that swing as they pass, the way a real streetlight's do
+          const spot = new SpotLight('#ffbd78', this.reach * 1.6, 9 * scale, Math.PI * 0.36, 0.65, 1.5);
+          spot.castShadow = true;
+          spot.shadow.mapSize.set(512, 512);
+          spot.shadow.bias = -0.0008;
+          spot.shadow.normalBias = 0.02;
+          spot.shadow.radius = 3;
+          spot.shadow.camera.near = 0.05;
+          spot.shadow.camera.far = 9 * scale;
+          spot.shadow.camera.layers.set(LAMP_CASTER_LAYER);
+          this.group.add(spot, spot.target);
+          this.pool.push(spot);
+          continue;
+        }
         const light = new PointLight('#ffbd78', this.reach, 9 * scale, 1.5);
         this.pool.push(light);
         this.group.add(light);
@@ -205,13 +231,25 @@ export class Streetlights {
       }
       taken.push(best);
       const spot = this.spots[best]!;
-      this.pool[k]!.position.set(spot.x, (HEAD_Y - 0.1) * this.scale, spot.z);
+      const light = this.pool[k]!;
+      light.position.set(spot.x, (HEAD_Y - 0.1) * this.scale, spot.z);
+      if ((light as SpotLight).isSpotLight) (light as SpotLight).target.position.set(spot.x, 0, spot.z);
     }
   }
 
   /** 0 in full daylight, 1 at night: the lenses, halos and cones follow it */
   setLevel(level: number): void {
-    for (const l of this.pool) l.intensity = this.reach * level;
+    for (const l of this.pool) {
+      const spot = (l as SpotLight).isSpotLight;
+      l.intensity = this.reach * level * (spot ? 1.6 : 1);
+      // a lamp that is out casts nothing: its shadow map stops being redrawn (switching the shadow
+      // off instead would change every lit material's program)
+      if (spot) {
+        l.shadow!.autoUpdate = level > 0.02;
+        // but the map must exist: a shadow sampler bound to nothing is a GL error on every draw
+        if (!l.shadow!.map) l.shadow!.needsUpdate = true;
+      }
+    }
     this.lens.color.copy(LIGHT).multiplyScalar(0.5 + 1.9 * level);
     this.halo.opacity = 0.9 * level;
     this.halo.visible = level > 0.02;

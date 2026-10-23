@@ -32,6 +32,10 @@ import {
 } from 'postprocessing';
 import { GodRaysEffect } from './post/GodRays';
 import { ZoomBlurEffect } from './post/ZoomBlur';
+import { SSREffect } from './post/SSR';
+import { SSGIEffect } from './post/SSGI';
+import { DepthNormals } from './post/viewSpace';
+import { ReflectionProbe } from './materials/ReflectionProbe';
 import {
   CONTRAIL_FROM,
   FOLD_WINDOW,
@@ -76,6 +80,7 @@ import { DeliveryPopup } from './interact/DeliveryPopup';
 import { BatchHud } from './interact/BatchHud';
 import { SkyDome } from './materials/SkyDome';
 import { REFLECTED_LAYER } from './materials/PlanarReflection';
+import { windowLight } from './materials/WindowGlass';
 import { CloudNoise } from './bake/CloudNoise';
 import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
@@ -143,6 +148,11 @@ export class Engine {
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
   private godRays: GodRaysEffect | null = null;
+  private ssr: SSREffect | null = null;
+  private ssgi: SSGIEffect | null = null;
+  private depthNormals: DepthNormals | null = null;
+  /** the live reflection of the surroundings that car paint and window glass mirror (HIGH) */
+  private envProbe: ReflectionProbe | null = null;
   /** the grade's sun level this frame (0 dark .. ~1.6 noon): god rays follow it */
   private sunLevel = 0;
   private blurLevel = 0;
@@ -223,6 +233,8 @@ export class Engine {
       shadow.normalBias = 0.05;
       shadow.radius = 2.5;
     }
+
+    if (this.quality.tier === 'high' && !UNLIT) this.envProbe = new ReflectionProbe(256);
 
     this.fog = new Fog('#05070f', 10, 90);
     this.scene.fog = this.fog;
@@ -340,6 +352,18 @@ export class Engine {
     if (this.quality.tier === 'high' && !UNLIT) {
       const normalPass = new NormalPass(this.scene, this.camera);
       this.composer.addPass(normalPass);
+      // Light the frame can see bounces off what it lands on (SSGI, before the occlusion takes its
+      // share back), and reflections are traced through the depth buffer (SSR, after it): the
+      // screen-space versions of what Lumen and hardware ray tracing do, built on the same normal
+      // buffer the ambient occlusion reads. ?nogi / ?nossr leave them out for an A/B.
+      const params = new URLSearchParams(location.search);
+      // both read normals rebuilt from depth (post/viewSpace.ts), shared and made once a frame
+      this.depthNormals = new DepthNormals();
+      if (!params.has('nogi')) {
+        this.ssgi = new SSGIEffect(this.camera, this.depthNormals);
+        effects.push(this.ssgi);
+      }
+      this.ssr = params.has('nossr') ? null : new SSREffect(this.camera, this.depthNormals);
       effects.push(
         new SSAOEffect(this.camera, normalPass.texture, {
           blendFunction: BlendFunction.MULTIPLY,
@@ -356,6 +380,7 @@ export class Engine {
           fade: 0.02,
         }),
       );
+      if (this.ssr) effects.push(this.ssr);
     }
     // bloom is a mip chain over the whole frame and it exists to sell light —
     // blockout mode keeps only the scroll blur and the vignette
@@ -578,9 +603,15 @@ export class Engine {
       MathUtils.lerp(lo.scale, hi.scale, u),
       MathUtils.lerp(lo.boost, hi.boost, u),
     );
+    if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
+    if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
     // materials with their own envMap ignore the line above
     KitCity.setEnvIntensity(this.scene.environmentIntensity);
+    // the rooms behind the close-up windows: daylight through the glass, and their lamps, which
+    // are only worth seeing once the day has gone (by day a lit room is a faint warmth)
+    windowLight.day.value = MathUtils.smoothstep(sunLevel, 0.4, 1.4);
+    windowLight.lamp.value = 0.3 + 0.7 * this.lampLevel;
   }
 
   /**
@@ -895,7 +926,13 @@ export class Engine {
     this.airTrail.update(t, time, this.path, this.plane.group.position);
 
     this.beacon.renderReflection(this.renderer, this.scene, this.camera);
+    this.depthNormals?.invalidate();
     this.composer.render();
+    // The probe works where there are cars and close-up glass to mirror it: the town and the city.
+    // It draws after the frame, when every light that just came into view has its shadow map (the
+    // probe's own renders do not redraw them).
+    const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0 : null;
+    this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
 
     if (this.warming) return; // silent warm-up frames: no chrome events
     if (!this.firstFrameDone) {
@@ -906,6 +943,14 @@ export class Engine {
   }
 
   private firstFrameDone = false;
+
+  /** what hangs in front of the probe and must stay out of the reflections it gives */
+  private get probeHidden(): Object3D[] {
+    return [
+      this.plane.group, this.trail.line, this.airTrail.mesh, this.flock.group, this.launchString.line,
+      this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
+    ];
+  }
 
   private sunNdc = new Vector3();
   private sunUv = new Vector2();
@@ -1010,6 +1055,8 @@ export class Engine {
     this.deliveryPopup.dispose();
     this.batchHud.dispose();
     this.composer.dispose();
+    this.envProbe?.dispose();
+    this.depthNormals?.dispose();
     this.noise.dispose();
     this.plane.dispose();
     this.trail.dispose();

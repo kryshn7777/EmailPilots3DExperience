@@ -27,15 +27,20 @@ def louver(**kw):
     return dict(dict(kind='louver', mat='louver', frame='frame_dark', backing='spandrel'), **kw)
 
 
-def shop(wall, bay=4.8, h=6.0, lit=0.5):
-    return dict(h=h, wall=wall, bay=bay, lit=lit)
+def shop(wall, bay=4.8, h=6.0, lit=0.5, lobby=False, awnings=0.5, blades=0.25):
+    return dict(h=h, wall=wall, bay=bay, lit=lit, lobby=lobby, awnings=awnings, blades=blades)
+
+
+def lobby(wall, bay=5.0, h=6.0, lit=0.5):
+    """A tower's ground floor: shops either side of a canopied entrance."""
+    return shop(wall, bay, h, lit, lobby=True, awnings=0.3, blades=0.1)
 
 
 # ---- towers --------------------------------------------------------------------
 
 def glass_a():
     m = Model('skyscraper-glass-a', 'tower', 2.9)
-    body = curtain(floor_h=4.2, ground=shop('concrete_d', 5.0))
+    body = curtain(floor_h=4.2, ground=lobby('concrete_d', 5.0))
     m.tier(0, 0, 34, 28, 0, 138, body, chamfer=3.5,
            roof=dict(parapet=1.2, items=dict(ac=2.0, vent=2.0, skylight=0.6)))
     m.tier(0, 0, 24, 18, 138, 152, louver(), chamfer=2.5,
@@ -51,7 +56,7 @@ def glass_a():
 def glass_b():
     m = Model('skyscraper-glass-b', 'tower', 2.8)
     skin = lambda **kw: curtain(frame='frame_light', glass=TEAL_POOL, **kw)
-    m.tier(0, 0, 40, 30, 0, 64, skin(ground=shop('concrete_d', 5.0)),
+    m.tier(0, 0, 40, 30, 0, 64, skin(ground=lobby('concrete_d', 5.0)),
            roof=dict(parapet=1.1, items=dict(garden=1.8, ac=1.0, vent=1.0)))
     m.tier(0, 0, 32, 24, 64, 124, skin(), chamfer=2.5,
            roof=dict(parapet=1.1, items=dict(garden=1.2, solar=0.6, vent=1.0)))
@@ -68,7 +73,7 @@ def deco():
     skin = lambda **kw: dict(dict(kind='deco', floor_h=4.2, bay=2.4, wall='limestone',
                                   frame='frame_dark', glass=GLASS_POOL, lit=0.3), **kw)
     cornice = (1.0, 0.8, 'limestone')
-    m.tier(0, 0, 42, 34, 0, 84, skin(ground=shop('limestone', 4.8, lit=0.55), cornice=cornice),
+    m.tier(0, 0, 42, 34, 0, 84, skin(ground=lobby('limestone', 4.8, lit=0.55), cornice=cornice),
            roof=dict(parapet=1.1, mat='roof_tar', items=dict(ac=1.5, vent=2.0, skylight=0.5)))
     m.tier(0, 0, 32, 26, 84, 126, skin(cornice=cornice),
            roof=dict(parapet=1.0, mat='roof_tar', items=dict(ac=1.0, vent=1.5)))
@@ -90,7 +95,7 @@ def stone():
             (a, b), (-a, b), (-a, a), (-b, a), (-b, -a), (-a, -a)]
     keys = ['E', 'S', 'S', 'E', 'S', 'S', 'E', 'S', 'S', 'E', 'S', 'S']
     body = punched(floor_h=3.9, bay=2.3, trim='limestone', depth=0.5,
-                   ground=shop('concrete_d', 4.5, h=5.5), cornice=(0.9, 0.6, 'concrete'))
+                   ground=lobby('concrete_d', 4.5, h=5.5), cornice=(0.9, 0.6, 'concrete'))
     m.tier(0, 0, 0, 0, 0, 125, body, poly=poly, keys=keys, name='cross',
            roof=dict(parapet=1.1, items=dict(ac=1.5, vent=2.0, skylight=0.5, bulkhead=0.4)))
     m.tier(0, 0, 14, 14, 125, 138, louver(), chamfer=2.0, roof=dict(parapet=0.7, margin=0.8))
@@ -103,7 +108,7 @@ def stone():
 
 def twin():
     m = Model('skyscraper-twin', 'tower', 2.7)
-    m.tier(0, 0, 42, 28, 0, 92, curtain(ground=shop('concrete_d', 5.0)), chamfer=3.0,
+    m.tier(0, 0, 42, 28, 0, 92, curtain(ground=lobby('concrete_d', 5.0)), chamfer=3.0,
            roof=dict(parapet=1.1, items=dict(ac=1.5, vent=1.5, garden=0.8)))
     m.tier(-12, 0, 15, 28, 92, 146, curtain(frame='frame_light', glass=BLUE_POOL), name='pl',
            roof=dict(parapet=0.9, items=dict(ac=1.5, vent=1.0)))
@@ -134,7 +139,7 @@ def needle():
     """Supertall: a slim glass shaft that tapers in three steps to a long spire."""
     m = Model('skyscraper-needle', 'tower', 2.9)
     skin = lambda **kw: curtain(frame='frame_dark', glass=BLUE_POOL, **kw)
-    m.tier(0, 0, 28, 28, 0, 96, skin(floor_h=4.0, ground=shop('concrete_d', 5.0)), chamfer=4.0,
+    m.tier(0, 0, 28, 28, 0, 96, skin(floor_h=4.0, ground=lobby('concrete_d', 5.0)), chamfer=4.0,
            roof=dict(parapet=1.0, items=dict(ac=1.0, vent=1.0)))
     m.tier(0, 0, 23, 23, 96, 172, skin(floor_h=4.0), chamfer=3.5,
            roof=dict(parapet=1.0, items=dict(ac=1.0, vent=1.0)))
@@ -149,7 +154,7 @@ def crown():
     """Classical office tower under a green copper pyramid."""
     m = Model('skyscraper-crown', 'tower', 2.7)
     body = punched(floor_h=3.9, bay=2.6, wall='limestone', trim='limestone', win_w=0.5,
-                   win_h=0.62, depth=0.5, ground=shop('limestone', 5.2, h=6.0, lit=0.55),
+                   win_h=0.62, depth=0.5, ground=lobby('limestone', 5.2, h=6.0, lit=0.55),
                    cornice=(1.1, 1.0, 'limestone'), belt=(30.0, 0.5, 'limestone'))
     m.tier(0, 0, 36, 36, 0, 78, body, roof=dict(parapet=1.1, mat='roof_tar', items=dict(ac=1.5, vent=1.5)))
     m.tier(0, 0, 28, 28, 78, 128, dict(body, ground=None), roof=dict(parapet=1.0, mat='roof_tar', items=dict(ac=1.0)))
@@ -164,8 +169,9 @@ def crown():
 def brick():
     m = Model('block-brick', 'block', 1.35)
     body = punched(floor_h=3.8, bay=2.9, wall='brick_red', trim='limestone', win_w=0.5,
-                   win_h=0.62, depth=0.4, ground=shop('brick_brn', 4.0, h=5.0, lit=0.6),
-                   cornice=(1.1, 0.9, 'limestone'))
+                   win_h=0.62, depth=0.4,
+                   ground=shop('brick_brn', 4.0, h=5.0, lit=0.6, awnings=0.6, blades=0.4),
+                   cornice=(1.1, 0.9, 'limestone'), fire_escape=True, ac_units=0.12)
     m.tier(0, 0, 24, 18, 0, 34, body,
            roof=dict(parapet=0.9, parapet_mat='brick_red', items=dict(ac=2.0, vent=1.5, skylight=0.6)))
     m.tank(-6, -3, 34, r=2.0, h=3.0)
@@ -200,8 +206,8 @@ def loft():
 def mansard():
     m = Model('block-mansard', 'block', 1.15)
     body = punched(floor_h=3.7, bay=2.5, wall='limestone', trim='limestone', win_w=0.46,
-                   win_h=0.68, sill=0.14, depth=0.35, ground=shop('limestone', 3.8, h=5.0),
-                   cornice=(0.9, 0.8, 'limestone'))
+                   win_h=0.68, sill=0.14, depth=0.35, ground=shop('limestone', 3.8, h=5.0, awnings=0.6),
+                   cornice=(0.9, 0.8, 'limestone'), ac_units=0.06)
     m.tier(0, 0, 28, 17, 0, 26, body, roof=False)
     m.mansard(0, 0, 28, 17, 26, 32.5, 2.6, dormers=(4, 3))
     for x, y in ((-8, -3), (2, 3), (9, -2)):
