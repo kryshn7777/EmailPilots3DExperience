@@ -91,6 +91,55 @@ export const HOME_CHAPTERS: ChapterCopy[] = [
   },
 ];
 
+/** What the software is, in plain words: the first thing the website says once the flight has landed. */
+export const INTRO = {
+  kicker: 'Email Pilots · Windows desktop app',
+  title: 'Personal outreach that follows up for you.',
+  body: 'Email Pilots sends the emails you would write yourself if you had the time — from your own mailbox, paced like a person, and it stops the moment someone replies. It all runs on your PC: no cloud account, no servers, no per-contact fees.',
+  proof: ['7-day free trial · no credit card', '100% local — nothing leaves your PC', 'Gmail, Microsoft or any SMTP mailbox'],
+};
+
+export interface PointCopy {
+  kicker?: string;
+  title: string;
+  body: string;
+}
+
+/** Who it is for (FEATURES.md: founders, recruiters, job-seekers, freelancers & agencies). */
+export const AUDIENCES: { kicker: string; title: string; items: PointCopy[] } = {
+  kicker: 'Who it is for',
+  title: 'Built for people who write to people.',
+  items: [
+    { title: 'Founders', body: 'Reach investors, partners and first customers in your own voice, and let the follow-ups happen without a reminder in your calendar.' },
+    { title: 'Recruiters', body: 'Personalize every message from your own spreadsheet. Each column becomes a merge field, and a candidate who replies is never chased again.' },
+    { title: 'Job-seekers', body: 'Send each person a tailored CV, follow up on a schedule you set, and keep every reply in one place.' },
+    { title: 'Freelancers & agencies', body: 'Run several campaigns side by side from your mailbox plus up to 5 more — each campaign with its own subject and template, each mailbox with its own daily allowance.' },
+  ],
+};
+
+export const STEPS: { kicker: string; title: string; items: PointCopy[] } = {
+  kicker: 'How it works',
+  title: 'Three steps to a send that sounds like you.',
+  items: [
+    { kicker: 'Step 1', title: 'Connect your mailbox', body: 'Sign in with Microsoft, or add Gmail or any SMTP host with a guided app password. Every account is test-authenticated before it is saved.' },
+    { kicker: 'Step 2', title: 'Write once, personal every time', body: 'Import a CSV, write with merge fields like {{name}}, and check a real mail-client preview and a deliverability review before anything leaves.' },
+    { kicker: 'Step 3', title: 'Let it fly', body: 'Sends are spread over human-looking schedules with daily caps. Follow-ups go out on your timetable and stand down the moment a reply lands.' },
+  ],
+};
+
+export const WHY: { kicker: string; title: string; items: PointCopy[] } = {
+  kicker: 'Why Email Pilots',
+  title: 'Honest by design.',
+  items: [
+    { title: 'Measured by replies, not pixels', body: 'No open tracking, no hidden pixels, no rewritten links. Reply-rate analytics are built in.' },
+    { title: 'Private by design', body: 'Contacts, history and credentials stay in files on your PC, protected by Windows’ own vault. The optional AI runs on your machine too.' },
+    { title: 'Paced like a person', body: 'Randomized gaps, a ±minutes wobble on every schedule, a daily cap per mailbox, and new mailboxes eased in from ~5 to ~50 a day.' },
+    { title: 'Follow-ups that stop themselves', body: 'Before every follow-up it checks all your connected inboxes. If the person answered, the rest of the sequence is cancelled.' },
+    { title: 'Rehearse before it is real', body: 'Practice Mode reroutes every send to your own inbox, with the same rendering, pacing and limits, so the first real send is not a leap of faith.' },
+    { title: 'One plan, no meter', body: '$2.9 a week covers your mailbox plus up to 5 more. No per-seat or per-contact fees.' },
+  ],
+};
+
 export interface ManualItem {
   title: string;
   body: string;
@@ -280,6 +329,9 @@ export const FAQ = [
   { q: 'Is my data stored in a cloud?', a: 'No. Contacts, history, replies, and settings are plain local files on your PC. No cloud account, no telemetry, no tracking.' },
   { q: 'How does the free trial work?', a: '7 days, full app, no credit card to start. Cancel anytime.' },
   { q: 'Does the AI send my text to a server?', a: 'Never. The optional copilot runs 100% on your machine; its only network traffic is the one-time model download.' },
+  { q: 'Who is Email Pilots for?', a: 'People who write to other people: founders, recruiters, job-seekers, freelancers and agencies. It is built for personal outreach and follow-up — one person writing to people they want to reach — not for impersonal broadcasts.' },
+  { q: 'Does it track opens or clicks?', a: 'No. There are no hidden pixels and no rewritten links. You measure success by replies, and reply-rate analytics are built in.' },
+  { q: 'Can I try it before I connect my real mailbox?', a: 'Yes. Explore mode tours the whole app with sample data, and Practice Mode reroutes every send to your own inbox so you can rehearse safely.' },
   { q: 'What happens when someone replies?', a: 'Their sequence stands down automatically — any of your connected inboxes counts — and the reply appears in your Replies view within 15 minutes.' },
 ];
 
