@@ -33,6 +33,7 @@ import {
 import { GodRaysEffect } from './post/GodRays';
 import { ZoomBlurEffect } from './post/ZoomBlur';
 import { CinemaEffect } from './post/Cinema';
+import { Lightning } from './actors/Lightning';
 import { SSREffect } from './post/SSR';
 import { SSGIEffect } from './post/SSGI';
 import { VolumetricFogEffect } from './post/VolumetricFog';
@@ -149,6 +150,8 @@ export class Engine {
   private batch: BatchSend;
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
+  /** forked bolts that descend through the storm and the lighthouse's sky (none under reduced motion) */
+  private lightning!: Lightning;
   /** letterbox, grain, film curve; DoF + chromatic aberration on HIGH (post/Cinema.ts). Null under ?nocine */
   private cinema: CinemaEffect | null = null;
   private godRays: GodRaysEffect | null = null;
@@ -293,6 +296,7 @@ export class Engine {
     this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer, this.noise);
     this.envelopes = new Envelopes(this.raycast, this.tooltip);
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
+    this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
@@ -330,6 +334,7 @@ export class Engine {
       this.clouds.night,
       this.envelopes.group,
       this.storm.group,
+      this.lightning.group,
       this.biplane.group,
       this.birds.group,
       this.beacon.group,
@@ -488,6 +493,7 @@ export class Engine {
       ...(this.clouds.volume ? [this.clouds.volume] : []),
       this.envelopes.group,
       this.storm.group,
+      this.lightning.group,
       this.biplane.group,
       this.birds.group,
       this.beacon.group,
@@ -773,7 +779,7 @@ export class Engine {
     shot.look.copy(this.lanternCentre);
 
     // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
-    this.rig.jolt = this.idlePreset ? 0 : this.storm.flash;
+    this.rig.jolt = this.idlePreset ? 0 : Math.max(this.storm.flash, this.lightning.flash);
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -836,7 +842,9 @@ export class Engine {
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirWorld, 60);
 
     this.sky.followCamera(this.camera.position);
-    this.sky.flash = this.storm.flash;
+    // each bolt's return stroke lights the sky and the sea as the storm's own flashes do (last frame's value)
+    const flash = Math.max(this.storm.flash, this.lightning.flash * 0.5);
+    this.sky.flash = flash;
     this.sky.time = time;
 
     // sun direction in view space for the sprite lighting gradient
@@ -946,6 +954,17 @@ export class Engine {
     const stormness =
       MathUtils.smoothstep(t, 0.34, 0.38) * (1 - MathUtils.smoothstep(t, 0.46, 0.52));
     this.storm.update(time, dt, stormness, Math.random, t);
+    // bolts through the storm and the lighthouse's sky: the storm's let-down to the end of the beacon,
+    // landing on the sea (the water's height from the first beacon frame, a fixed one before it);
+    // never under reduced motion or on the sub-page orbits
+    const bolts =
+      this.options.reducedMotion || this.idlePreset ? 0
+        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.55, 0.575));
+    const seaY = this.beacon.group.position.y + 0.15;
+    this.lightning.update(
+      time, dt, bolts, this.camera, seaY, Math.max(this.camera.position.y + 55, seaY + 70),
+      innerHeight * Math.min(devicePixelRatio, 2),
+    );
     this.biplane.update(t, time, this.storm.flash);
     this.birds.update(time, t);
     this.wingPlanes.update(
@@ -958,7 +977,7 @@ export class Engine {
     );
     this.traffic.update(t, time);
     this.plane.setBeamHit(
-      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color, this.delivered),
+      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, Math.max(this.storm.flash, this.lightning.flash * 0.6), this.fog.color, this.delivered),
     );
     // dev hook for automated inspection: `window.__cam = { p: [x,y,z], l: [x,y,z] }` takes the camera
     const hook = this.probe ? (window as unknown as { __cam?: { p: number[]; l: number[] } }).__cam : undefined;
