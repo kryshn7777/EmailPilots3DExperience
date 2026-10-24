@@ -31,22 +31,20 @@ export const PATH_POINTS = [
   [47.5, 3.6, 11],
   [52, 10.2, 9],
   [56, 17.4, 6.8],
-  // CH4 formation — S through the cloud sea, above the city but not in orbit
-  // over it: the climb tops out at 26, having gained 17 since CH3 started at
-  // 9. The first pass gained 43 and put the district so far below that it
-  // stopped reading as a city at all.
-  [60, 24, 5],
-  [70, 26, -4],
-  [80, 25, 3],
-  // CH5 storm — the let-down out of the high air, landing on the
-  // original altitude by its last point so CH6's approach is undisturbed.
-  // It used to be a slalom of +-6 swings through three gates; that was a lot of
-  // bends in a short run, so it is now a gentle drift (+-2) through one gate
-  [88, 23, -1],
-  [94, 21, 2],
-  [100, 19, -1.5],
-  [106, 17, 1.5],
-  [110, 15.5, -1.5],
+  // CH4 formation — straight through the cloud sea, above the town but not in orbit over it: the
+  // climb tops out at 26, having gained 17 since CH3 started at 9. (It used to S across the line,
+  // z 5 → −4 → 3 in twenty units, and with the storm's slalom after it the dart zig-zagged through
+  // the whole middle of the flight; it now eases back onto the line z = 0 and holds it.)
+  [60, 24, 5.2],
+  [70, 25.8, 3.0],
+  [80, 25, 1.4],
+  // CH5 storm — the let-down out of the high air, a straight descent through the one gate,
+  // landing on the original altitude so CH6's approach is undisturbed (it was a ±2 slalom)
+  [88, 23.1, 0.6],
+  [94, 21.2, 0.2],
+  [100, 19.3, 0],
+  [106, 17.6, 0],
+  [110, 16.8, 0],
   // CH6 beacon — calm rising arc, then the delivery: the dart climbs the last
   // stretch to the lantern, flies in through its glass (it dissolves into the lamp
   // there, the Engine shrinks it to nothing at the lantern's centre) and comes out

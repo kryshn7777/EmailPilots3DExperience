@@ -192,14 +192,31 @@ def _garage(hp, fr, o, z0, spec, rng):
         hp.fquad(fr, x0, x0 + w * 0.8 / 4, z0 + h * 0.8, z0 + h * 0.92, -0.045, 'glass_dark')
 
 
-def timber(hp, fr, L, v0, v1, mat='trim_dark', pitch=1.5):
-    """Half-timbering: posts and rails standing proud of the plaster."""
+def timber(hp, fr, L, v0, v1, mat='trim_dark', pitch=1.5, avoid=()):
+    """Half-timbering: posts and rails standing proud of the plaster. `avoid` holds the
+    openings (u0, u1, z0, z1): a post or rail that would cross one stops at its trim."""
+    def spans(a, b, lo, hi, axis):
+        """Pieces of [lo, hi] along the member, clear of every opening it would cross."""
+        cuts = sorted((o[0] - 0.12, o[1] + 0.12) if axis == 'u' else (o[2] - 0.12, o[3] + 0.12)
+                      for o in avoid
+                      if (o[2] < b and o[3] > a if axis == 'u' else o[0] < b and o[1] > a))
+        out, at = [], lo
+        for c0, c1 in cuts:
+            if c0 > at:
+                out.append((at, min(c0, hi)))
+            at = max(at, c1)
+        if at < hi:
+            out.append((at, hi))
+        return [(x0, x1) for x0, x1 in out if x1 - x0 > 0.1]
     n = max(2, round(L / pitch))
     for i in range(n + 1):
         u = L * i / n
-        hp.fbox(fr, max(0, u - 0.07), min(L, u + 0.07), 0, 0.07, v0, v1, mat, skip=('-w',))
+        a, b = max(0, u - 0.07), min(L, u + 0.07)
+        for z0, z1 in spans(a, b, v0, v1, 'v'):
+            hp.fbox(fr, a, b, 0, 0.07, z0, z1, mat, skip=('-w',))
     for v in (v0, (v0 + v1) / 2, v1 - 0.12):
-        hp.fbox(fr, 0, L, 0, 0.07, v, v + 0.12, mat, skip=('-w',))
+        for u0, u1 in spans(v, v + 0.12, 0, L, 'u'):
+            hp.fbox(fr, u0, u1, 0, 0.07, v, v + 0.12, mat, skip=('-w',))
 
 
 def house_wall(hp, fr, L, z0, z1, spec, rng):
@@ -255,7 +272,8 @@ def house_wall(hp, fr, L, z0, z1, spec, rng):
     for o, _ in items:
         {'win': _window, 'door': _door, 'garage': _garage}[o['t']](hp, fr, o, z0, spec, rng)
     if spec.get('timber'):
-        timber(hp, fr, L, z0 + spec['timber'][0], z0 + spec['timber'][1])
+        timber(hp, fr, L, z0 + spec['timber'][0], z0 + spec['timber'][1],
+               avoid=[(r[0], r[1], z0 + r[2], z0 + r[3]) for _, r in items])
 
 
 # -- structures ----------------------------------------------------------------
@@ -268,6 +286,10 @@ def _rot(ridge):
 def house_block(m, cx, cy, w, d, z0, ze, walls, roof, name, ridge='x', skip=()):
     """Walls up to the eaves at `ze`, then a gable, hip or flat roof."""
     kind = roof['kind']
+    if name == 'b':
+        # the main roof's material: the manifest carries its colour, which the runtime's roof
+        # shader (src/webgl/materials/Roofs.ts) reads the baked course pattern against
+        m.roof_mat = roof.get('mat') or roof.get('flat', {}).get('mat')
     if kind == 'hip':
         ridge = 'x' if w >= d else 'y'
     pitch = roof.get('pitch', 0.5)

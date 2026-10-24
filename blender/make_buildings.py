@@ -2,7 +2,7 @@
 
     python blender/make_buildings.py --set city                  # towers + blocks (the night city)
     python blender/make_buildings.py --set homes                 # every sheet of the homes set
-    python blender/make_buildings.py --set homes --sheet hero-trees --only tree-oak-hero
+    python blender/make_buildings.py --set homes --sheet hero-trees --only tree-oak-ultra
     blender -b -P blender/make_buildings.py -- --set homes
 
 A set is one folder under public/models/ and one manifest.json. Each set has one or
@@ -10,7 +10,7 @@ more SHEETS, a sheet being a group of modules that share one atlas (one material
 runtime):
 
   main         the lean modules, baked from high-poly twins (every set has one)
-  hero-trees   close-up trees: bark tubes and leaf cards, built directly (homes only)
+  hero-trees   close-up trees: bark tubes, leaf cards and 3D leaves, built directly (homes only)
   hero-houses  close-up houses: the high-poly twin itself on a denser bake (homes only)
   hero-towers  close-up towers and blocks for the night city's canyon, the same way (city only)
 
@@ -33,6 +33,7 @@ from PIL import Image  # noqa: E402
 from bld import archetypes, atlas, foliage, hero_trees, homes  # noqa: E402
 from bld.bake import Baker  # noqa: E402
 from bld.bark import normal_map as bark_normals  # noqa: E402
+from bld.materials import PALETTE  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -44,7 +45,7 @@ SETS = {
                             groups=(('tower', archetypes.TOWERS), ('block', archetypes.BLOCKS))),
     }),
     'homes': dict(dir='homes', sheets={
-        'main': dict(layout='homes', kind='baked',
+        'main': dict(layout='homes', kind='baked', low=1024,
                      groups=(('house', homes.HOUSES), ('tree', homes.TREES))),
         'hero-trees': dict(layout='hero-trees', kind='trees'),
         'hero-houses': dict(layout='homes-hero', kind='hero-baked',
@@ -52,10 +53,14 @@ SETS = {
     }),
 }
 
-# module id -> (species, the lean module it replaces, tier). 'hero' is for lots the
-# camera passes close to, 'detail' for the ring of trees it still sees clearly, 'lite'
-# for the many trees beyond that.
+# module id -> (species, the lean module it replaces, tier). 'ultra' (~50k triangles) is for the
+# few trees the camera passes within a few metres of, 'hero' (~15k) for the lots it passes close
+# to, 'detail' for the ring of trees it still sees clearly, 'lite' for the many trees beyond that.
 HERO_TREES = {
+    'tree-oak-ultra': ('oak', 'tree-oak', 'ultra'),
+    'tree-maple-ultra': ('maple', 'tree-maple', 'ultra'),
+    'tree-pine-ultra': ('pine', 'tree-pine', 'ultra'),
+    'tree-poplar-ultra': ('poplar', 'tree-poplar', 'ultra'),
     'tree-oak-hero': ('oak', 'tree-oak', 'hero'),
     'tree-maple-hero': ('maple', 'tree-maple', 'hero'),
     'tree-pine-hero': ('pine', 'tree-pine', 'hero'),
@@ -108,8 +113,9 @@ def atlas_names(sheet):
            {m: f'{pre}{m}-low.webp' for m in ('color', 'orm', 'emissive')}
 
 
-def save_maps(sheet, maps, out, debug, size_full):
-    """Write the full and half-size WebP maps. `maps` values are (H, W, 3|4) uint8."""
+def save_maps(sheet, maps, out, debug, size_full, low_cap=None):
+    """Write the full and half-size WebP maps. `maps` values are (H, W, 3|4) uint8.
+    `low_cap` sizes every phone map of the sheet to at most that many pixels instead."""
     full, low = atlas_names(sheet)
     sizes = {}
     for name, arr in maps.items():
@@ -122,6 +128,8 @@ def save_maps(sheet, maps, out, debug, size_full):
         # mush on a phone); the occlusion/roughness map halves, and a 1024 atlas is small enough
         # to keep whole
         low_size = size_full if (size_full <= 1024 or (sheet == 'main' and name in ('color', 'emissive'))) else size_full // 2
+        if low_cap:
+            low_size = min(size_full, low_cap)
         for variant, size in ((full, size_full), (low, low_size)):
             # phones skip the normal map entirely
             if name not in variant:
@@ -137,6 +145,13 @@ def save_maps(sheet, maps, out, debug, size_full):
                 sized.save(path, 'WEBP', quality=90, alpha_quality=100, method=6)
             sizes[os.path.basename(path)] = os.path.getsize(path)
     return sizes
+
+
+def _roof(model):
+    """A house's main roofing colour (sRGB hex): the runtime recolours its roofs per lot and
+    reads the baked course pattern relative to it (src/webgl/materials/Roofs.ts)."""
+    mat = getattr(model, 'roof_mat', None)
+    return dict(roof=PALETTE[mat]['c']) if mat else {}
 
 
 def build_baked(setname, sheet, cfg, args, out):
@@ -170,7 +185,7 @@ def build_baked(setname, sheet, cfg, args, out):
         entries.append(dict(
             id=model.id, kind=model.kind, sheet=sheet, lod0=f'{model.id}.lod0.glb',
             footprint=[round(dx * k, 3), round(dy * k, 3)], height=round(dz * k, 3),
-            tris0=model.tris(), density=round(model.density, 2),
+            tris0=model.tris(), density=round(model.density, 2), **_roof(model),
         ))
         print(f'{model.id:24s} {model.tris():4d} tris  {model.density:5.1f} px/m  '
               f'{dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s')
@@ -178,35 +193,41 @@ def build_baked(setname, sheet, cfg, args, out):
     if baker:
         m = baker.assemble(solids)
         sizes = save_maps(sheet, {k: m[k] for k in ('color', 'normal', 'orm', 'emissive')},
-                          out, args.debug, layout.size)
+                          out, args.debug, layout.size, cfg.get('low'))
     return entries, sizes, dict(normal=True, emissive=True, alpha=False)
 
 
 def build_trees(setname, sheet, cfg, args, out):
     layout = atlas.LAYOUTS[cfg['layout']]
-    t = time.time()
-    cards = foliage.all_cards()
-    barks = hero_trees.barks(layout)
-    print(f'[{sheet}] {len(cards)} leaf cards and {len(barks)} bark strips in {time.time() - t:.0f}s')
+    sizes = {}
+    if not args.reuse_maps:
+        t = time.time()
+        cards = foliage.all_cards()
+        barks = hero_trees.barks(layout)
+        print(f'[{sheet}] {len(cards)} leaf cards and {len(barks)} bark strips in {time.time() - t:.0f}s')
 
-    n = layout.size
-    color = np.zeros((n, n, 4), np.uint8)
-    orm = np.zeros((n, n, 3), np.uint8)
-    orm[...] = (255, 204, 0)
-    # the cards keep their soft radial lighting normals (a flat normal map there); the bark
-    # gets the relief of its own furrows, which is what a trunk at arm's length is made of
-    normal = np.zeros((n, n, 3), np.uint8)
-    normal[...] = (128, 128, 255)
-    for key, rect in layout.cards.items():
-        x, y, w, h = rect
-        color[y:y + h, x:x + w] = cards[key]
-    for sp, rect in layout.bark.items():
-        x, y, w, h = rect
-        rgb, o, height = barks[sp]
-        color[y:y + h, x:x + w, :3] = rgb
-        color[y:y + h, x:x + w, 3] = 255
-        orm[y:y + h, x:x + w] = o
-        normal[y:y + h, x:x + w] = bark_normals(height, 9.0)
+        n = layout.size
+        color = np.zeros((n, n, 4), np.uint8)
+        orm = np.zeros((n, n, 3), np.uint8)
+        orm[...] = (255, 204, 0)
+        # the cards keep their soft radial lighting normals (a flat normal map there); the bark
+        # gets the relief of its own furrows, which is what a trunk at arm's length is made of
+        normal = np.zeros((n, n, 3), np.uint8)
+        normal[...] = (128, 128, 255)
+        for key, rect in layout.cards.items():
+            x, y, w, h = rect
+            color[y:y + h, x:x + w] = cards[key]
+        for sp, rect in layout.bark.items():
+            x, y, w, h = rect
+            rgb, o, height = barks[sp]
+            color[y:y + h, x:x + w, :3] = rgb
+            color[y:y + h, x:x + w, 3] = 255
+            orm[y:y + h, x:x + w] = o
+            normal[y:y + h, x:x + w] = bark_normals(height, 5.0)
+        # a strip of plain white: the 3D leaves and needles sample it, so their colour is their vertex colours'
+        x, y, w, h = layout.swatch
+        color[y:y + h, x:x + w] = 255
+        sizes = save_maps(sheet, dict(color=color, orm=orm, normal=normal), out, args.debug, n)
 
     entries = []
     for mid, (species, lean, lod) in HERO_TREES.items():
@@ -222,8 +243,8 @@ def build_trees(setname, sheet, cfg, args, out):
             footprint=[round(dx * homes.SCALE, 3), round(dy * homes.SCALE, 3)],
             height=round(dz * homes.SCALE, 3), tris0=tree.tris(),
         ))
-        print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s')
-    sizes = save_maps(sheet, dict(color=color, orm=orm, normal=normal), out, args.debug, n)
+        kinds = ' '.join(f'{k} {v}' for k, v in tree.builder.tris.items())
+        print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s  ({kinds})')
     return entries, sizes, dict(normal=True, emissive=False, alpha=True)
 
 
@@ -267,7 +288,7 @@ def build_hero_baked(setname, sheet, cfg, args, out):
             id=f'{model.id}-hero', kind=model.kind, sheet=sheet, lean=model.id, lod='hero',
             lod0=f'{model.id}-hero.lod0.glb',
             footprint=[round(dx * k, 3), round(dy * k, 3)], height=round(dz * k, 3),
-            tris0=model.hero_tris(), density=round(model.density, 2),
+            tris0=model.hero_tris(), density=round(model.density, 2), **_roof(model),
         ))
         print(f'{model.id + "-hero":28s} {model.hero_tris():6d} tris  {model.density:5.1f} px/m  '
               f'{time.time() - t:5.1f}s')

@@ -12,6 +12,7 @@ import {
   PCFShadowMap,
   PMREMGenerator,
   PerspectiveCamera,
+  PointLight,
   Scene,
   Vector2,
   Vector3,
@@ -33,8 +34,10 @@ import {
 import { GodRaysEffect } from './post/GodRays';
 import { ZoomBlurEffect } from './post/ZoomBlur';
 import { CinemaEffect } from './post/Cinema';
+import { Lightning } from './actors/Lightning';
 import { SSREffect } from './post/SSR';
 import { SSGIEffect } from './post/SSGI';
+import { VolumetricFogEffect } from './post/VolumetricFog';
 import { DepthNormals } from './post/viewSpace';
 import { ReflectionProbe } from './materials/ReflectionProbe';
 import {
@@ -59,7 +62,7 @@ import { Panel } from './actors/Panel';
 import { PaperBurst } from './actors/PaperBurst';
 import { PaperPlane } from './actors/PaperPlane';
 import { KitCity } from './actors/KitCity';
-import { fogHeight } from './fog';
+import { fogHeight, fogSun, fogSunColor } from './fog';
 import { ROOFTOP_BASE_Y } from './bake/cityGen.mjs';
 import { Rooftops } from './actors/Rooftops';
 import { Mountains } from './actors/Mountains';
@@ -70,7 +73,9 @@ import { AirTrail } from './actors/AirTrail';
 import { Flock } from './actors/Flock';
 import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
-import { BatchSend, RELEASE_T } from './actors/BatchSend';
+import { BatchSend } from './actors/BatchSend';
+import { liveLaptopScreen } from './actors/LaptopScreen';
+import { HERO_RELEASE, STAGE, launchPulse, planeScale } from './rig/launch';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
 import { BEACON_ANCHOR, CITY_ANCHOR, COPILOT_ANCHOR, LANTERN, PANEL_ANCHOR } from './rig/pathPoints.mjs';
@@ -134,6 +139,8 @@ export class Engine {
   private sun = new DirectionalLight('#ffd9a0', 1);
   private hemi = new HemisphereLight('#8fa8cc', '#1a1e2e', 0.35);
   private desk: Desk;
+  /** the cool light the laptop screen throws on the desk, found in the Desk's lights (null if there is none) */
+  private screenSpill: PointLight | null = null;
   private panel: Panel;
   private windowFrame: WindowFrame;
   private rooftops!: Rooftops;
@@ -148,11 +155,15 @@ export class Engine {
   private batch: BatchSend;
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
+  /** forked bolts that descend through the storm and the lighthouse's sky (none under reduced motion) */
+  private lightning!: Lightning;
   /** letterbox, grain, film curve; DoF + chromatic aberration on HIGH (post/Cinema.ts). Null under ?nocine */
   private cinema: CinemaEffect | null = null;
   private godRays: GodRaysEffect | null = null;
   private ssr: SSREffect | null = null;
   private ssgi: SSGIEffect | null = null;
+  /** sunlit haze with the sun's shadows in it (post/VolumetricFog.ts). HIGH only; null under ?novol */
+  private volume: VolumetricFogEffect | null = null;
   private depthNormals: DepthNormals | null = null;
   /** the live reflection of the surroundings that car paint and window glass mirror (HIGH) */
   private envProbe: ReflectionProbe | null = null;
@@ -283,6 +294,10 @@ export class Engine {
 
     const rand = mulberry32(919);
     this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand, this.quality.tier === 'high');
+    this.desk.group.traverse((o) => {
+      const light = o as PointLight;
+      if (!this.screenSpill && light.isPointLight && light.color.getHexString() === '9fc4ff') this.screenSpill = light;
+    });
     this.panel = new Panel(new Vector3(...PANEL_ANCHOR));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
@@ -290,6 +305,7 @@ export class Engine {
     this.clouds = new Clouds(this.path.chapterAnchor(3), this.quality, rand, this.renderer, this.noise);
     this.envelopes = new Envelopes(this.raycast, this.tooltip);
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
+    this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
@@ -305,7 +321,7 @@ export class Engine {
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);
-    this.batch = new BatchSend(this.path);
+    this.batch = new BatchSend(this.path, { low: this.quality.tier === 'low', calm: this.options.reducedMotion });
     this.flock = new Flock(rand);
 
     this.scene.add(
@@ -327,6 +343,7 @@ export class Engine {
       this.clouds.night,
       this.envelopes.group,
       this.storm.group,
+      this.lightning.group,
       this.biplane.group,
       this.birds.group,
       this.beacon.group,
@@ -384,6 +401,12 @@ export class Engine {
         }),
       );
       if (this.ssr) effects.push(this.ssr);
+      // the air itself, lit by the sun and shadowed by what stands in it: laid over the shaded
+      // frame and before the bloom, so the brightest shafts glow. ?novol leaves it out.
+      if (!params.has('novol')) {
+        this.volume = new VolumetricFogEffect(this.camera, this.sun);
+        effects.push(this.volume);
+      }
     }
     // bloom is a mip chain over the whole frame and it exists to sell light —
     // blockout mode keeps only the scroll blur and the vignette
@@ -479,6 +502,7 @@ export class Engine {
       ...(this.clouds.volume ? [this.clouds.volume] : []),
       this.envelopes.group,
       this.storm.group,
+      this.lightning.group,
       this.biplane.group,
       this.birds.group,
       this.beacon.group,
@@ -561,6 +585,9 @@ export class Engine {
     this.clouds.sunColor.copy(this.colorA).multiplyScalar(cloudBrightness);
 
     this.clouds.skyColor.copy(this.sky.zenith).lerp(this.sky.horizon, 0.3);
+    // the land bounces the low sun up into the cloud bases: warm, and only worth anything by day
+    this.clouds.groundColor.copy(this.sky.sunColor).lerp(this.sky.horizon, 0.35)
+      .multiplyScalar(0.14 * MathUtils.smoothstep(sunLevel, 0.5, 1.6));
 
     this.blend(from.fogColor, to.fogColor, u);
     this.fog.color.copy(this.colorA);
@@ -583,7 +610,7 @@ export class Engine {
     this.sky.sunDir.copy(this.sunDirWorld);
     this.sky.sunIntensity = sunLevel;
     this.mountains.setSunIntensity(sunLevel);
-    this.sun.intensity = sunLevel * 2.2;
+    this.sun.intensity = sunLevel * 2.2 * num((g) => g.key ?? 1);
     // sky-and-ground bounce: shadowed surfaces take the colour of the sky from above and of
     // the sunlit ground from below, so shade is never a flat grey and rooftops pick up warmth
     this.hemi.color.copy(this.sky.horizon).lerp(this.sky.zenith, 0.35);
@@ -614,6 +641,39 @@ export class Engine {
       MathUtils.lerp(lo.scale, hi.scale, u),
       MathUtils.lerp(lo.boost, hi.boost, u),
     );
+    // the haze glows toward the sun (every tier: it is a few ALU in the fog every material shares)
+    fogSun.value.set(this.sunDirWorld.x, this.sunDirWorld.y, this.sunDirWorld.z, num((g) => g.inscatter ?? 0));
+    fogSunColor.value.copy(this.sun.color);
+    if (this.volume) {
+      // like the mist: a chapter without a volume borrows its neighbour's shape and fades its density
+      type Vol = { density: number; scale: number; noise: number; aniso: number; sun: number; ambient: number; base: number };
+      const volOf = (g: GradeParams): Vol | null => {
+        const v = g.volume;
+        if (!v) return null;
+        return {
+          density: v.density, scale: v.scale, noise: v.noise ?? 0.5, aniso: v.aniso ?? 0.75,
+          sun: v.sun ?? 1, ambient: v.ambient ?? 0.5,
+          base: v.base === 'sea' ? this.beacon.group.position.y + 0.15 : ROOFTOP_BASE_Y,
+        };
+      };
+      const a = volOf(from);
+      const b = volOf(to);
+      const v0 = a ?? (b ? { ...b, density: 0 } : null);
+      const v1 = b ?? (a ? { ...a, density: 0 } : null);
+      const p = this.volume.params;
+      if (!v0 || !v1) {
+        p.density = 0;
+      } else {
+        const mix = (k: keyof Vol): number => MathUtils.lerp(v0[k], v1[k], u);
+        p.density = mix('density');
+        p.scale = mix('scale');
+        p.noise = mix('noise');
+        p.aniso = mix('aniso');
+        p.sun = mix('sun');
+        p.base = mix('base');
+        p.ambient.copy(this.fog.color).lerp(this.sky.zenith, 0.4).multiplyScalar(mix('ambient'));
+      }
+    }
     if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
     if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
@@ -712,9 +772,7 @@ export class Engine {
     const foldIn = MathUtils.smoothstep(t, FOLD_WINDOW.start, FOLD_WINDOW.end);
     const unfold = MathUtils.smoothstep(t, UNFOLD_WINDOW.start, UNFOLD_WINDOW.end);
     this.plane.setFold(foldIn * (1 - unfold));
-    if (this.prevT < FOLD_WINDOW.end && t >= FOLD_WINDOW.end) {
-      this.burst.trigger(this.rig.planeWorldPos, time);
-    }
+    // (the fold's puff of flecks is BatchSend's: pure in t, so it scrubs)
     if (this.prevT < TOUCHDOWN_T && t >= TOUCHDOWN_T) {
       this.confetti.trigger(this.rig.planeWorldPos, time);
     }
@@ -728,18 +786,22 @@ export class Engine {
     shot.look.copy(this.lanternCentre);
 
     // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
-    this.rig.jolt = this.idlePreset ? 0 : this.storm.flash;
+    this.rig.jolt = this.idlePreset ? 0 : Math.max(this.storm.flash, this.lightning.flash);
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
-    // (it is the third plane of the batch: two scouts have left the laptop ahead of it)
-    this.plane.group.visible = this.idlePreset !== null || t > RELEASE_T[2];
+    // (it is the third plane of the batch: two scouts have left the laptop ahead of it, and it
+    // leaves the screen as an envelope (BatchSend's) that opens into this letter)
+    const heroOpen = this.idlePreset ? 1 : MathUtils.smoothstep(t - HERO_RELEASE, STAGE.openFrom, STAGE.openTo);
+    this.plane.group.visible = this.idlePreset !== null || t > HERO_RELEASE + STAGE.openFrom;
     // the dart is swallowed by the arrival screen it flies into
     const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
     // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
     const intoLamp = this.idlePreset ? 1 : MathUtils.smoothstep(this.rig.planeWorldPos.distanceTo(this.lanternCentre), 0.5, 4.2);
     this.delivered = 1 - intoLamp;
-    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp, 1e-4));
+    // small beside the laptop, full size once the flight opens up over the town
+    const size = this.idlePreset ? 1 : planeScale(t) * (0.45 + 0.55 * heroOpen);
+    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp * size, 1e-4));
     if (intoLamp < 0.02) this.plane.group.visible = false;
     this.launchString.update(this.idlePreset ? 1 : t, this.path);
     this.plane.flex(time, t > CONTRAIL_FROM || this.idlePreset ? 1 : 0);
@@ -791,7 +853,9 @@ export class Engine {
     this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirWorld, 60);
 
     this.sky.followCamera(this.camera.position);
-    this.sky.flash = this.storm.flash;
+    // each bolt's return stroke lights the sky and the sea as the storm's own flashes do (last frame's value)
+    const flash = Math.max(this.storm.flash, this.lightning.flash * 0.5);
+    this.sky.flash = flash;
     this.sky.time = time;
 
     // sun direction in view space for the sprite lighting gradient
@@ -818,7 +882,8 @@ export class Engine {
     this.birds.group.visible = t > 0.055 && t < 0.3;
     // ends with the sea reveal (0.605) — the extra tail let the camera catch
     // radar rings and ship lights hanging in the no-fly sky during the bend
-    this.beacon.group.visible = t > 0.44 && t < 0.605;
+    // from 0.4: the sea comes up under the storm before the lighthouse forms out of the mist
+    this.beacon.group.visible = t > 0.4 && t < 0.605;
     // (the overnight deck gates itself — Clouds.update fades it in on t)
     // city arrives while the camera is still short of the first lots (it
     // crosses x≈170 near t 0.66) so it builds at a distance instead of
@@ -873,6 +938,8 @@ export class Engine {
     // the district leaves the frame by thickening into the storm's weather, not by
     // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
+    // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
+    if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
     if (leave > 0) {
       this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
       this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
@@ -884,7 +951,13 @@ export class Engine {
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
-    if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
+    if (nearDesk) {
+      this.desk.update(time); // 250-mote dust loop, pointless offscreen
+      // the live laptop display, and the screen's spill on the desk swelling with each launch
+      const launchT = this.idlePreset ? 1 : t;
+      liveLaptopScreen()?.update(launchT, this.options.reducedMotion);
+      if (this.screenSpill) this.screenSpill.intensity += launchPulse(launchT) * (this.options.reducedMotion ? 0.4 : 1.0);
+    }
     this.panel.update(t);
     this.clouds.update(time, this.sunScreenDir, this.fog.near, this.fog.far, t);
     this.envelopes.update(
@@ -898,7 +971,18 @@ export class Engine {
     const stormness =
       MathUtils.smoothstep(t, 0.34, 0.38) * (1 - MathUtils.smoothstep(t, 0.46, 0.52));
     this.storm.update(time, dt, stormness, Math.random, t);
-    this.biplane.update(t, time);
+    // bolts through the storm and the lighthouse's sky: the storm's let-down to the end of the beacon,
+    // landing on the sea (the water's height from the first beacon frame, a fixed one before it);
+    // never under reduced motion or on the sub-page orbits
+    const bolts =
+      this.options.reducedMotion || this.idlePreset ? 0
+        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.55, 0.575));
+    const seaY = this.beacon.group.position.y + 0.15;
+    this.lightning.update(
+      time, dt, bolts, this.camera, seaY, Math.max(this.camera.position.y + 55, seaY + 70),
+      innerHeight * Math.min(devicePixelRatio, 2),
+    );
+    this.biplane.update(t, time, this.storm.flash);
     this.birds.update(time, t);
     this.wingPlanes.update(
       this.rig.planeWorldPos,
@@ -910,7 +994,7 @@ export class Engine {
     );
     this.traffic.update(t, time);
     this.plane.setBeamHit(
-      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, this.storm.flash, this.fog.color, this.delivered),
+      this.beacon.update(time, this.camera, t, this.rig.planeWorldPos, Math.max(this.storm.flash, this.lightning.flash * 0.6), this.fog.color, this.delivered),
     );
     // dev hook for automated inspection: `window.__cam = { p: [x,y,z], l: [x,y,z] }` takes the camera
     const hook = this.probe ? (window as unknown as { __cam?: { p: number[]; l: number[] } }).__cam : undefined;
@@ -997,7 +1081,10 @@ export class Engine {
       MathUtils.smoothstep(facing, 0.05, 0.4) *
       (1 - MathUtils.smoothstep(offscreen, 1.2, 2.2));
     this.sunUv.set(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
-    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5);
+    // the lens flare only while the sun's disc itself is in the frame
+    const flare = MathUtils.smoothstep(this.sunLevel, 0.6, 1.2) * MathUtils.smoothstep(facing, 0.3, 0.6) *
+      (1 - MathUtils.smoothstep(offscreen, 0.85, 1.0));
+    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5, this.idlePreset ? 0 : flare);
   }
 
   private loop = (): void => {
@@ -1090,6 +1177,7 @@ export class Engine {
     this.launchString.dispose();
     this.sky.dispose();
     this.desk.dispose();
+    liveLaptopScreen()?.dispose();
     this.panel.dispose();
     this.windowFrame.dispose();
     this.rooftops.dispose();

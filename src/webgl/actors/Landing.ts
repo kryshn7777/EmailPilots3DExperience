@@ -64,14 +64,16 @@ export class Landing {
   private screenLight: PointLight | null = null;
   private officeBuilt = false;
   /** the departure: lined up on the runway, rolls and climbs out as the dart comes in behind it */
-  private departing = new Airliner();
+  private departing: Airliner;
   /** one parked at the apron */
-  private parked = new Airliner();
+  private parked: Airliner;
   /** the landed jet's route: down the runway, then off onto the taxiway toward the apron */
   private route!: CatmullRomCurve3;
   private disposables: { dispose(): void }[] = [];
 
   constructor(runwayEnd: Vector3, quality: Quality) {
+    this.departing = new Airliner({ tier: quality.tier, running: true });
+    this.parked = new Airliner({ tier: quality.tier });
     const cx = runwayEnd.x;
     const cz = runwayEnd.z;
     const RUNWAY_LEN = 64;

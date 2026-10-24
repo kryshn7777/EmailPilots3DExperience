@@ -108,6 +108,13 @@ const TINTS = ['#ffffff', '#e8ecf6', '#d5dbec', '#f2ead9', '#c9d0e4'];
 export function lodScale(mod) {
   return 2 / Math.max(mod.footprint[0], mod.footprint[1], mod.height);
 }
+/**
+ * How much taller than its module's own proportions a skyscraper stands. The plots are packed
+ * (towers are 1.7–2.9 wide on a 4.2 x 3.9 grid, with no room to widen), so at their modelled
+ * height the downtown read as a row of slim boxes from the canyon, worst on a portrait phone.
+ * Towers rise instead: KitCity scales them by `rise` in y alone (taller floors, same plot).
+ */
+export const TOWER_RISE = 1.45;
 /** nearest a building face may stand to the canyon's centre line: the road's half width plus a pavement */
 const CANYON_CLEAR = 2.75;
 /** and from a cross street's centre line: half its width plus a pavement */
@@ -171,8 +178,10 @@ export function cityRecipes(modules, canyonZ = 0) {
       const gx = Math.abs(x - sx) - reachX;
       if (gx < CROSS_CLEAR) x += Math.sign(x - sx || 1) * (CROSS_CLEAR - gx);
     }
+    const rise = /sky/i.test(mod.id) ? TOWER_RISE : 1;
     lots.push({
-      x, z, w, d, h: mod.height * s * ls, yaw, tint, moduleId: mod.id,
+      x, z, w, d, h: mod.height * s * ls * rise, yaw, tint, moduleId: mod.id,
+      ...(rise !== 1 ? { rise } : {}),
       ...(z !== b.z || x !== b.x ? { stepped: true } : {}),
     });
   }

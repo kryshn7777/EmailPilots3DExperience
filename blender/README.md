@@ -15,6 +15,11 @@ python blender/make_cars.py                      # the nine road vehicles (six f
 python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
+python blender/make_airliner.py                  # the landing chapter's A320neo-class jet, both tiers, and its livery maps
+                                                 # (--render DIR: Cycles previews); then npm run compress:models
+python blender/make_biplane.py && npm run compress:models   # the storm chapter's banner-tow biplane and its fabric normal map
+python blender/make_ship.py && npm run compress:models      # the lighthouse chapter's 181 m container ship, in metres (ship.glb, and ship-lo.glb for phones)
+                                                 # (--render DIR: Cycles previews, VIEWS=side,bridge,... picks them)
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
@@ -108,6 +113,7 @@ chapter's sun.
 | `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each twice: `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets` and `exotic`; the runtime is `StreetCars.ts`. 3.6 MB for all eighteen files |
 | `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
 | `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
+| `make_airliner.py` | `public/models/airliner/` | an A320neo-class jet lofted in metres and scaled to 7.4 units (`bld/airliner.py`): `airliner.glb` (~38k tris, HIGH) and `airliner-low.glb` (~12k, LOW, no fan blades or panel lines), one mesh per material plus each wheel and fan on its own and Empties for the lights and fan axes; `livery.webp` / `livery-low.webp`, an atlas painted with PIL (the fuselage unrolled in the top half, the fin projected side-on in the bottom) and `glow.webp`, the lit cabin windows. Runtime: `Airliner.ts` |
 
 The lighthouse is modelled in the units of the old procedural tower (lantern centre at
 z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, tooltip) hold.
@@ -268,7 +274,14 @@ sky (as an environment map) that the homes take their light and reflections from
 **Not** baked: the sun, and shadows from it or from clouds. Its direction changes in
 every chapter and each module is instanced at four rotations, so a sun baked into a
 shared atlas would be wrong on three of the four. The engine keeps a real
-directional light for it. The cloud environment is rendered *without* a sun disc for
+directional light for it.
+
+Nor is a house's **roofing**: every house type is one module instanced across the town, so a baked
+roof would give the whole neighbourhood twelve roofs. Each module's manifest entry carries `roof`, the
+colour of its main roofing material, and `src/webgl/materials/Roofs.ts` reads the baked course pattern
+against it to re-roof every lot in its own style and colour (shingle, clay tile, slate, standing-seam
+metal, cedar shake), with weathering, ridge caps, solar arrays and skylights. The homes' `main` sheet is
+2048 px (about 25 px per metre on a house, like the hero sheet); phones get 1024 px maps. The cloud environment is rendered *without* a sun disc for
 the same reason (the clouds are still lit by a sun, so they glow and have silver
 edges on the sun side).
 

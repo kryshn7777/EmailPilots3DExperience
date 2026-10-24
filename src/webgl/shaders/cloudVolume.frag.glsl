@@ -21,6 +21,7 @@ uniform vec3 uBoxMax;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uSkyColor;
+uniform vec3 uGroundColor;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
@@ -136,7 +137,12 @@ void main() {
     // thin edges are brighter than their depth suggests (the powder effect)
     float powder = 0.6 + 0.4 * (1.0 - exp(-d * 3.0));
 
-    vec3 radiance = (uSunColor * direct * 0.42 + uSkyColor * sky * 0.5) * powder;
+    // light from below: the sunlit land and the low sun's glow reflected up into the cloud bases, so
+    // the underside of the deck is warm at golden hour instead of a flat grey ceiling
+    // (shut out where more cloud hangs underneath, so the bellies keep their shape)
+    float under = shapeDensity(p - vec3(0.0, 4.0, 0.0), heightFrac(p.y - 4.0), 2.0);
+    float below = (1.0 - h) * (1.0 - h) * (1.0 - 0.8 * under);
+    vec3 radiance = (uSunColor * direct * 0.42 + uSkyColor * sky * 0.5 + uGroundColor * below) * powder;
 
     float step_ = exp(-d * SIGMA * dt);
     light += radiance * transmittance * (1.0 - step_);

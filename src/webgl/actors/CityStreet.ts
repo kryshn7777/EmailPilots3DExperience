@@ -36,9 +36,23 @@ export interface Footprint {
 }
 
 /** the canyon road is 4.6 wide; a building face stands no nearer than 2.75 to its centre line */
-const ROAD_HALF = 2.3;
+export const ROAD_HALF = 2.3;
 const FACE = 2.75;
-const CROSS_HALF = 1.3;
+export const CROSS_HALF = 1.3;
+
+/**
+ * The junctions' light cycle (14 s), shared by the signal heads and by the cars (StreetCars stops them at
+ * the lines): the canyon has green 0-7, amber 7-8.2, red 8.2-14; the cross street runs opposite, with a
+ * clearance gap each way. 0 green, 1 amber, 2 red.
+ */
+export const canyonPhase = (time: number): 0 | 1 | 2 => {
+  const t = time % 14;
+  return t < 7 ? 0 : t < 8.2 ? 1 : 2;
+};
+export const crossPhase = (time: number): 0 | 1 | 2 => {
+  const t = time % 14;
+  return t < 8.6 ? 2 : t < 12.6 ? 0 : t < 13.8 ? 1 : 2;
+};
 
 type Part = [BufferGeometry, string];
 
@@ -63,6 +77,97 @@ const box = (w: number, h: number, d: number, x: number, y: number, z: number): 
   new BoxGeometry(w, h, d).translate(x, y, z);
 const cyl = (r0: number, r1: number, h: number, x: number, y: number, z: number, seg = 8): BufferGeometry =>
   new CylinderGeometry(r0, r1, h, seg).translate(x, y, z);
+
+/**
+ * The café's furniture and diners, in the street props' own scale (a metre is 0.56 here: the town's 0.33 a metre,
+ * drawn 1.7 times larger in the night city so a table and its diners read from the flight). A chair and a diner face +z; their
+ * origin is the middle of the seat on the floor.
+ */
+const M = 0.56;
+const CAFE = { table: 0.75 * M, seat: 0.45 * M, seatOffset: 0.62 * M };
+
+function cafeTable(): BufferGeometry {
+  const top = CAFE.table;
+  const parts: Part[] = [
+    [cyl(0.4 * M, 0.4 * M, 0.03 * M, 0, top, 0, 16), '#2f3640'],
+    [cyl(0.34 * M, 0.34 * M, 0.012 * M, 0, top + 0.02 * M, 0, 16), '#e9e2d2'],
+    [cyl(0.03 * M, 0.04 * M, top, 0, top / 2, 0, 8), '#1d2128'],
+    [cyl(0.2 * M, 0.2 * M, 0.02 * M, 0, 0.01 * M, 0, 12), '#1d2128'],
+    // a small candle in a glass at the middle, and a flower
+    [cyl(0.03 * M, 0.03 * M, 0.06 * M, 0, top + 0.05 * M, 0, 8), '#f4ead2'],
+    [cyl(0.012 * M, 0.012 * M, 0.1 * M, 0.14 * M, top + 0.07 * M, 0.02 * M, 5), '#3b6b44'],
+    [new IcosahedronGeometry(0.03 * M, 0).translate(0.14 * M, top + 0.13 * M, 0.02 * M), '#e0566c'],
+  ];
+  // a place laid at each end: a plate with a meal on it (pasta, a salad, a steak), a glass and a fork
+  const meals = ['#d9a441', '#6d9a49', '#8c4a2e'];
+  for (const side of [-1, 1]) {
+    const x = side * 0.2 * M;
+    parts.push(
+      [cyl(0.11 * M, 0.1 * M, 0.012 * M, x, top + 0.03 * M, 0, 14), '#f2efe8'],
+      [new IcosahedronGeometry(0.06 * M, 1).scale(1, 0.45, 0.85).translate(x, top + 0.05 * M, 0), meals[side > 0 ? 1 : 0]!],
+      [cyl(0.022 * M, 0.018 * M, 0.09 * M, x * 0.55, top + 0.07 * M, 0.15 * M, 8), '#9fd0e8'],
+      [box(0.012 * M, 0.004 * M, 0.11 * M, x + side * 0.15 * M, top + 0.026 * M, 0), '#c9ccd2'],
+    );
+  }
+  parts.push([cyl(0.025 * M, 0.025 * M, 0.12 * M, -0.1 * M, top + 0.08 * M, -0.14 * M, 8), '#2d5a3a']);
+  return prop(parts);
+}
+
+function cafeChair(): BufferGeometry {
+  const seat = CAFE.seat;
+  const legs: Part[] = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) legs.push([box(0.025 * M, seat, 0.025 * M, sx * 0.17 * M, seat / 2, sz * 0.17 * M), '#1b1e25']);
+  }
+  return prop([
+    ...legs,
+    [box(0.4 * M, 0.04 * M, 0.4 * M, 0, seat, 0), '#6a4a2e'],
+    // the back rises on the side away from the table (-z)
+    [box(0.4 * M, 0.34 * M, 0.03 * M, 0, seat + 0.19 * M, -0.19 * M), '#6a4a2e'],
+    [box(0.025 * M, 0.34 * M, 0.025 * M, -0.17 * M, seat + 0.17 * M, -0.19 * M), '#1b1e25'],
+    [box(0.025 * M, 0.34 * M, 0.025 * M, 0.17 * M, seat + 0.17 * M, -0.19 * M), '#1b1e25'],
+  ]);
+}
+
+interface Diner { shirt: string; trousers: string; skin: string; hair: string }
+const DINERS: Diner[] = [
+  { shirt: '#c0463a', trousers: '#2b2f3a', skin: '#e8b896', hair: '#1c1612' },
+  { shirt: '#3d6fa8', trousers: '#3a3226', skin: '#c68e66', hair: '#4a3220' },
+  { shirt: '#e0b04a', trousers: '#49525e', skin: '#8d5a3b', hair: '#161616' },
+  { shirt: '#4f8f6a', trousers: '#2b2f3a', skin: '#f1c9a5', hair: '#a8793a' },
+  { shirt: '#8a5fb0', trousers: '#3a3a44', skin: '#d8a27a', hair: '#2a2a2e' },
+  { shirt: '#d8d8d8', trousers: '#1f2a44', skin: '#a8714c', hair: '#4a3220' },
+];
+
+/** a person sitting, leant a little to the table, a fork's worth of arm forward, head and hair */
+function cafeDiner(d: Diner): BufferGeometry {
+  const seat = CAFE.seat + 0.02 * M;
+  const parts: Part[] = [];
+  // thighs run forward from the seat, shins drop to the floor, shoes
+  for (const sx of [-1, 1]) {
+    parts.push(
+      [box(0.13 * M, 0.13 * M, 0.42 * M, sx * 0.09 * M, seat + 0.07 * M, 0.2 * M), d.trousers],
+      [box(0.11 * M, seat - 0.02 * M, 0.11 * M, sx * 0.09 * M, (seat - 0.02 * M) / 2 + 0.02 * M, 0.4 * M), d.trousers],
+      [box(0.11 * M, 0.06 * M, 0.2 * M, sx * 0.09 * M, 0.03 * M, 0.46 * M), '#16171b'],
+    );
+  }
+  // the torso, a little forward
+  parts.push(
+    [box(0.34 * M, 0.5 * M, 0.2 * M, 0, seat + 0.37 * M, 0.04 * M).rotateX(-0.12), d.shirt],
+    [cyl(0.05 * M, 0.06 * M, 0.08 * M, 0, seat + 0.66 * M, 0.08 * M, 8), d.skin],
+    [new IcosahedronGeometry(0.105 * M, 1).translate(0, seat + 0.78 * M, 0.1 * M), d.skin],
+    [new IcosahedronGeometry(0.112 * M, 1).scale(1, 0.75, 1.02).translate(0, seat + 0.83 * M, 0.085 * M), d.hair],
+  );
+  // arms: shoulder to elbow down, forearm forward to the table
+  for (const sx of [-1, 1]) {
+    parts.push(
+      [box(0.08 * M, 0.3 * M, 0.08 * M, sx * 0.21 * M, seat + 0.4 * M, 0.06 * M).rotateX(-0.1), d.shirt],
+      [box(0.07 * M, 0.07 * M, 0.3 * M, sx * 0.19 * M, seat + 0.27 * M, 0.26 * M), d.shirt],
+      [new IcosahedronGeometry(0.04 * M, 0).translate(sx * 0.18 * M, seat + 0.27 * M, 0.43 * M), d.skin],
+    );
+  }
+  return prop(parts);
+}
 
 /**
  * The night city's street level: paved plazas where a lot stands empty, street trees,
@@ -141,7 +246,11 @@ export class CityStreet {
     // trees, benches and the rest are collected as placements, then instanced per kind
     const place: Record<string, { x: number; z: number; yaw: number; s: number; color?: string }[]> = {
       tree: [], bench: [], planter: [], bollard: [], bin: [], hydrant: [], kiosk: [], shelter: [], signal: [], manhole: [],
+      cafeTable: [], chair: [], diner0: [], diner1: [], diner2: [], diner3: [], diner4: [], diner5: [],
     };
+    // the plazas' café tables: positions of the candles' glow
+    const candles: { x: number; y: number; z: number }[] = [];
+    const cafeRand = mulberry32(4412);
     const add = (kind: string, x: number, z: number, yaw = 0, s = 1, color?: string): void => {
       place[kind]!.push({ x, z, yaw, s, ...(color ? { color } : {}) });
     };
@@ -185,6 +294,30 @@ export class CityStreet {
         else add('shelter', g.x0 + 1.0, g.side * (FACE + 0.6), g.side > 0 ? Math.PI : 0, 1);
       }
       if (rand() < 0.7) add('bin', g.x0 + 0.35, g.side * (FACE + 0.3), 0, 1);
+
+      // a café on the building side of the street trees: round tables with a pair of chairs, a candle
+      // and plates, and people eating at them (their own random stream, so nothing else moves)
+      if (depth >= 1.6 && w >= 2.4) {
+        const nTables = Math.max(1, Math.min(5, Math.floor(w / 1.7)));
+        const tz = g.side * (FACE + depth * 0.76);
+        for (let i = 0; i < nTables; i++) {
+          const tx = g.x0 + 0.15 + ((i + 0.5) / nTables) * w + (cafeRand() - 0.5) * 0.2;
+          add('cafeTable', tx, tz, 0, 1);
+          candles.push({ x: tx, y: CAFE.table + 0.03, z: tz });
+          // two chairs facing each other across the table, a third on the road side when there is room
+          const seats: { x: number; z: number; yaw: number }[] = [
+            { x: tx - CAFE.seatOffset, z: tz, yaw: Math.PI / 2 },
+            { x: tx + CAFE.seatOffset, z: tz, yaw: -Math.PI / 2 },
+          ];
+          if (depth >= 2.4 && cafeRand() < 0.6) seats.push({ x: tx, z: tz - g.side * CAFE.seatOffset, yaw: g.side > 0 ? 0 : Math.PI });
+          for (const seat of seats) {
+            // a chair drawn out a little off the table's axis, never quite square
+            const yaw = seat.yaw + (cafeRand() - 0.5) * 0.35;
+            add('chair', seat.x, seat.z, yaw, 1);
+            if (cafeRand() < 0.72) add(`diner${Math.floor(cafeRand() * 6)}`, seat.x, seat.z, yaw, 1);
+          }
+        }
+      }
     }
     // hydrants and bins along the curbs, wherever there is room
     for (let x = x0 + 4; x < x1 - 4; x += 9 + rand() * 4) {
@@ -215,6 +348,9 @@ export class CityStreet {
         [new IcosahedronGeometry(0.06, 0).translate(-0.12, 0.26, -0.03), '#d9566c'],
       ]),
       bollard: prop([[cyl(0.028, 0.032, 0.18, 0, 0.09, 0, 8), '#3a3f48'], [cyl(0.03, 0.03, 0.02, 0, 0.17, 0, 8), '#e9b44c']]),
+      cafeTable: cafeTable(),
+      chair: cafeChair(),
+      ...Object.fromEntries(DINERS.map((d, i) => [`diner${i}`, cafeDiner(d)])),
       bin: prop([[cyl(0.06, 0.05, 0.17, 0, 0.085, 0, 10), '#24402f'], [cyl(0.065, 0.065, 0.015, 0, 0.18, 0, 10), '#1a1d24']]),
       hydrant: prop([
         [cyl(0.035, 0.04, 0.12, 0, 0.06, 0, 8), '#a5281f'],
@@ -299,11 +435,13 @@ export class CityStreet {
         }
         // and the stop line before it
         bars.push({ x: sx + e * (CROSS_HALF + 1.05), z: e * -0.55, sx: 0.07, sz: 1.05 });
+        // and the cross street's own stop line, across the lane that approaches from this side
+        bars.push({ x: sx + e * 0.6, z: e * (ROAD_HALF + 0.55), sx: 1.0, sz: 0.07 });
       }
     }
     const barMesh = new InstancedMesh(unit, paintMaterial, bars.length);
     bars.forEach((b, i) => {
-      barMesh.setMatrixAt(i, m4.compose(p.set(b.x, 0.012, b.z), q.identity(), sc.set(b.sx, 0.004, b.sz)));
+      barMesh.setMatrixAt(i, m4.compose(p.set(b.x, 0.016, b.z), q.identity(), sc.set(b.sx, 0.004, b.sz)));
     });
     barMesh.frustumCulled = false;
     this.group.add(barMesh);
@@ -340,6 +478,19 @@ export class CityStreet {
     signals.frustumCulled = false;
     this.group.add(signals);
     own(this.signalGeometry); own(signals.material as PointsMaterial);
+
+    // the café tables' candles: a small warm glow on every table
+    if (candles.length) {
+      const candleGeometry = own(new BufferGeometry());
+      candleGeometry.setAttribute('position', new Float32BufferAttribute(candles.flatMap((c) => [c.x, c.y + 0.03, c.z]), 3));
+      const candleLights = new Points(candleGeometry, new PointsMaterial({
+        map: own(glowTexture()), size: 0.26, color: '#ffb866', transparent: true, depthWrite: false,
+        blending: AdditiveBlending, sizeAttenuation: true,
+      }));
+      candleLights.frustumCulled = false;
+      this.group.add(candleLights);
+      own(candleLights.material as PointsMaterial);
+    }
 
     // ---- manholes with steam -----------------------------------------------------------------------
     const vents: { x: number; z: number }[] = [];
@@ -415,9 +566,7 @@ export class CityStreet {
   /** Signals cycle and steam rises; `time` in seconds. */
   update(time: number): void {
     if (this.steam) this.steam.uniforms.uTime!.value = time;
-    // a 14 s cycle: the canyon has green 0-7, amber 7-8.2, red 8.2-14 (the cross street runs opposite)
-    const t = time % 14;
-    const phase = t < 7 ? 0 : t < 8.2 ? 1 : 2;
+    const phase = canyonPhase(time);
     const pos = this.signalGeometry.attributes.position as Float32BufferAttribute;
     const col = this.signalGeometry.attributes.color as Float32BufferAttribute;
     this.signalHeads.forEach((h, i) => {

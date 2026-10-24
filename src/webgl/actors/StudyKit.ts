@@ -1,0 +1,263 @@
+import {
+  BufferGeometry,
+  CustomBlending,
+  OneFactor,
+  SrcAlphaFactor,
+  ZeroFactor,
+  Curve,
+  CatmullRomCurve3,
+  CylinderGeometry,
+  Euler,
+  ExtrudeGeometry,
+  Group,
+  LatheGeometry,
+  Material,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PlaneGeometry,
+  Texture,
+  Quaternion,
+  Shape,
+  TubeGeometry,
+  Vector2,
+  Vector3,
+} from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
+/**
+ * Small modelling kit for the study: author furniture and props as loose
+ * geometry with a placement each, and ship one merged draw per material.
+ * Geometry is normalised on the way in (non-indexed, position + normal + uv
+ * only) so a Lathe, a Box, a Tube and an Extrusion can share a bucket.
+ */
+
+export interface Place {
+  x?: number; y?: number; z?: number;
+  rx?: number; ry?: number; rz?: number;
+  /** uniform, or per axis */
+  s?: number | [number, number, number];
+}
+
+const M = new Matrix4();
+const Q = new Quaternion();
+const E = new Euler();
+const P = new Vector3();
+const S = new Vector3();
+
+export function placement(p: Place, out = new Matrix4()): Matrix4 {
+  E.set(p.rx ?? 0, p.ry ?? 0, p.rz ?? 0, 'YXZ');
+  Q.setFromEuler(E);
+  const s = p.s ?? 1;
+  if (typeof s === 'number') S.set(s, s, s);
+  else S.set(s[0], s[1], s[2]);
+  return out.compose(P.set(p.x ?? 0, p.y ?? 0, p.z ?? 0), Q, S);
+}
+
+function normalise(g: BufferGeometry): BufferGeometry {
+  const flat = g.index ? g.toNonIndexed() : g;
+  if (flat !== g) g.dispose();
+  for (const name of Object.keys(flat.attributes)) {
+    if (name !== 'position' && name !== 'normal' && name !== 'uv') flat.deleteAttribute(name);
+  }
+  return flat;
+}
+
+export class Kit {
+  private buckets = new Map<Material, BufferGeometry[]>();
+  triangles = 0;
+
+  /** bake `g` through `p` into the bucket for `m` */
+  add(g: BufferGeometry, m: Material, p: Place = {}): void {
+    this.addMatrix(g, m, placement(p, M));
+  }
+
+  addMatrix(g: BufferGeometry, m: Material, mat: Matrix4): void {
+    const flat = normalise(g);
+    flat.applyMatrix4(mat);
+    this.triangles += flat.attributes.position!.count / 3;
+    const bucket = this.buckets.get(m);
+    if (bucket) bucket.push(flat);
+    else this.buckets.set(m, [flat]);
+  }
+
+  /** a placed sub-assembly: its parts are positioned relative to `origin` */
+  at(origin: Place | Matrix4): { add(g: BufferGeometry, m: Material, p?: Place): void; origin: Matrix4 } {
+    const o = origin instanceof Matrix4 ? origin.clone() : placement(origin, new Matrix4());
+    return {
+      origin: o,
+      add: (g, m, p = {}) => this.addMatrix(g, m, placement(p, new Matrix4()).premultiply(o)),
+    };
+  }
+
+  /** one mesh per material, added to `parent`; the merged geometry goes to `owned` for disposal */
+  flush(parent: Group, owned: { dispose(): void }[]): Mesh[] {
+    const meshes: Mesh[] = [];
+    const stats: Record<string, number> = {};
+    for (const [material, parts] of this.buckets) {
+      const tris = parts.reduce((n, g) => n + g.attributes.position!.count / 3, 0);
+      stats[(material as { name?: string }).name || `${material.type}#${material.uuid.slice(0, 6)}`] = tris;
+      const merged = parts.length === 1 ? parts[0]! : mergeGeometries(parts, false);
+      if (parts.length > 1) parts.forEach((g) => g.dispose());
+      if (!merged) continue;
+      const mesh = new Mesh(merged, material);
+      parent.add(mesh);
+      owned.push(merged);
+      meshes.push(mesh);
+    }
+    this.buckets.clear();
+    if (typeof location !== 'undefined' && location.search.includes('probe')) (window as unknown as { __studyStats?: unknown }).__studyStats = stats;
+    return meshes;
+  }
+}
+
+/** profile is [radius, y] from the bottom up; a lathe around the y axis. `vFromY` maps v to height instead of profile index. */
+export function lathe(profile: [number, number][], seg: number, vFromY?: [number, number]): LatheGeometry {
+  const g = new LatheGeometry(profile.map(([r, y]) => new Vector2(r, y)), seg);
+  if (vFromY) {
+    const pos = g.attributes.position!;
+    const uv = g.attributes.uv!;
+    for (let i = 0; i < pos.count; i++) uv.setY(i, (pos.getY(i) - vFromY[0]) / (vFromY[1] - vFromY[0]));
+  }
+  return g;
+}
+
+/** a tube along a smooth path through `pts`, flattened along z by `flat` (1 = round) */
+export function tube(pts: [number, number, number][], r: number, tubular: number, radial: number, flat = 1): TubeGeometry {
+  const curve = new CatmullRomCurve3(pts.map((p) => new Vector3(...p)));
+  const g = new TubeGeometry(curve, tubular, r, radial, false);
+  if (flat !== 1) g.scale(1, 1, flat);
+  return g;
+}
+
+/** a cylinder whose axis runs from a to b */
+export function rod(a: Vector3, b: Vector3, r: number, seg = 8, rb = r): CylinderGeometry {
+  const g = new CylinderGeometry(rb, r, a.distanceTo(b), seg);
+  g.applyQuaternion(Q.setFromUnitVectors(new Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+  g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  return g;
+}
+
+/**
+ * A slab with chamfered edges: w x h x d centred on the origin, the bevel `c` on every edge.
+ * UVs are in world units on the large faces (u along x, v along z), so scale them to taste.
+ */
+export function bevelBox(w: number, h: number, d: number, c0: number): BufferGeometry {
+  const c = Math.min(c0, Math.min(w, h, d) / 2.4);
+  const sh = new Shape();
+  const hw = w / 2 - c;
+  const hd = d / 2 - c;
+  sh.moveTo(-hw, -hd); sh.lineTo(hw, -hd); sh.lineTo(hw, hd); sh.lineTo(-hw, hd); sh.closePath();
+  const g = new ExtrudeGeometry(sh, {
+    depth: h - 2 * c, bevelEnabled: true, bevelSize: c, bevelThickness: c, bevelSegments: 1, steps: 1,
+  });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, -(h - 2 * c) / 2, 0);
+  return g;
+}
+
+/**
+ * A moulding run: the 2D `profile` ([depth out of the wall, height]) extruded `len` along +z, with
+ * the back of the profile on x = 0. Rotate and place it with a Place.
+ */
+export function moulding(profile: [number, number][], len: number): BufferGeometry {
+  const sh = new Shape();
+  profile.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+  sh.closePath();
+  return new ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, steps: 1 });
+}
+
+/** remaps a box's UVs so each face shows `rect` ([u0, v0, u1, v1]) of an atlas; faces are +x -x +y -y +z -z */
+export function atlasBox(g: BufferGeometry, rects: Array<[number, number, number, number]>): BufferGeometry {
+  const uv = g.attributes.uv!;
+  for (let f = 0; f < 6; f++) {
+    const r = rects[Math.min(f, rects.length - 1)]!;
+    for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      uv.setXY(i, r[0] + uv.getX(i) * (r[2] - r[0]), r[1] + uv.getY(i) * (r[3] - r[1]));
+    }
+  }
+  return g;
+}
+
+/** scale the uv of any geometry */
+export function uvScale<T extends BufferGeometry>(g: T, su: number, sv: number, ou = 0, ov = 0): T {
+  const uv = g.attributes.uv!;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, ou + uv.getX(i) * su, ov + uv.getY(i) * sv);
+  return g;
+}
+
+class HelixCurve extends Curve<Vector3> {
+  private axis: Vector3;
+  private u = new Vector3();
+  private v = new Vector3();
+  constructor(private a: Vector3, b: Vector3, private r: number, private turns: number) {
+    super();
+    this.axis = b.clone().sub(a);
+    const ref = Math.abs(this.axis.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+    this.u.crossVectors(this.axis, ref).normalize();
+    this.v.crossVectors(this.axis, this.u).normalize();
+  }
+  override getPoint(t: number, out = new Vector3()): Vector3 {
+    const ang = t * this.turns * Math.PI * 2;
+    return out.copy(this.a).addScaledVector(this.axis, t).addScaledVector(this.u, Math.cos(ang) * this.r).addScaledVector(this.v, Math.sin(ang) * this.r);
+  }
+}
+
+/** a coil spring from a to b */
+export function helix(a: Vector3, b: Vector3, r: number, turns: number, wire: number, seg = 60): TubeGeometry {
+  return new TubeGeometry(new HelixCurve(a, b, r, turns), seg, wire, 5, false);
+}
+
+/**
+ * Keep an overlay (dust, glow cards, light shafts) out of the screen-space passes' normal buffer.
+ * That pass draws the whole scene with an override material, which turns a Points cloud into
+ * one-pixel junk and a glow card into solid geometry; both read as dark flecks and smudges once
+ * the ambient occlusion has sampled them. Their draw range is emptied for that pass only.
+ */
+export function skipInNormalPass(o: Object3D): void {
+  o.onBeforeRender = (_r, scene, _c, geometry) => {
+    geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
+  };
+}
+
+const _p = new Vector3();
+const _s = new Vector3();
+const _q = new Quaternion();
+const _roll = new Quaternion();
+const _m = new Matrix4();
+const Z = new Vector3(0, 0, 1);
+
+/** an additive billboard (a flare, a halo, a wisp of steam) that stays out of the normal pass; `userData.roll` spins it */
+export function glowCard(map: Texture, color: string, opacity: number): { mesh: Mesh; material: MeshBasicMaterial } {
+  const material = additiveKeepAlpha(new MeshBasicMaterial({ map, color, transparent: true, depthWrite: false, opacity, toneMapped: false }));
+  const mesh = new Mesh(new PlaneGeometry(1, 1), material);
+  mesh.userData.glow = true;
+  mesh.userData.roll = 0;
+  mesh.renderOrder = 5;
+  mesh.onBeforeRender = (_r, scene, camera, geometry) => {
+    geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
+    _p.setFromMatrixPosition(mesh.matrixWorld);
+    _s.setFromMatrixScale(mesh.matrixWorld);
+    _q.copy(camera.quaternion).multiply(_roll.setFromAxisAngle(Z, mesh.userData.roll as number));
+    mesh.matrixWorld.copy(_m.compose(_p, _q, _s));
+  };
+  return { mesh, material };
+}
+
+/**
+ * Additive light that leaves the frame's alpha alone. Plain AdditiveBlending also adds the source
+ * alpha to the frame's alpha, and that channel is not opacity here: the sky writes the fraction of
+ * the sun's light still reaching each pixel into it and the god-ray march reads it back
+ * (materials/skyVisibility.ts). Motes and glows that raised it showed up as dark blocks on the wall
+ * once the post chain had its way with them.
+ */
+export function additiveKeepAlpha<T extends Material>(material: T): T {
+  material.blending = CustomBlending;
+  material.blendSrc = SrcAlphaFactor;
+  material.blendDst = OneFactor;
+  material.blendSrcAlpha = ZeroFactor;
+  material.blendDstAlpha = OneFactor;
+  return material;
+}

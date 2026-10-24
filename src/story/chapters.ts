@@ -38,6 +38,25 @@ export interface GradeParams {
   wet?: number;
   /** strength of the one-bounce global illumination (post/SSGI.ts). Default 0.8. */
   bounce?: number;
+  /**
+   * Multiplies the sun's direct light only (not the sky, the lamps or the windows, which follow
+   * `sunIntensity`): a low sun that rakes the roofs and throws long shadows while the street lamps are
+   * already on. Default 1.
+   */
+  key?: number;
+  /**
+   * The haze glowing toward the sun (webgl/fog.ts `fogSun`): how much of the sun's colour the distance
+   * fog takes on when looking toward it. Default 0.
+   */
+  inscatter?: number;
+  /**
+   * Volumetric haze lit by the sun, with the sun's shadows in it (post/VolumetricFog.ts, HIGH tier):
+   * shafts between the houses and through the trees. `density` is the extinction per unit at the
+   * base, `scale` the height over which it thins, `noise` 0..1 how much it breaks into drifting
+   * banks, `aniso` the forward lobe (0..0.95), `sun` the sunlight it scatters (x the sun colour),
+   * `ambient` the sky light it scatters (x the fog colour). Absent is none.
+   */
+  volume?: { density: number; scale: number; noise?: number; aniso?: number; sun?: number; ambient?: number; base: 'ground' | 'sea' };
 }
 
 export interface RigParams {
@@ -94,24 +113,29 @@ export const CHAPTERS: Chapter[] = [
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.5, 0.3, 0.35], fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5, cloud: 0.6, wet: 0.35, bounce: 0.9,
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.55, 0.2, 0.4], key: 1.6, fogColor: '#2b3652', fogNear: 70, fogFar: 330, envIntensity: 0.5, cloud: 0.6, wet: 0.35, bounce: 0.9,
       // fog belongs to the distance: clear streets below the window, the far town
       // sinking into the horizon (the mist term thickens it along the ground only)
-      mist: { strength: 1, boost: 1.9, scale: 6, base: 'ground' } },
+      mist: { strength: 1, boost: 1.9, scale: 6, base: 'ground' },
+      inscatter: 0.5, volume: { density: 0.007, scale: 3.5, noise: 0.75, aniso: 0.8, sun: 0.9, ambient: 0.25, base: 'ground' } },
   },
   {
     id: 'takeoff', t0: 0.17, t1: 0.26,
     // low and closer than the other chapters: the street is a long zone, and at the old 0.020
     // lag the camera rode eleven units back with the dart a speck between the lamps
     rig: { fov: 58, camLag: 0.014, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 0.75, offsetSide: 0.45, offsetBack: 0.6, bank: 0.5, lookUp: 0.35 },
-    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffd9a0', sunIntensity: 0.9, sunDir: [0.55, 0.35, 0.2], fogColor: '#7f93b4', fogNear: 80, fogFar: 340, envIntensity: 0.45, cloud: 0.5, wet: 0.4, bounce: 0.9,
-      mist: { strength: 1, boost: 2.1, scale: 7, base: 'ground' } },
+    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffc987', sunIntensity: 0.9, sunDir: [0.6, 0.24, 0.25], key: 1.5, fogColor: '#7f93b4', fogNear: 80, fogFar: 340, envIntensity: 0.45, cloud: 0.5, wet: 0.4, bounce: 0.9,
+      mist: { strength: 1, boost: 2.1, scale: 7, base: 'ground' },
+      inscatter: 0.5, volume: { density: 0.009, scale: 3.5, noise: 0.75, aniso: 0.8, sun: 0.9, ambient: 0.25, base: 'ground' } },
   },
   {
     id: 'formation', t0: 0.26, t1: 0.36,
     rig: { fov: 50, camLag: 0.024, lookAhead: 0.012, turbAmp: 0.10, offsetUp: 1.2, offsetSide: 1.4, offsetBack: 1.2, bank: 0.7 },
     grade: { zenith: '#7f9cc8', horizon: '#ffd9a0', sunColor: '#ffd9a0', sunIntensity: 1.6, sunDir: [0.62, 0.25, 0.1], fogColor: '#dcc6a4', fogNear: 100, fogFar: 360, envIntensity: 0.6, cloud: 0.55, wet: 0.1, bounce: 0.6,
-      mist: { strength: 0.6, boost: 1.4, scale: 6, base: 'ground' } },
+      mist: { strength: 0.6, boost: 1.4, scale: 6, base: 'ground' },
+      // no volume up here: from formation height the ground haze only greys the town (the mist and
+      // the fog already give it depth), so it fades out across the takeoff/formation seam
+      inscatter: 0.15 },
   },
   {
     id: 'storm', t0: 0.36, t1: 0.48,
@@ -154,8 +178,12 @@ export const CHAPTERS: Chapter[] = [
   },
 ];
 
-/** The letter folds into the plane across this t-window inside CH1. */
-export const FOLD_WINDOW = { start: 0.03, end: 0.08 };
+/**
+ * The hero's letter folds into the dart across this t-window, in the air over the desk: it is
+ * the third envelope to leave the laptop (webgl/rig/launch.ts: released at 0.025, folding from
+ * +0.012 to +0.030 after it).
+ */
+export const FOLD_WINDOW = { start: 0.037, end: 0.055 };
 
 /** Contrail becomes visible once airborne. */
 export const CONTRAIL_FROM = 0.17;

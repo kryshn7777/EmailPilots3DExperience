@@ -23,7 +23,8 @@
       ],
       "height": 1.997,
       "tris0": 62,
-      "density": 13.88
+      "density": 27.67,
+      "roof": "#5e473a"
     },
     {
       "id": "home-colonial",
@@ -36,7 +37,8 @@
       ],
       "height": 2.879,
       "tris0": 72,
-      "density": 7.53
+      "density": 15.15,
+      "roof": "#3c3f45"
     },
     {
       "id": "home-ranch",
@@ -49,7 +51,8 @@
       ],
       "height": 1.894,
       "tris0": 38,
-      "density": 10.25
+      "density": 20.5,
+      "roof": "#4d5056"
     },
     {
       "id": "home-farmhouse",
@@ -62,7 +65,8 @@
       ],
       "height": 3.16,
       "tris0": 106,
-      "density": 8.95
+      "density": 17.9,
+      "roof": "#3f464b"
     },
     {
       "id": "home-craftsman",
@@ -75,7 +79,8 @@
       ],
       "height": 2.095,
       "tris0": 83,
-      "density": 11.29
+      "density": 22.59,
+      "roof": "#5e473a"
     },
     {
       "id": "home-victorian",
@@ -88,7 +93,8 @@
       ],
       "height": 3.642,
       "tris0": 86,
-      "density": 8.59
+      "density": 17.24,
+      "roof": "#4d5056"
     },
     {
       "id": "home-terrace",
@@ -101,7 +107,8 @@
       ],
       "height": 2.871,
       "tris0": 10,
-      "density": 8.0
+      "density": 16.0,
+      "roof": "#36363a"
     },
     {
       "id": "home-modern",
@@ -114,7 +121,8 @@
       ],
       "height": 2.046,
       "tris0": 20,
-      "density": 8.89
+      "density": 17.87,
+      "roof": "#9a9ca0"
     },
     {
       "id": "home-bungalow",
@@ -127,7 +135,8 @@
       ],
       "height": 2.062,
       "tris0": 82,
-      "density": 12.71
+      "density": 25.44,
+      "roof": "#4d5056"
     },
     {
       "id": "home-suburban",
@@ -140,7 +149,8 @@
       ],
       "height": 2.739,
       "tris0": 76,
-      "density": 8.92
+      "density": 18.0,
+      "roof": "#4d5056"
     },
     {
       "id": "home-tudor",
@@ -153,7 +163,8 @@
       ],
       "height": 3.762,
       "tris0": 24,
-      "density": 9.44
+      "density": 18.9,
+      "roof": "#5e473a"
     },
     {
       "id": "home-duplex",
@@ -166,7 +177,8 @@
       ],
       "height": 2.739,
       "tris0": 34,
-      "density": 10.31
+      "density": 20.62,
+      "roof": "#3c3f45"
     },
     {
       "id": "tree-oak",
@@ -179,7 +191,7 @@
       ],
       "height": 3.519,
       "tris0": 92,
-      "density": 7.32
+      "density": 14.64
     },
     {
       "id": "tree-maple",
@@ -192,7 +204,7 @@
       ],
       "height": 3.432,
       "tris0": 92,
-      "density": 9.07
+      "density": 18.14
     },
     {
       "id": "tree-pine",
@@ -205,7 +217,7 @@
       ],
       "height": 3.498,
       "tris0": 36,
-      "density": 12.29
+      "density": 24.72
     },
     {
       "id": "tree-poplar",
@@ -218,7 +230,7 @@
       ],
       "height": 4.584,
       "tris0": 92,
-      "density": 11.36
+      "density": 22.73
     },
     {
       "id": "home-cottage-hero",
@@ -232,8 +244,9 @@
         2.772
       ],
       "height": 1.997,
-      "tris0": 3926,
-      "density": 29.0
+      "tris0": 4996,
+      "density": 29.0,
+      "roof": "#5e473a"
     },
     {
       "id": "home-colonial-hero",
@@ -247,8 +260,9 @@
         3.679
       ],
       "height": 2.879,
-      "tris0": 6318,
-      "density": 20.29
+      "tris0": 7208,
+      "density": 20.29,
+      "roof": "#3c3f45"
     },
     {
       "id": "home-ranch-hero",
@@ -263,7 +277,8 @@
       ],
       "height": 1.894,
       "tris0": 4692,
-      "density": 22.5
+      "density": 22.5,
+      "roof": "#4d5056"
     },
     {
       "id": "home-farmhouse-hero",
@@ -278,7 +293,8 @@
       ],
       "height": 3.16,
       "tris0": 6404,
-      "density": 19.64
+      "density": 19.64,
+      "roof": "#3f464b"
     },
     {
       "id": "home-craftsman-hero",
@@ -292,8 +308,9 @@
         3.96
       ],
       "height": 2.095,
-      "tris0": 4223,
-      "density": 23.48
+      "tris0": 4353,
+      "density": 23.48,
+      "roof": "#5e473a"
     },
     {
       "id": "home-victorian-hero",
@@ -307,8 +324,9 @@
         3.349
       ],
       "height": 3.642,
-      "tris0": 6932,
-      "density": 18.3
+      "tris0": 8978,
+      "density": 18.3,
+      "roof": "#4d5056"
     },
     {
       "id": "home-terrace-hero",
@@ -323,7 +341,8 @@
       ],
       "height": 2.871,
       "tris0": 8278,
-      "density": 16.6
+      "density": 16.6,
+      "roof": "#36363a"
     },
     {
       "id": "home-modern-hero",
@@ -338,7 +357,8 @@
       ],
       "height": 2.046,
       "tris0": 2230,
-      "density": 19.5
+      "density": 19.5,
+      "roof": "#9a9ca0"
     },
     {
       "id": "home-bungalow-hero",
@@ -352,8 +372,9 @@
         3.267
       ],
       "height": 2.062,
-      "tris0": 3734,
-      "density": 27.05
+      "tris0": 4868,
+      "density": 27.05,
+      "roof": "#4d5056"
     },
     {
       "id": "home-suburban-hero",
@@ -367,8 +388,9 @@
         3.465
       ],
       "height": 2.739,
-      "tris0": 6262,
-      "density": 19.5
+      "tris0": 6590,
+      "density": 19.5,
+      "roof": "#4d5056"
     },
     {
       "id": "home-tudor-hero",
@@ -382,8 +404,9 @@
         3.003
       ],
       "height": 3.762,
-      "tris0": 3242,
-      "density": 20.66
+      "tris0": 6048,
+      "density": 20.66,
+      "roof": "#5e473a"
     },
     {
       "id": "home-duplex-hero",
@@ -398,7 +421,64 @@
       ],
       "height": 2.739,
       "tris0": 3692,
-      "density": 21.38
+      "density": 21.38,
+      "roof": "#3c3f45"
+    },
+    {
+      "id": "tree-oak-ultra",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-oak",
+      "lod": "ultra",
+      "lod0": "tree-oak-ultra.lod0.glb",
+      "footprint": [
+        3.383,
+        3.444
+      ],
+      "height": 3.951,
+      "tris0": 49372
+    },
+    {
+      "id": "tree-maple-ultra",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-maple",
+      "lod": "ultra",
+      "lod0": "tree-maple-ultra.lod0.glb",
+      "footprint": [
+        2.899,
+        2.909
+      ],
+      "height": 3.689,
+      "tris0": 47288
+    },
+    {
+      "id": "tree-pine-ultra",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-pine",
+      "lod": "ultra",
+      "lod0": "tree-pine-ultra.lod0.glb",
+      "footprint": [
+        2.219,
+        2.199
+      ],
+      "height": 3.71,
+      "tris0": 50664
+    },
+    {
+      "id": "tree-poplar-ultra",
+      "kind": "tree",
+      "sheet": "hero-trees",
+      "lean": "tree-poplar",
+      "lod": "ultra",
+      "lod0": "tree-poplar-ultra.lod0.glb",
+      "footprint": [
+        1.642,
+        1.566
+      ],
+      "height": 4.918,
+      "tris0": 48798
     },
     {
       "id": "tree-oak-hero",
@@ -408,11 +488,11 @@
       "lod": "hero",
       "lod0": "tree-oak-hero.lod0.glb",
       "footprint": [
-        3.355,
-        3.314
+        3.347,
+        3.33
       ],
-      "height": 3.952,
-      "tris0": 19138
+      "height": 3.978,
+      "tris0": 17050
     },
     {
       "id": "tree-maple-hero",
@@ -422,11 +502,11 @@
       "lod": "hero",
       "lod0": "tree-maple-hero.lod0.glb",
       "footprint": [
-        2.807,
-        2.738
+        2.752,
+        2.791
       ],
-      "height": 3.632,
-      "tris0": 17030
+      "height": 3.634,
+      "tris0": 15586
     },
     {
       "id": "tree-pine-hero",
@@ -436,8 +516,8 @@
       "lod": "hero",
       "lod0": "tree-pine-hero.lod0.glb",
       "footprint": [
-        2.219,
-        2.147
+        2.211,
+        2.112
       ],
       "height": 3.697,
       "tris0": 13528
@@ -450,11 +530,11 @@
       "lod": "hero",
       "lod0": "tree-poplar-hero.lod0.glb",
       "footprint": [
-        1.504,
-        1.511
+        1.526,
+        1.527
       ],
-      "height": 4.82,
-      "tris0": 15544
+      "height": 4.819,
+      "tris0": 15572
     },
     {
       "id": "tree-oak-detail",
@@ -464,11 +544,11 @@
       "lod": "detail",
       "lod0": "tree-oak-detail.lod0.glb",
       "footprint": [
-        3.538,
-        3.417
+        3.514,
+        3.54
       ],
-      "height": 4.009,
-      "tris0": 2176
+      "height": 4.099,
+      "tris0": 2158
     },
     {
       "id": "tree-maple-detail",
@@ -478,11 +558,11 @@
       "lod": "detail",
       "lod0": "tree-maple-detail.lod0.glb",
       "footprint": [
-        2.982,
-        3.039
+        2.974,
+        2.968
       ],
-      "height": 3.645,
-      "tris0": 2010
+      "height": 3.75,
+      "tris0": 2011
     },
     {
       "id": "tree-pine-detail",
@@ -492,8 +572,8 @@
       "lod": "detail",
       "lod0": "tree-pine-detail.lod0.glb",
       "footprint": [
-        2.214,
-        2.272
+        2.267,
+        2.285
       ],
       "height": 3.697,
       "tris0": 3444
@@ -506,11 +586,11 @@
       "lod": "detail",
       "lod0": "tree-poplar-detail.lod0.glb",
       "footprint": [
-        1.738,
-        1.751
+        1.657,
+        1.75
       ],
-      "height": 4.653,
-      "tris0": 2118
+      "height": 4.835,
+      "tris0": 2148
     },
     {
       "id": "tree-oak-lite",
@@ -520,11 +600,11 @@
       "lod": "lite",
       "lod0": "tree-oak-lite.lod0.glb",
       "footprint": [
-        3.821,
-        3.601
+        3.895,
+        3.204
       ],
-      "height": 4.027,
-      "tris0": 714
+      "height": 4.191,
+      "tris0": 738
     },
     {
       "id": "tree-maple-lite",
@@ -534,11 +614,11 @@
       "lod": "lite",
       "lod0": "tree-maple-lite.lod0.glb",
       "footprint": [
-        3.346,
-        3.254
+        3.201,
+        3.166
       ],
-      "height": 3.632,
-      "tris0": 650
+      "height": 3.673,
+      "tris0": 670
     },
     {
       "id": "tree-pine-lite",
@@ -548,8 +628,8 @@
       "lod": "lite",
       "lod0": "tree-pine-lite.lod0.glb",
       "footprint": [
-        2.492,
-        2.124
+        2.401,
+        2.3
       ],
       "height": 3.697,
       "tris0": 900
@@ -562,11 +642,11 @@
       "lod": "lite",
       "lod0": "tree-poplar-lite.lod0.glb",
       "footprint": [
-        1.976,
-        2.001
+        2.057,
+        1.883
       ],
-      "height": 4.585,
-      "tris0": 706
+      "height": 4.389,
+      "tris0": 718
     }
   ],
   "sheets": {

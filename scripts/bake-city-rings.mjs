@@ -33,26 +33,35 @@ const OFFSETS = {
 // the night city is real buildings throughout on HIGH, and the neighbourhood
 // is real houses out to 110 units, with the impostors only past that.
 // near = the hero (close-up) models where a set has them, mid = the lean ones.
-// Trees have three tiers because they are what the window-exit view is full of: `near` -> hero
-// trees (~10k tris), `detail` -> the mid-detail tree (~2.4k), `lite` -> a ~700-triangle tree with
-// real boughs and leaf cards out to a radius where a lean 60-triangle blob would still read as
-// one. Beyond `lite` the lean module stands. Houses only have the hero tier. `detail` and `lite`
-// are subsets of `mid`. Phones (low) have no hero tier but do get detail and lite.
+// Trees have four tiers because they are what the window-exit view is full of: `ultra` -> the
+// close-up tree (~50k tris: full branching skeleton, buttress roots, three sizes of leaf card and
+// hundreds of individual 3D leaves) for the few the flight passes within a few metres of, `near` ->
+// hero trees (~15k tris), `detail` -> the mid-detail tree (~2.4k), `lite` -> a ~700-triangle tree
+// with real boughs and leaf cards out to a radius where a lean 60-triangle blob would still read
+// as one. Beyond `lite` the lean module stands. Houses only have the hero tier. `ultra` is a
+// subset of `near`/`mid`, `detail` and `lite` are subsets of `mid`. Phones (low) have no ultra or
+// hero tier but do get detail and lite. Street trees (verge trees, about half the size of a
+// yard's) have their own, shorter radii: `streetUltra`, `streetNear`, `streetDetail`, `streetLite`.
+// Every instance of a module is drawn whether or not it is in view (an InstancedMesh is culled as
+// a whole), so the radii are a triangle budget: the tree total on screen is the sum over the rings.
 // `hero` (city): the lots inside `near` that get the full-geometry hero towers and blocks
 // (blender `--sheet hero-towers`, 18-170k triangles each), which only the lots the canyon flies
 // past can justify; `near` itself still decides the neon and billboard dressing in City.ts.
 const RINGS = {
   city: { high: { near: 18, mid: 1e6, hero: 12 }, low: { near: 8, mid: 45 } },
   rooftops: {
-    high: { near: 11, mid: 110, treeNear: 15, treeDetail: 28, treeLite: 78, streetDetail: 16, streetLite: 42 },
+    high: {
+      near: 11, mid: 110, treeUltra: 6.5, streetUltra: 4.5, treeNear: 12, streetNear: 8,
+      treeDetail: 28, treeLite: 78, streetDetail: 16, streetLite: 42,
+    },
     low: { near: 10, mid: 55, treeNear: 0, treeDetail: 15, treeLite: 36, streetDetail: 9, streetLite: 24 },
   },
 };
 
 const partition = (lots, offset, radii, kindOf = () => undefined) => {
   const out = {
-    high: { near: [], mid: [], far: [], detail: [], lite: [], hero: [] },
-    low: { near: [], mid: [], far: [], detail: [], lite: [], hero: [] },
+    high: { near: [], mid: [], far: [], detail: [], lite: [], hero: [], ultra: [] },
+    low: { near: [], mid: [], far: [], detail: [], lite: [], hero: [], ultra: [] },
   };
   lots.forEach((lot, i) => {
     let best = Infinity;
@@ -74,9 +83,11 @@ const partition = (lots, offset, radii, kindOf = () => undefined) => {
     }
     for (const tier of ['high', 'low']) {
       const r = radii[tier];
-      // verge trees are small and many: detail tier at most, never the 9k-triangle hero
+      // verge trees are small and many: the hero tier only right beside the flight
       let near = isTree && r.treeNear !== undefined ? r.treeNear : r.near;
-      if (lot.street) near = 0;
+      if (lot.street) near = r.streetNear ?? 0;
+      const ultraTo = lot.street ? r.streetUltra : r.treeUltra;
+      if (isTree && ultraTo !== undefined && best < ultraTo) out[tier].ultra.push(i);
       const detailTo = lot.street ? Math.min(r.treeDetail ?? 0, r.streetDetail ?? 22) : r.treeDetail;
       const liteTo = lot.street ? Math.min(r.treeLite ?? 0, r.streetLite ?? 30) : r.treeLite;
       (best < near ? out[tier].near : best < r.mid ? out[tier].mid : out[tier].far).push(i);
@@ -88,7 +99,10 @@ const partition = (lots, offset, radii, kindOf = () => undefined) => {
     }
   });
   // a set without a hero radius swaps its whole near ring (the homes), so it carries no list
-  for (const tier of ['high', 'low']) if (radii[tier].hero === undefined) delete out[tier].hero;
+  for (const tier of ['high', 'low']) {
+    if (radii[tier].hero === undefined) delete out[tier].hero;
+    if (!out[tier].ultra.length) delete out[tier].ultra;
+  }
   return out;
 };
 
@@ -113,7 +127,7 @@ for (const [key, lots] of [['city', cityLots], ['rooftops', roofLots]]) {
     key,
     'high near/mid/far:',
     rings[key].high.near.length, rings[key].high.mid.length, rings[key].high.far.length,
-    `(detail ${rings[key].high.detail.length}, lite ${rings[key].high.lite.length}` +
+    `(ultra ${rings[key].high.ultra?.length ?? 0}, detail ${rings[key].high.detail.length}, lite ${rings[key].high.lite.length}` +
       `${rings[key].high.hero ? `, hero ${rings[key].high.hero.length}` : ''})`,
     '· low:',
     rings[key].low.near.length, rings[key].low.mid.length, rings[key].low.far.length,

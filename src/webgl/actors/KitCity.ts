@@ -25,6 +25,7 @@ import { adoptGlassAttributes, windowGlassMaterial } from '../materials/WindowGl
 import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
+import { applyRoofs, roofAttributes } from '../materials/Roofs';
 
 export interface KitLot {
   x: number; z: number; w: number; d: number; h: number;
@@ -33,6 +34,8 @@ export interface KitLot {
   forest?: boolean;
   /** a small tree on the verge of a street */
   street?: boolean;
+  /** stretch in y alone over the module's own proportions (cityGen TOWER_RISE); absent is 1 */
+  rise?: number;
 }
 export interface KitRingSet {
   near: number[]; mid: number[]; far: number[];
@@ -42,6 +45,11 @@ export interface KitRingSet {
    * towers on the lots the canyon actually brushes past.
    */
   hero?: number[];
+  /**
+   * trees the camera passes within a few metres of: they swap to their `ultra` module (~50k triangles, HIGH
+   * only), whichever ring they are in. A subset of `near` in practice.
+   */
+  ultra?: number[];
   /** lots inside `mid` that swap to their `detail` module (trees; HIGH and LOW) */
   detail?: number[];
   /** lots inside `mid`, beyond `detail`, that swap to their `lite` module (trees; HIGH and LOW) */
@@ -53,8 +61,13 @@ export interface KitModule {
   sheet?: string;
   /** set on a hero/detail module: the lean module it replaces */
   lean?: string;
-  /** 'hero' replaces `lean` in the near ring (HIGH), 'detail' in the detail ring, 'lite' in the lite ring */
-  lod?: 'hero' | 'detail' | 'lite';
+  /**
+   * 'ultra' replaces `lean` in the ultra ring (HIGH), 'hero' in the near ring (HIGH), 'detail' in the
+   * detail ring, 'lite' in the lite ring
+   */
+  lod?: 'ultra' | 'hero' | 'detail' | 'lite';
+  /** a house's main roofing colour (sRGB hex), what the baked roof pattern is read against */
+  roof?: string;
 }
 /** One atlas: what is present depends on the sheet (hero trees have no normals or glow). */
 export interface SheetAtlas {
@@ -91,6 +104,10 @@ function dequantized(source: BufferGeometry): BufferGeometry {
   return geometry;
 }
 
+/** far-ring roof colours: the shingle, clay, slate and metal mix of the town's real roofs, a shade darker */
+const FAR_ROOFS = ['#3a3c40', '#57504a', '#6e4434', '#4a5462', '#7a3a2c', '#a85a3c', '#b8724a', '#485058',
+  '#2f5440', '#8a3a2e', '#3a3e44', '#8e8c84', '#2f4262', '#8a6a48'];
+
 /** Gable roof of unit size, ridge along x: the far-ring stand-in for a house roof. */
 function roofPrism(): BufferGeometry {
   const A = [-0.5, -0.5, -0.5], B = [-0.5, -0.5, 0.5], C = [-0.5, 0.5, 0];
@@ -125,6 +142,11 @@ export interface KitOptions {
   cloudEnv?: boolean;
   /** real modules cast and receive the sun's shadows (HIGH, where the engine has a shadow map) */
   shadows?: boolean;
+  /**
+   * Give every house its own roof (materials/Roofs.ts): a roofing style and colour per lot,
+   * weathering, solar arrays and skylights. The neighbourhood seen from above wants it.
+   */
+  roofs?: boolean;
 }
 
 /**
@@ -239,8 +261,10 @@ export class KitCity {
       metalness: 1,
       ...(maps.emissive ? { emissive: '#ffffff', emissiveMap: maps.emissive, emissiveIntensity: glow } : {}),
       ...(maps.normal ? { normalMap: maps.normal } : {}),
-      // leaf cards are cut-outs: no blending, so no sorting and no wrong draw order
-      ...(maps.alpha ? { alphaTest: 0.42 } : {}),
+      // leaf cards are cut-outs: no blending, so no sorting and no wrong draw order. The trees also
+      // carry the light that reaches each vertex as a vertex colour (blender/bld/hero_trees.py):
+      // the heart of a crown dark, its sunlit skin bright, each cluster of leaves its own tone
+      ...(maps.alpha ? { alphaTest: 0.42, vertexColors: true } : {}),
     });
     if (cloudEnv) {
       if (KitCity.environment) {
@@ -266,7 +290,7 @@ export class KitCity {
    * higher up, in world space so a street of trees sways together, a gust travelling across the
    * town), the cards flutter on top of that, and sunlight coming from behind a leaf glows through
    * it the way a canopy lights up against a low sun. Bark is the bottom half of the sheet
-   * (atlas.py HERO_TREES), cards the top half, so the UV says which is which.
+   * (atlas.py HERO_TREES), cards, leaves and needles the top half, so the UV says which is which.
    */
   private static foliage(material: MeshStandardMaterial): void {
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -320,7 +344,7 @@ export class KitCity {
     lots: KitLot[],
     rings: KitRingSet,
     manifest: KitManifest,
-    { tier = 'high', glow = 1, cloudEnv = false, shadows = false }: KitOptions = {},
+    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false }: KitOptions = {},
     private color = new Color(),
   ) {
     const modules = manifest.modules;
@@ -355,15 +379,22 @@ export class KitCity {
     // can afford it; everything else, and every phone, gets the lean module.
     // the hero tier is for HIGH; detail and lite trees serve both tiers (phones read the half-size
     // atlases), so a phone's trees are real branches and leaves, not 40-triangle blobs
-    const swaps = { hero: new Map<string, string>(), detail: new Map<string, string>(), lite: new Map<string, string>() };
-    for (const m of modules) if (m.lean && (tier === 'high' || m.lod !== 'hero')) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
+    const swaps = {
+      ultra: new Map<string, string>(), hero: new Map<string, string>(),
+      detail: new Map<string, string>(), lite: new Map<string, string>(),
+    };
+    for (const m of modules) {
+      if (m.lean && (tier === 'high' || (m.lod !== 'hero' && m.lod !== 'ultra'))) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
+    }
+    const ultraSet = new Set(rings.ultra ?? []);
     const nearSet = new Set(rings.hero ?? rings.near);
     const detailSet = new Set(rings.detail ?? []);
     const liteSet = new Set(rings.lite ?? []);
     const byModule = new Map<string, number[]>();
     for (const i of modelled) {
       const lean = lots[i]!.moduleId;
-      const id = nearSet.has(i) ? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
+      const id = ultraSet.has(i) ? swaps.ultra.get(lean) ?? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
+        : nearSet.has(i) ? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
         : detailSet.has(i) ? swaps.detail.get(lean) ?? lean
         : liteSet.has(i) ? swaps.lite.get(lean) ?? lean : lean;
       const arr = byModule.get(id) ?? [];
@@ -371,11 +402,17 @@ export class KitCity {
       byModule.set(id, arr);
     }
     const materials = new Map<string, MeshStandardMaterial>();
-    const materialFor = (sheet: string): MeshStandardMaterial => {
-      let m = materials.get(sheet);
+    // houses whose roofs the town dresses: one table of the modules' roofing colours, indexed per vertex
+    const roofBases = [...new Set(modules.filter((m) => m.kind === 'house' && m.roof).map((m) => m.roof!))];
+    const dressed = (mod: KitModule): boolean => roofs && mod.kind === 'house' && !!mod.roof;
+    const materialFor = (mod: KitModule): MeshStandardMaterial => {
+      const sheet = mod.sheet ?? 'main';
+      const key = dressed(mod) ? `${sheet}:roofs` : sheet;
+      let m = materials.get(key);
       if (!m) {
         m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
-        materials.set(sheet, m);
+        if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high');
+        materials.set(key, m);
       }
       return m;
     };
@@ -384,7 +421,7 @@ export class KitCity {
     for (const [moduleId, indices] of byModule) {
       const mod = modules.find((m) => m.id === moduleId);
       if (!mod) continue;
-      const material = materialFor(mod.sheet ?? 'main');
+      const material = materialFor(mod);
       loader.load(asset(`/models/${manifest.dir}/${mod.lod0}`), (gltf) => {
         let found: Mesh | null = null;
         let glassFound: Mesh | null = null;
@@ -404,6 +441,7 @@ export class KitCity {
         // bake any node transform into the geometry before measuring it, so the
         // fit below is made against what is actually drawn
         const geometry = dequantized(source.geometry).applyMatrix4(source.matrixWorld);
+        if (dressed(mod)) roofAttributes(geometry, roofBases.indexOf(mod.roof!));
         this.disposables.push(geometry);
         geometry.computeBoundingBox();
         const bounds = geometry.boundingBox!;
@@ -431,8 +469,10 @@ export class KitCity {
           // ratios agree and the module lands at its own proportions; taking
           // the smallest keeps it undistorted and inside its plot if they
           // ever drift. Measured off the GEOMETRY (a hero off its shell, above).
-          const fit = Math.min(lot.w / geomW, lot.d / geomD, lot.h / geomHeight);
-          s.set(fit, fit, fit);
+          const rise = lot.rise ?? 1;
+          const fit = Math.min(lot.w / geomW, lot.d / geomD, lot.h / rise / geomHeight);
+          // a tower the generator raises (cityGen TOWER_RISE) stretches in y alone, on the same plot
+          s.set(fit, fit * rise, fit);
           p.set(lot.x, -baseY * fit, lot.z);
           inst.setMatrixAt(k, m4.compose(p, q, s));
           inst.setColorAt(k, this.color.set(lot.tint));
@@ -549,7 +589,7 @@ export class KitCity {
     const make = (
       geometry: BufferGeometry, material: MeshStandardMaterial, list: number[],
       place: (lot: KitLot) => [number, number, number, number, number, number],
-      tinted: boolean,
+      tint: ((lot: KitLot) => string) | null,
     ): void => {
       const inst = new InstancedMesh(geometry, material, list.length);
       list.forEach((lotIndex, k) => {
@@ -557,7 +597,7 @@ export class KitCity {
         const [x, y, z, sx, sy, sz] = place(lot);
         q.setFromAxisAngle(Y, lot.yaw);
         inst.setMatrixAt(k, m4.compose(p.set(x, y, z), q, s.set(sx, sy, sz)));
-        if (tinted) inst.setColorAt(k, this.color.set(lot.tint));
+        if (tint) inst.setColorAt(k, this.color.set(tint(lot)));
       });
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
       this.group.add(inst);
@@ -566,14 +606,20 @@ export class KitCity {
     };
     if (houses.length) {
       make(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: '#d6cdbb', roughness: 0.9 }),
-        houses, (l) => [l.x, l.h * 0.28, l.z, l.w, l.h * 0.56, l.d], true);
-      make(roofPrism(), new MeshStandardMaterial({ color: '#4a4b52', roughness: 0.95, side: DoubleSide }),
-        houses, (l) => [l.x, l.h * 0.56 + l.h * 0.22, l.z, l.w * 1.06, l.h * 0.44, l.d * 1.06], false);
+        houses, (l) => [l.x, l.h * 0.28, l.z, l.w, l.h * 0.56, l.d], (l) => l.tint);
+      // the roofs keep the town's mix of colours out here too (materials/Roofs.ts dresses the real ones)
+      const roofHash = (l: KitLot): number => {
+        const v = Math.sin(l.x * 12.9898 + l.z * 78.233) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      make(roofPrism(), new MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, side: DoubleSide }),
+        houses, (l) => [l.x, l.h * 0.56 + l.h * 0.22, l.z, l.w * 1.06, l.h * 0.44, l.d * 1.06],
+        (l) => FAR_ROOFS[Math.floor(roofHash(l) * FAR_ROOFS.length)]!);
     }
     if (trees.length) {
       // a woodland of thousands: 20-triangle blobs, the 80-triangle ones only for a few
       make(new IcosahedronGeometry(1, trees.length > 600 ? 0 : 1), new MeshStandardMaterial({ color: '#4d6c3a', roughness: 1 }),
-        trees, (l) => [l.x, l.h * 0.62, l.z, l.w * 0.5, l.h * 0.4, l.d * 0.5], true);
+        trees, (l) => [l.x, l.h * 0.62, l.z, l.w * 0.5, l.h * 0.4, l.d * 0.5], (l) => l.tint);
     }
   }
 

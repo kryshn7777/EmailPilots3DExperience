@@ -18,7 +18,7 @@ import type { Tooltip } from '../interact/Tooltip';
  * border, a stamp, a postmark and the address lines; the back with the V of the flap and a wax
  * seal. They used to be flat cream slabs seen edge-on, which read as white plates.
  */
-function envelopeTextures(): { front: CanvasTexture; back: CanvasTexture } {
+export function envelopeTextures(): { front: CanvasTexture; back: CanvasTexture } {
   const W = 512;
   const H = 346;
   const make = (draw: (ctx: CanvasRenderingContext2D) => void): CanvasTexture => {
