@@ -315,7 +315,7 @@ export class Clouds {
     const night =
       (0.16 + 0.2 * bank) *
       MathUtils.smoothstep(t, 0.585, 0.622) *
-      (1 - MathUtils.smoothstep(t, 0.8, 0.84));
+      (1 - MathUtils.smoothstep(t, 0.835, 0.872));
     this.nightMaterial.uniforms.uOpacity!.value = night;
     this.night.visible = night > 0.002;
     if (this.night.visible) {

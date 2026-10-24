@@ -54,6 +54,8 @@ const RECEIVED_AT = 0.9885;
 export class Landing {
   readonly group = new Group();
   private edgeLightMaterial: MeshStandardMaterial;
+  /** the lit materials that come on with the airfield (see `update`), and the glow each is made with */
+  private powered: { m: MeshStandardMaterial; base: number }[] = [];
   private rabbitMaterials: MeshStandardMaterial[] = [];
   private windsock: Mesh;
   private reply: Mesh;
@@ -143,6 +145,7 @@ export class Landing {
     const greenMat = new MeshStandardMaterial({ color: '#062a10', emissive: '#3ef58a', emissiveIntensity: 2 });
     const redMat = new MeshStandardMaterial({ color: '#2a0808', emissive: '#ff4b4b', emissiveIntensity: 2 });
     this.disposables.push(greenMat, redMat);
+    this.powered.push({ m: greenMat, base: 2 }, { m: redMat, base: 2 });
     for (let i = 0; i < 9; i++) {
       const z = cz - RUNWAY_W / 2 + 0.5 + (i * (RUNWAY_W - 1)) / 8;
       const g = new Mesh(bulb, greenMat);
@@ -172,6 +175,7 @@ export class Landing {
     const papiWhite = new MeshStandardMaterial({ color: '#222', emissive: '#fff4e0', emissiveIntensity: 2.2 });
     const papiRed = new MeshStandardMaterial({ color: '#220808', emissive: '#ff4b4b', emissiveIntensity: 2.2 });
     this.disposables.push(papiWhite, papiRed);
+    this.powered.push({ m: papiWhite, base: 2.2 }, { m: papiRed, base: 2.2 });
     for (let i = 0; i < 4; i++) {
       const m = i < 2 ? papiWhite : papiRed;
       const p = new Mesh(bulb, m);
@@ -585,14 +589,20 @@ export class Landing {
   update(t: number, time: number): void {
     if (!this.group.visible) return;
     this.ensureOffice();
-    this.edgeLightMaterial.emissiveIntensity = 1.4 + Math.sin(time * 1.6) * 0.4;
+    // the airfield wakes as the dart comes down out of the cloud: the edge lights run up first, then the
+    // threshold bars and PAPI, and the rabbit last, racing toward the threshold on the way in
+    const edge = MathUtils.smoothstep(t, 0.832, 0.862);
+    const bars = MathUtils.smoothstep(t, 0.846, 0.872);
+    const rabbit = MathUtils.smoothstep(t, 0.856, 0.882);
+    this.edgeLightMaterial.emissiveIntensity = (1.4 + Math.sin(time * 1.6) * 0.4) * edge;
+    for (const p of this.powered) p.m.emissiveIntensity = p.base * bars;
 
     // the rabbit: one bright pulse racing toward the threshold, looping
     const sweep = (time * 1.4) % 1;
     for (let i = 0; i < this.rabbitMaterials.length; i++) {
       const pos = 1 - i / this.rabbitMaterials.length; // far → near
       const d = Math.abs(sweep - pos);
-      this.rabbitMaterials[i]!.emissiveIntensity = Math.max(0, 1 - d * 9) * 5;
+      this.rabbitMaterials[i]!.emissiveIntensity = Math.max(0, 1 - d * 9) * 5 * rabbit;
     }
 
     this.windsock.rotation.y = Math.sin(time * 0.7) * 0.4;

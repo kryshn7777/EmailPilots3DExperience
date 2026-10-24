@@ -907,7 +907,8 @@ export class Engine {
     // switched on inside the weather (the fog has closed in around the lens by then), not out in the open
     this.city.group.visible = t > 0.622 && t < 0.83;
     this.copilot.group.visible = t > 0.75 && t < 0.9;
-    this.landing.group.visible = t > 0.85;
+    // up through the weather as the flight comes down out of it (the fog and the deck cover the arrival)
+    this.landing.group.visible = t > 0.83;
     // The room is measurably off-screen from t=0.17 — an AABB-vs-frustum test
     // on the desk, the panel and the window frame returns false at 0.17, 0.19,
     // 0.21, 0.24, 0.28 and 0.31 — but it was kept "visible" until 0.32.
@@ -957,6 +958,13 @@ export class Engine {
       this.fog.near = MathUtils.lerp(this.fog.near, 5, closing);
       this.fog.far = MathUtils.lerp(this.fog.far, 42, closing);
     }
+    // the descent to the airfield goes through cloud too: fog closes while the starfield is left behind,
+    // the airfield is switched on inside it, and it opens as the runway lights come up
+    const descent = MathUtils.smoothstep(t, 0.815, 0.838) * (1 - MathUtils.smoothstep(t, 0.852, 0.896));
+    if (descent > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 4, descent);
+      this.fog.far = MathUtils.lerp(this.fog.far, 62, descent);
+    }
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
     // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
     if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
@@ -996,9 +1004,11 @@ export class Engine {
     // never under reduced motion or on the sub-page orbits
     const bolts =
       this.options.reducedMotion || this.idlePreset ? 0
-        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.63, 0.665));
+        : MathUtils.smoothstep(t, 0.345, 0.375) * (1 - MathUtils.smoothstep(t, 0.63, 0.665));
     // the bolts land on the sea, then on the city's roofs as the flight crosses over to it
-    const seaY = MathUtils.lerp(this.beacon.group.position.y + 0.15, this.city.group.position.y, MathUtils.smoothstep(t, 0.6, 0.625));
+    // (and the storm's first strikes, where the town fades into the weather, land on the town's ground)
+    const stormGround = MathUtils.lerp(ROOFTOP_BASE_Y, this.beacon.group.position.y + 0.15, MathUtils.smoothstep(t, 0.39, 0.42));
+    const seaY = MathUtils.lerp(stormGround, this.city.group.position.y, MathUtils.smoothstep(t, 0.6, 0.625));
     this.lightning.update(
       time, dt, bolts, this.camera, seaY, Math.max(this.camera.position.y + 55, seaY + 70),
       innerHeight * Math.min(devicePixelRatio, 2),
