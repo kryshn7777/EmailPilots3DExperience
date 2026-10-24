@@ -43,6 +43,7 @@ import type { Tooltip } from '../interact/Tooltip';
 import { glowTexture } from '../bake/CanvasTextures';
 import { requestCompile } from '../warm';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import beamVert from '../shaders/beam.vert.glsl';
 import beamFrag from '../shaders/beam.frag.glsl';
 import oceanVert from '../shaders/ocean.vert.glsl';
@@ -67,35 +68,80 @@ import { ReflectionProbe } from '../materials/ReflectionProbe';
 const TOWER_SCALE = 1.55;
 
 /**
- * Where the freighter steams during the beacon chapter, in island-local
- * space. It is staged FAR and LARGE rather than near and cropped: the camera
- * flies 13 units above the water, so a close hull sits under the frame edge
- * (the old one left the shot entirely by t≈0.505). At this range it holds the
- * lower-right third through the whole sweep, and it is heading for the light —
- * a vessel being guided in, which is the chapter's whole point.
+ * The freighter's scale. The tower's lantern is 12.2 model units up and the island is scaled by
+ * TOWER_SCALE, so it sits 18.9 units above the sea; a stone light of this style carries its lamp about
+ * 38 m up, which makes the world 0.5 unit to the metre. The ship (blender/make_ship.py) is modelled in
+ * metres, a 181 m, 27 m-beam, 1,800-TEU feeder with its bridge deck 27 m up and its mast 44 m up, so
+ * scaling it by exactly this puts it in true proportion to the tower: 91 units long, 4.8 times the
+ * lighthouse's height, its bridge level with the lantern gallery.
  */
+const SHIP_SCALE = 0.5;
+/** the keel-level transom to the stem, and the raked tops, in metres: for the wake and the track */
+const SHIP_HALF_LENGTH = 90;
 /**
- * Riding height. The hull is 5 units deep at this scale, and at the old 0.5
- * it sat roughly 40% under — the ship read as half-sunk rather than loaded.
+ * Riding height. The model's waterline is y = 0 in its own frame; the sea plane's mean is 0.15 and the
+ * swells (ocean.vert) crest about 2.5 over it, so the hull rides a little proud of the mean, with the
+ * crests lapping the boot topping and the troughs showing a band of red.
  */
-// Rides higher than it used to. The swells in ocean.vert are 1.6x taller now
-// and peak around 2 units above the plane at y=0.15, which at the old 2.15 put
-// crests through the boot topping — the exact "half underwater" look this
-// number was raised to fix in the first place.
-const SHIP_Y = 2.85;
+const SHIP_Y = 0.7;
 /**
- * The leg stays well out to seaward: the freighter is ~38 units long now, so
- * a track any closer swung its bow in over the islet's rocks.
+ * Where the ship steams, in the island's frame: out to sea, an arc about the islet at about 140 units
+ * (280 m), passing from the east of it round to the north-west as the story turns. A feeder this big
+ * needs room (the flight camera is within 40 units of the tower, and a hull 91 units long would fill
+ * the lens anywhere nearer) and this keeps it behind the light from both cameras: the approach looks
+ * east along the shore, then the delivery shot swings to look north across the sea. The keys are
+ * [story t, bearing in degrees from +x toward +z, radius in units]; the ship's bearing is a monotone
+ * cubic through them, its heading the tangent.
  */
+const SHIP_TRACK: readonly (readonly [number, number, number])[] = [
+  [0.43, -4, 150],
+  [0.46, -18, 146],
+  [0.5, -40, 140],
+  [0.52, -66, 138],
+  [0.54, -96, 140],
+  [0.58, -124, 146],
+  [0.61, -134, 150],
+];
+
+/** how far the lamp's sweep points down when it rakes the ship: the hull is 5 degrees below the lantern at its range */
+const SHIP_BEAM_TILT = -0.05;
+
+/** a monotone cubic (Fritsch-Carlson) through column `c` (1 bearing, 2 radius) of SHIP_TRACK, at story time t */
+function trackAt(t: number, c: 1 | 2): number {
+  const k = SHIP_TRACK;
+  const n = k.length;
+  if (t <= k[0]![0]) return k[0]![c];
+  if (t >= k[n - 1]![0]) return k[n - 1]![c];
+  let i = 0;
+  while (t > k[i + 1]![0]) i++;
+  const slope = (j: number): number => (k[j + 1]![c] - k[j]![c]) / (k[j + 1]![0] - k[j]![0]);
+  const tangent = (j: number): number => {
+    if (j === 0) return slope(0);
+    if (j === n - 1) return slope(n - 2);
+    const a = slope(j - 1);
+    const b = slope(j);
+    return a * b <= 0 ? 0 : (2 * a * b) / (a + b);
+  };
+  const t0 = k[i]![0];
+  const h = k[i + 1]![0] - t0;
+  const u = (t - t0) / h;
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * k[i]![c] + (u3 - 2 * u2 + u) * h * tangent(i) +
+    (-2 * u3 + 3 * u2) * k[i + 1]![c] + (u3 - u2) * h * tangent(i + 1);
+}
+
+/** the ship's place on its track (island frame, y left to the caller) at story time t */
+function shipPlace(t: number, out: Vector3): Vector3 {
+  const a = MathUtils.degToRad(trackAt(t, 1));
+  const r = trackAt(t, 2);
+  return out.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+}
+
 /** extra scroll the sea holds before it starts letting go — see `reveal` */
 const SEA_FADE_DELAY = 0.012;
 /** seconds for the lamp to come full circle */
 const BEAM_PERIOD = 7;
-
-/** the freighter's size and track, in the island's frame (see buildShip): it crosses ahead of the camera, left to right */
-const SHIP_SCALE = 2.8;
-const SHIP_FROM = new Vector3(34, SHIP_Y, -30);
-const SHIP_TO = new Vector3(28, SHIP_Y, 34);
 
 export class Beacon {
   readonly group = new Group();
@@ -126,7 +172,9 @@ export class Beacon {
   private flare!: Sprite;
   private ship = new Group();
   private wake!: Mesh;
-  private radar: Mesh | null = null;
+  private radars: Mesh[] = [];
+  private shipPos = new Vector3();
+  private shipAhead = new Vector3();
   /** the lamp's bearing: the wall clock, one turn every BEAM_PERIOD seconds */
   private beamYaw = 0;
   /**
@@ -321,7 +369,7 @@ export class Beacon {
     this.mirrored(this.flare);
     this.disposables.push(this.flareMaterial);
 
-    this.buildShip();
+    this.buildShip(quality.tier);
 
     // — radar rings riding just above the swell —
     for (let i = 0; i < 3; i++) {
@@ -483,7 +531,7 @@ varying vec3 vBeamWorld;
           float cone = smoothstep(0.9848, 0.9972, c) + 0.1 * smoothstep(0.93, 0.99, c);
           vec3 L = normalize((viewMatrix * vec4(-Ld, 0.0)).xyz);
           float ndl = max(dot(normal, L), 0.0) * 0.75 + 0.25;
-          outgoingLight += diffuseColor.rgb * uBeamColor * (uBeamPower * cone * ndl * 7.0 / (1.0 + 0.0005 * d * d));
+          outgoingLight += diffuseColor.rgb * uBeamColor * (uBeamPower * cone * ndl * 7.0 / (1.0 + 0.00004 * d * d));
         }
         #include <opaque_fragment>`,
       );
@@ -509,14 +557,15 @@ varying vec3 vBeamWorld;
   }
 
   /**
-   * The container freighter riding the swell off the islet, modelled in Blender
-   * (blender/make_ship.py, ~7k triangles): a lofted hull with a flared bow and bulb, a steel deck
-   * with hatch covers, stacks of corrugated containers in line colours, a five-deck
-   * accommodation block with a wide bridge, funnel, radar mast, lifeboats, vents, handrails and
-   * lit windows. It streams in after construction; the radar turns, the running lights glow and
-   * a foam wake trails it.
+   * The container ship riding the swell off the islet, modelled in Blender (blender/make_ship.py): a
+   * 181 m, 1,800-TEU feeder in metres, so SHIP_SCALE puts it in true proportion to the tower. A lofted
+   * hull with a raked stem, bulbous bow and transom, hatch covers with ISO 20 and 40 ft container
+   * stacks, deck cranes, an eight-level accommodation block with bridge wings, funnel, mast and
+   * scanners, lifeboats, rails, lettering, and lit windows (~45k triangles, meshopt-packed; phones get
+   * ship-lo.glb, which leaves out what only reads close up). It streams in after construction; the
+   * scanners turn, the running lights and deck floods glow and a foam wake trails it.
    */
-  private buildShip(): void {
+  private buildShip(tier: Quality['tier']): void {
     const mat = (extra: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial => {
       const m = new MeshStandardMaterial({ vertexColors: true, ...extra });
       this.beamLit(m);
@@ -555,50 +604,59 @@ varying vec3 vBeamWorld;
       this.disposables.push(g, m);
     };
 
-    new GLTFLoader().load(asset('/models/ship/ship.glb'), (gltf) => {
-      const root = gltf.scene;
-      const marks: Record<string, Vector3> = {};
-      root.traverse((o) => {
-        const mesh = o as Mesh;
-        if (mesh.isMesh) {
-          mesh.material = materials[o.name] ?? materials.upper!;
-          this.disposables.push(mesh.geometry);
-        } else if (o.name.startsWith('nav_') || o.name === 'radar') {
-          marks[o.name] = o.position.clone();
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(
+      asset(tier === 'low' ? '/models/ship/ship-lo.glb' : '/models/ship/ship.glb'),
+      (gltf) => {
+        const root = gltf.scene;
+        const marks = new Map<string, Vector3>();
+        root.traverse((o) => {
+          const mesh = o as Mesh;
+          if (mesh.isMesh) {
+            mesh.material = materials[o.name] ?? materials.upper!;
+            this.disposables.push(mesh.geometry);
+          } else if (/^(nav_|flood_|radar)/.test(o.name)) {
+            marks.set(o.name, o.position.clone());
+          }
+        });
+        // the nodes that only marked a place are no longer needed
+        for (const name of marks.keys()) root.getObjectByName(name)?.removeFromParent();
+        this.ship.add(root);
+        this.mirrored(root);
+        // the lamps are sprites, sized in scene units (the hull is 91 units long, so a masthead light
+        // is a few units across to read at the range the ship keeps)
+        const lamp = (name: string, color: string, size: number): void => {
+          const p = marks.get(name);
+          if (p) lampAt(p, color, size);
+        };
+        lamp('nav_red', '#ff4a4a', 3.4);
+        lamp('nav_green', '#52ff8e', 3.4);
+        lamp('nav_mast', '#eafcff', 3.6);
+        lamp('nav_bow', '#eafcff', 3.0);
+        lamp('nav_stern', '#eafcff', 2.4);
+        // the deck floods, so the cargo and the block read in the dark
+        for (const name of marks.keys()) if (name.startsWith('flood_')) lampAt(marks.get(name)!, '#ffe7b8', 4.2);
+        // the scanners: a bar that turns on its mast (an S-band and an X-band, in metres)
+        for (const [name, size] of [['radar', [4.6, 0.3, 0.55]], ['radar2', [3.0, 0.24, 0.45]]] as const) {
+          const p = marks.get(name);
+          if (!p) continue;
+          const bar = new Mesh(new BoxGeometry(...size), materials.upper!);
+          bar.position.copy(p);
+          this.disposables.push(bar.geometry);
+          this.ship.add(bar);
+          this.mirrored(bar);
+          this.radars.push(bar);
         }
-      });
-      // the nodes that only marked a place are no longer needed
-      for (const name of Object.keys(marks)) root.getObjectByName(name)?.removeFromParent();
-      this.ship.add(root);
-      this.mirrored(root);
-      lampAt(marks.nav_red!, '#ff5a5a', 0.55);
-      lampAt(marks.nav_green!, '#6dff9a', 0.55);
-      lampAt(marks.nav_mast!, '#eafcff', 0.6);
-      lampAt(marks.nav_bow!, '#eafcff', 0.5);
-      lampAt(marks.nav_stern!, '#eafcff', 0.4);
-      // deck floodlights over the stacks, so the cargo reads in the dark
-      for (const [x, z] of [[-1.6, 0], [0.4, 0], [2.4, 0]] as const) lampAt(new Vector3(x, 2.15, z), '#ffe7b8', 0.7);
-      // the radar: a bar that turns on the mast
-      const radar = new Mesh(new BoxGeometry(0.34, 0.03, 0.05), materials.upper!);
-      radar.position.copy(marks.radar!);
-      radar.position.y += 0.02;
-      this.disposables.push(radar.geometry);
-      this.ship.add(radar);
-      this.mirrored(radar);
-      this.radar = radar;
-      requestCompile(root);
-    });
+        requestCompile(root);
+      },
+    );
 
-    // Staged out in the sea ahead of the camera, crossing the shot from the left, bow toward the
-    // light: close enough to read, far enough to sit beside the tower rather than block it. The
-    // heading is baked from the SHIP_FROM→SHIP_TO leg so the bow always points where it is going.
-    this.ship.position.copy(SHIP_FROM);
-    const leg = SHIP_TO.clone().sub(SHIP_FROM);
-    this.ship.rotation.y = Math.atan2(-leg.z, leg.x); // model's bow is +x
+    // Out to sea along SHIP_TRACK, bow to the way it goes (rolling about its own length: 'YXZ'
+    // heads it first, then rolls it about the heading, then pitches it)
+    this.ship.rotation.order = 'YXZ';
     this.ship.scale.setScalar(SHIP_SCALE);
 
-    // wake: a long foam wedge lying flat on the water behind the hull, kept
-    // in the island's frame (not the ship's) so the swell roll never tips it
+    // wake: a long foam wedge lying flat on the water behind the hull, kept in the island's frame
+    // (not the ship's) so the swell roll never tips it
     const wakeMaterial = new MeshStandardMaterial({
       color: '#0b2b30',
       emissive: '#9fd6cf',
@@ -609,7 +667,7 @@ varying vec3 vBeamWorld;
       side: DoubleSide,
       map: glowTexture(),
     });
-    const wakeGeometry = new PlaneGeometry(SHIP_SCALE * 12, SHIP_SCALE * 1.6);
+    const wakeGeometry = new PlaneGeometry(SHIP_SCALE * 300, SHIP_SCALE * 52);
     this.wake = new Mesh(wakeGeometry, wakeMaterial);
     this.wake.rotation.x = -Math.PI / 2;
     this.wake.renderOrder = 1;
@@ -673,7 +731,9 @@ varying vec3 vBeamWorld;
     this.rainLight.beamDir.set(Math.cos(this.beamYaw) * Math.cos(tilt), Math.sin(tilt), -Math.sin(this.beamYaw) * Math.cos(tilt));
     this.rainLight.beamPower = this.beamMaterial.uniforms.uIntensity!.value / 0.8;
     this.beamLight.uLamp.value.copy(this.towerTop);
-    this.beamLight.uBeamDir.value.copy(this.rainLight.beamDir);
+    // the ship stands far out and low, so the light it takes is the sweep's own bearing at a nearly level pitch
+    // (the tilted beam the camera sees would pass over the bridge and into the sea short of the hull)
+    this.beamLight.uBeamDir.value.set(Math.cos(this.beamYaw) * Math.cos(SHIP_BEAM_TILT), Math.sin(SHIP_BEAM_TILT), -Math.sin(this.beamYaw) * Math.cos(SHIP_BEAM_TILT));
     this.beamLight.uBeamPower.value = this.rainLight.beamPower;
     this.rainLight.lamp.copy(this.towerTop);
     this.rainSky.set(fogColor ?? '#0a1a21').multiplyScalar(2.2).addScalar(0.02);
@@ -719,36 +779,42 @@ varying vec3 vBeamWorld;
     this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32) * lampOn;
     this.flare.scale.setScalar(5 * TOWER_SCALE * (1 + delivery * 0.45));
 
-    // — the freighter stands in toward the light —
+    // — the freighter steams round the islet —
     // The passage is STORY-T driven, not wall-clock: the ship has to cross
     // the same part of the frame on every scroll-through, or the shot is
     // whatever the page happened to be doing when you got there. Wall-clock
     // is left to the swell it rides on.
-    const passage = MathUtils.smoothstep(t, 0.43, 0.6);
-    this.ship.position.lerpVectors(SHIP_FROM, SHIP_TO, passage);
-    // Works this sea harder than the last one — two beat frequencies so the
-    // hull never settles into an obvious loop, and real pitch and roll. The
-    // bob stays modest relative to the swell (±0.34 against ~2 units of wave)
-    // because the failure mode here has always been the trough dipping the
-    // boot topping under; it is the ROTATION that sells the weather.
+    shipPlace(t, this.shipPos);
+    // the heading is the way the track goes (a hair ahead of the ship's place on it)
+    shipPlace(t + 0.002, this.shipAhead);
+    this.shipAhead.sub(this.shipPos);
+    const heading = Math.atan2(-this.shipAhead.z, this.shipAhead.x); // the model's bow is +x
+    this.ship.position.copy(this.shipPos);
+    // The swell is the scene's fixed height (about 2.5 units at its crests), a few metres against
+    // a 181 m hull, so the ship rides it slowly: it heaves a third of a unit and rolls about 1.5
+    // degrees, two beat frequencies so it never settles into an obvious loop. At this size a real
+    // feeder in this sea barely moves, and the failure mode is the hull wagging like a toy.
     this.ship.position.y =
-      SHIP_Y + Math.sin(time * 0.7) * 0.22 + Math.sin(time * 1.13 + 0.7) * 0.12;
-    this.ship.rotation.z = Math.sin(time * 0.7 + 1.3) * 0.115 + Math.sin(time * 1.31) * 0.04;
-    this.ship.rotation.x = Math.sin(time * 0.55) * 0.075;
+      SHIP_Y + Math.sin(time * 0.5) * 0.3 + Math.sin(time * 0.83 + 0.7) * 0.15;
+    this.ship.rotation.y = heading;
+    this.ship.rotation.x = Math.sin(time * 0.45 + 1.3) * 0.022 + Math.sin(time * 0.91) * 0.008; // roll
+    this.ship.rotation.z = Math.sin(time * 0.38) * 0.01 + Math.sin(time * 0.77 + 2.0) * 0.005; // pitch
 
-    if (this.radar) this.radar.rotation.y = time * 2.4;
+    for (const radar of this.radars) radar.rotation.y = time * 2.4;
 
     // the wake lies flat astern, along the heading, fading with the sea
     this.wake.visible = this.ship.visible;
     if (this.wake.visible) {
+      // centred 150 units astern of the ship's middle, so its leading end tucks under the transom
+      const back = SHIP_SCALE * SHIP_HALF_LENGTH * 1.2 + SHIP_SCALE * 300 * 0.5 - SHIP_SCALE * 30;
       this.wake.position.set(
-        this.ship.position.x - Math.cos(this.ship.rotation.y) * (SHIP_SCALE * 4.65 + 1),
-        0.32,
-        this.ship.position.z + Math.sin(this.ship.rotation.y) * (SHIP_SCALE * 4.65 + 1),
+        this.shipPos.x - Math.cos(heading) * back,
+        0.55,
+        this.shipPos.z + Math.sin(heading) * back,
       );
       // a plane pitched flat by rotation.x maps its long axis to
       // (cos z, 0, −sin z), so this matches the hull's heading exactly
-      this.wake.rotation.z = this.ship.rotation.y;
+      this.wake.rotation.z = heading;
       (this.wake.material as MeshStandardMaterial).opacity = reveal * 0.3;
     }
 
