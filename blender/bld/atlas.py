@@ -129,16 +129,19 @@ HOMES = Layout(
 LAYOUTS = {'city': CITY, 'homes': HOMES}
 
 
-# Hero trees: a fixed sheet, not a packed one. Eight 512 px leaf-cluster cards in
-# the top half, four 512x1024 bark strips (one per species) in the bottom half.
+# Hero trees: a fixed sheet, not a packed one. Twelve 512x320 leaf-cluster cards in the top
+# half (a column per species, rows: two summer variants and an autumn one, then a 64 px strip of
+# plain white, which the individual 3D leaves and needles sample so that their colour is wholly
+# the vertex colours'), four 512x1024 bark strips (one per species) in the bottom half. The
+# runtime tells leaves from bark by the half of the sheet a UV lies in (KitCity.foliage).
 HERO_TREES = Layout(
     'hero-trees', 2048, tiles={}, palette_origin=(0, 0), pitch=1, cols=1, pad=0, gutter=0,
     margin=0, reach={},
 )
 _SPECIES = ['oak', 'maple', 'poplar', 'pine']
-HERO_TREES.cards = {(sp, v): (512 * ((i * 2 + v) % 4), 512 * ((i * 2 + v) // 4), 512, 512)
-                    for i, sp in enumerate(_SPECIES) for v in (0, 1)}
+HERO_TREES.cards = {(sp, v): (512 * i, 320 * v, 512, 320) for i, sp in enumerate(_SPECIES) for v in range(3)}
 HERO_TREES.bark = {sp: (512 * i, 1024, 512, 1024) for i, sp in enumerate(_SPECIES)}
+HERO_TREES.swatch = (0, 960, 2048, 64)
 
 LAYOUTS['hero-trees'] = HERO_TREES
 

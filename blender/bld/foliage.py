@@ -8,7 +8,10 @@ shade each other where they overlap, on a transparent film. The result is an
 albedo-with-occlusion RGBA image; the runtime does the lighting.
 
 Species: oak (lobed), maple (palmate, autumn), poplar (small ovate), pine (needle
-spray). Two variants of each so a canopy does not repeat a single card.
+spray). Three variants of each: two in the species' summer colours so a canopy does not
+repeat a single card, and a third in its autumn colours (new growth for the pine), which the
+close-up trees scatter through the crown. Only the band of the render the cluster occupies
+is kept (SIZE x TILE_H), where the cards used to waste a third of their pixels on film.
 """
 import math
 import os
@@ -21,9 +24,12 @@ import numpy as np
 from mathutils import Matrix, Vector
 from PIL import Image
 
-SIZE = 512            # delivered card size
+SIZE = 512            # delivered card width
 RENDER = 1024         # rendered at 2x and filtered down
 FRAME = 1.3           # metres across the ortho camera
+BAND = (0.18, 0.80)   # the rows of the render (from the top) a cluster occupies
+TILE_H = 320          # delivered card height: the band at SIZE pixels per frame
+VARIANTS = 3
 
 
 # -- leaf blades -------------------------------------------------------------------
@@ -158,10 +164,14 @@ def _srgb(h):
 # -- species -----------------------------------------------------------------------
 
 SPECIES = {
-    'oak':    dict(kind='oak', size=0.15, count=34, base='#3e6a2a', tip='#7fa84a', vein='#2d4d1d'),
-    'maple':  dict(kind='maple', size=0.135, count=28, base='#9a3f1c', tip='#d9892f', vein='#6b2a12'),
-    'poplar': dict(kind='ovate', size=0.13, count=46, base='#5f8a35', tip='#a8c768', vein='#46682a'),
-    'pine':   dict(kind='needle', size=0.17, count=22, base='#233f2a', tip='#4f8050', vein='#1a2f20'),
+    'oak':    dict(kind='oak', size=0.15, count=34, base='#3e6a2a', tip='#7fa84a', vein='#2d4d1d',
+                   alt=dict(base='#7a3c14', tip='#d09030')),
+    'maple':  dict(kind='maple', size=0.135, count=28, base='#9a3f1c', tip='#d9892f', vein='#6b2a12',
+                   alt=dict(base='#7a1a10', tip='#d8452a')),
+    'poplar': dict(kind='ovate', size=0.13, count=46, base='#5f8a35', tip='#a8c768', vein='#46682a',
+                   alt=dict(base='#a08a22', tip='#ecd860')),
+    'pine':   dict(kind='needle', size=0.17, count=22, base='#233f2a', tip='#4f8050', vein='#1a2f20',
+                   alt=dict(base='#4a7a36', tip='#a4c868')),
 }
 
 
@@ -235,7 +245,7 @@ def _build_twig(species, seed, bm, uv, collection_mats):
 
 
 def render_card(species, seed, work):
-    """One RGBA leaf-cluster card as a (SIZE, SIZE, 4) uint8 array, straight alpha."""
+    """One RGBA leaf-cluster card as a (TILE_H, SIZE, 4) uint8 array, straight alpha."""
     sp = SPECIES[species]
     scene = bpy.data.scenes.new(f'card.{species}.{seed}')
     world = bpy.data.worlds.new(f'cardsky.{species}.{seed}')
@@ -252,7 +262,8 @@ def render_card(species, seed, work):
     bm.to_mesh(mesh)
     twig_n = len(twig_faces)
     bm.free()
-    leaf_mat = _leaf_material(f'leaf.{species}', _srgb(sp['base']), _srgb(sp['tip']), _srgb(sp['vein']))
+    pal = sp['alt'] if seed >= 2 else sp
+    leaf_mat = _leaf_material(f'leaf.{species}{seed}', _srgb(pal['base']), _srgb(pal['tip']), _srgb(sp['vein']))
     twig_mat = bpy.data.materials.new('twig')
     twig_mat.use_nodes = True
     twig_mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*_srgb('#4a3a2a'), 1)
@@ -292,7 +303,8 @@ def render_card(species, seed, work):
     img = Image.open(path).convert('RGBA').resize((SIZE, SIZE), Image.LANCZOS)
     arr = np.asarray(img).astype(np.float32) / 255.0
     arr = _bleed(arr)
-    return (arr * 255 + 0.5).astype(np.uint8)
+    top = int(round((BAND[0] + BAND[1]) / 2 * SIZE - TILE_H / 2))
+    return (arr[top:top + TILE_H] * 255 + 0.5).astype(np.uint8)
 
 
 def _bleed(rgba, iterations=10):
@@ -320,10 +332,10 @@ def _bleed(rgba, iterations=10):
 
 
 def all_cards():
-    """{(species, variant): uint8 RGBA (SIZE, SIZE, 4)}"""
+    """{(species, variant): uint8 RGBA (TILE_H, SIZE, 4)}"""
     work = tempfile.mkdtemp(prefix='cards')
     cards = {}
     for species in ('oak', 'maple', 'poplar', 'pine'):
-        for variant in (0, 1):
+        for variant in range(VARIANTS):
             cards[(species, variant)] = render_card(species, variant, work)
     return cards
