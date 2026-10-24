@@ -12,8 +12,6 @@ import {
   PlaneGeometry,
   RepeatWrapping,
   SphereGeometry,
-  Sprite,
-  SpriteMaterial,
   TorusGeometry,
   Vector3,
   Vector2,
@@ -21,7 +19,7 @@ import {
 import { glowTexture } from '../bake/CanvasTextures';
 import { fringeTexture, paintingTexture, shaftTexture } from '../bake/StudyTextures';
 import { FLOOR_Y } from './StudyFurniture';
-import { Kit, bevelBox, lathe, moulding, rod, tube, uvScale } from './StudyKit';
+import { Kit, bevelBox, glowCard, lathe, moulding, rod, skipInNormalPass, tube, uvScale } from './StudyKit';
 import type { Dispose, StudyMats } from './StudyMaterials';
 
 export const ROOM = {
@@ -209,7 +207,7 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
   // ——— wall sconces either side of the seascape: brass arm, glass tulip, a candle bulb ———
   const flame = keep(new MeshStandardMaterial({ color: '#fff0d2', emissive: '#ffc277', emissiveIntensity: 2.0 }));
   const halo = keep(glowTexture());
-  const sconceHalos: Sprite[] = [];
+  const sconceHalos: MeshBasicMaterial[] = [];
   const sconce = (wz: number, wy: number): void => {
     const o = k.at({ x: x0, y: FLOOR_Y + wy, z: wz, ry: Math.PI / 2 });
     o.add(new CylinderGeometry(0.1, 0.12, 0.03, 20).rotateX(Math.PI / 2), m.brass, { z: 0.015 });
@@ -220,13 +218,12 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
     o.add(new CylinderGeometry(0.02, 0.02, 0.1, 10), m.paper, { y: 0.02, z: 0.36 });
     o.add(new SphereGeometry(0.028, 10, 8).scale(1, 1.5, 1), flame, { y: 0.1, z: 0.36 });
     o.add(lathe([[0.03, 0], [0.07, 0.07], [0.1, 0.19], [0.095, 0.24], [0.085, 0.24], [0.088, 0.19], [0.06, 0.07], [0.026, 0]], 16), m.glass, { y: 0.0, z: 0.36 });
-    const s = new Sprite(new SpriteMaterial({ map: halo, color: '#ffcf94', transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0.55 }));
-    s.userData.glow = true;
-    s.position.set(x0 + 0.36, FLOOR_Y + wy + 0.1, wz);
-    s.scale.setScalar(0.8);
-    parent.add(s);
-    own.push(s.material);
-    sconceHalos.push(s);
+    const card = glowCard(halo, '#ffcf94', 0.55);
+    card.mesh.position.set(x0 + 0.36, FLOOR_Y + wy + 0.1, wz);
+    card.mesh.scale.setScalar(0.8);
+    parent.add(card.mesh);
+    own.push(card.material, card.mesh.geometry);
+    sconceHalos.push(card.material);
   };
   sconce(-2.6, 3.35);
   sconce(0.45, 3.35);
@@ -288,6 +285,7 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
     mesh.position.z = z;
     mesh.userData.glow = true;
     mesh.renderOrder = 4;
+    skipInNormalPass(mesh);
     parent.add(mesh);
     own.push(g);
     shafts.push(mesh);
@@ -297,7 +295,7 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
     update(time: number): void {
       shaftMat.opacity = 0.06 + Math.sin(time * 0.21) * 0.012;
       shafts.forEach((s, i) => { s.position.z = -0.5 + i * 1.3 + Math.sin(time * 0.1 + i * 2) * 0.05; });
-      sconceHalos.forEach((s, i) => { (s.material as SpriteMaterial).opacity = 0.5 + Math.sin(time * 5.1 + i * 3) * 0.04 + Math.sin(time * 11.3 + i) * 0.02; });
+      sconceHalos.forEach((mat, i) => { mat.opacity = 0.5 + Math.sin(time * 5.1 + i * 3) * 0.04 + Math.sin(time * 11.3 + i) * 0.02; });
     },
   };
 }

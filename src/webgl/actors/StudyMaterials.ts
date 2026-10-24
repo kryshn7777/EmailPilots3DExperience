@@ -1,4 +1,5 @@
 import {
+  Color,
   DoubleSide,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
@@ -22,10 +23,10 @@ export function studyMaterials(tier: StudyTier, own: Dispose[]) {
   const keepMaps = (m: SurfaceMaps): void => { own.push(m.map, m.normalMap); if (m.roughnessMap) own.push(m.roughnessMap); };
 
   // walnut: carcass wood and a lacquered top border (the same drawing, different finish)
-  const walnutMaps = woodMaps({ boards: 3, base: [112, 76, 52], seed: 21, joints: 1, gap: 0.8, roughness: 0.4, normal: 1.4 });
+  const walnutMaps = woodMaps({ boards: 3, base: [128, 82, 52], seed: 21, joints: 1, gap: 0.8, roughness: 0.4, normal: 1.4 });
   keepMaps(walnutMaps);
   const walnut = keep(new MeshStandardMaterial({
-    map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1, color: '#b09a86', envMapIntensity: 0.9,
+    map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1, color: '#c4a88c', envMapIntensity: 0.9,
   }));
   const walnutLacquer = keep(new MeshPhysicalMaterial({
     map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1,
@@ -87,7 +88,7 @@ export function studyMaterials(tier: StudyTier, own: Dispose[]) {
   keepMaps(drape);
   const curtain = keep(new MeshPhysicalMaterial({
     map: drape.map, normalMap: drape.normalMap, roughness: 0.9, side: DoubleSide,
-    sheen: high ? 1 : 0, sheenColor: new MeshStandardMaterial({ color: '#e4a68c' }).color, sheenRoughness: 0.45,
+    sheen: high ? 1 : 0, sheenColor: new Color('#e4a68c'), sheenRoughness: 0.45,
   }));
 
   const bookAtlas = studyBookAtlas();

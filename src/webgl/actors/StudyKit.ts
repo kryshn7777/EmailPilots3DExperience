@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BufferGeometry,
   Curve,
   CatmullRomCurve3,
@@ -10,6 +11,10 @@ import {
   Material,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  PlaneGeometry,
+  Texture,
   Quaternion,
   Shape,
   TubeGeometry,
@@ -196,4 +201,40 @@ class HelixCurve extends Curve<Vector3> {
 /** a coil spring from a to b */
 export function helix(a: Vector3, b: Vector3, r: number, turns: number, wire: number, seg = 60): TubeGeometry {
   return new TubeGeometry(new HelixCurve(a, b, r, turns), seg, wire, 5, false);
+}
+
+/**
+ * Keep an overlay (dust, glow cards, light shafts) out of the screen-space passes' normal buffer.
+ * That pass draws the whole scene with an override material, which turns a Points cloud into
+ * one-pixel junk and a glow card into solid geometry; both read as dark flecks and smudges once
+ * the ambient occlusion has sampled them. Their draw range is emptied for that pass only.
+ */
+export function skipInNormalPass(o: Object3D): void {
+  o.onBeforeRender = (_r, scene, _c, geometry) => {
+    geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
+  };
+}
+
+const _p = new Vector3();
+const _s = new Vector3();
+const _q = new Quaternion();
+const _roll = new Quaternion();
+const _m = new Matrix4();
+const Z = new Vector3(0, 0, 1);
+
+/** an additive billboard (a flare, a halo, a wisp of steam) that stays out of the normal pass; `userData.roll` spins it */
+export function glowCard(map: Texture, color: string, opacity: number): { mesh: Mesh; material: MeshBasicMaterial } {
+  const material = new MeshBasicMaterial({ map, color, transparent: true, depthWrite: false, blending: AdditiveBlending, opacity, toneMapped: false });
+  const mesh = new Mesh(new PlaneGeometry(1, 1), material);
+  mesh.userData.glow = true;
+  mesh.userData.roll = 0;
+  mesh.renderOrder = 5;
+  mesh.onBeforeRender = (_r, scene, camera, geometry) => {
+    geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
+    _p.setFromMatrixPosition(mesh.matrixWorld);
+    _s.setFromMatrixScale(mesh.matrixWorld);
+    _q.copy(camera.quaternion).multiply(_roll.setFromAxisAngle(Z, mesh.userData.roll as number));
+    mesh.matrixWorld.copy(_m.compose(_p, _q, _s));
+  };
+  return { mesh, material };
 }

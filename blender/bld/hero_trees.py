@@ -53,21 +53,21 @@ PARAMS = {
         trunk_r=(0.50, 0.20), lens=[4.6, 3.4, 2.3, 1.5, 0.8], kids=[6, 4, 3, 2], kid_t=(0.5, 1.0),
         angle=(38, 72), wobble=0.26, up=0.10, taper=0.62, sides=(16, 10, 7, 5, 4),
         centre=(0, 0, 7.8), radii=(4.7, 4.7, 3.8), cards=3300, size=(0.48, 0.84), lobes=11,
-        bark=dict(tint='#5b4a3a', moss=0.55, furrow=1.0)),
+        bark=dict(tint='#5b4a3a', moss=0.45, furrow=1.0, fissure=(30, 3.5, 0.075))),
     'maple': dict(
         trunk_r=(0.42, 0.18), lens=[4.0, 2.8, 1.9, 1.2, 0.65], kids=[5, 4, 3, 2], kid_t=(0.5, 1.0),
         angle=(34, 64), wobble=0.24, up=0.12, taper=0.62, sides=(16, 10, 7, 5, 4),
         centre=(0, 0, 6.8), radii=(3.9, 3.9, 3.9), cards=2800, size=(0.44, 0.78), lobes=10,
-        bark=dict(tint='#6a5646', moss=0.3, furrow=0.8)),
+        bark=dict(tint='#6a5646', moss=0.25, furrow=0.8, fissure=(26, 3, 0.06))),
     'poplar': dict(
         trunk_r=(0.34, 0.07), lens=[10.0, 1.9, 1.2, 0.8, 0.45], kids=[11, 3, 2, 2], kid_t=(0.22, 0.98),
         angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(14, 7, 5, 4, 4),
         centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=2300, size=(0.4, 0.7), lobes=10,
-        bark=dict(tint='#c9c3b2', moss=0.0, lenticels=0.6, furrow=0.35)),
+        bark=dict(tint='#c9c3b2', moss=0.0, lenticels=0.6, furrow=0.6, fissure=(14, 4, 0.05))),
     'pine': dict(
         trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.5), branches=9, reach=2.7,
         cards_per_branch=11, size=(0.85, 1.3), skirt=20,
-        bark=dict(tint='#5b3f2f', moss=0.15, furrow=1.2)),
+        bark=dict(tint='#5b3f2f', moss=0.12, furrow=1.1, fissure=(18, 6, 0.085))),
 }
 
 
@@ -97,9 +97,9 @@ ULTRA = {
         cards=2900, sizes3=((0.62, 0.95), (0.4, 0.66), (0.2, 0.36)), lobes=12,
         leaves3d=620, autumn=0.08),
     'pine': dict(
-        whorl=(1.7, 0.31), branches=8, reach=2.7, trunk_n=18, trunk_sides=22,
+        whorl=(1.7, 0.36), branches=7, reach=2.7, trunk_n=18, trunk_sides=22,
         roots=6, root_amp=0.9, root_h=1.1, knots=14, stubs=7, lean=1.5,
-        cards_per_branch=5, size=(0.7, 1.1), skirt=7, sub=4, tufts=2, needles=7),
+        cards_per_branch=5, size=(0.7, 1.1), skirt=7, sub=5, tufts=2, needles=7),
 }
 
 # 'detail' is the tier for trees the camera sees clearly but not up close: the same
@@ -225,7 +225,7 @@ class TreeBuilder:
 
     # -- bark ------------------------------------------------------------------------
 
-    def tube(self, pts, radii, sides, v0_frac=0.0, mod=None, cat='bark'):
+    def tube(self, pts, radii, sides, v0_frac=0.0, mod=None, cat='bark', closed=False):
         """Tapering bark tube along `pts`. Bark texel density is TEXEL unless the
         tube is too long for the strip (a 10 m poplar trunk), when it is relaxed so
         the V range stays inside it instead of sampling whatever lies beyond.
@@ -275,6 +275,16 @@ class TreeBuilder:
                 if geo.dot(d0 + d1) < 0:
                     quad.reverse(); nrm.reverse(); uvs.reverse(); cols.reverse()
                 self._face(quad, uvs, nrm, cols, cat)
+        if closed:
+            # the cut end of a thick bough: a fan of triangles in the dark of the heartwood
+            c, nn, bb, r, _, lt = rings[-1]
+            t = (pts[-1] - pts[-2]).normalized()
+            uv = self._atlas_uv(rect, 0.5, 0.5)
+            ring = [c + (math.cos(2 * math.pi * j / sides) * nn + math.sin(2 * math.pi * j / sides) * bb) * r
+                    for j in range(sides)]
+            for j in range(sides):
+                self._face([c + t * r * 0.08, ring[j], ring[(j + 1) % sides]], [uv] * 3, [t] * 3,
+                           [(lt * 0.5,) * 3] * 3, cat)
 
     def cap(self, centre, axis, radius, sides=6, light=0.35):
         """A dark disc closing the cut end of a stub."""
@@ -439,7 +449,8 @@ class TreeBuilder:
             radii[0] *= P['collar']
             if n > 2:
                 radii[1] *= 1 + (P['collar'] - 1) * 0.35
-        self.tube(pts, radii, P['sides'][min(depth, len(P['sides']) - 1)], rng.random(), mod)
+        self.tube(pts, radii, P['sides'][min(depth, len(P['sides']) - 1)], rng.random(), mod,
+                  closed=depth >= 1 and radii[-1] > 0.03)
         if depth == 0 and 'roots' in P:
             self.root_tubes(radii[0] * 0.95)
             self.scatter_bark_details(pts, radii)
@@ -650,18 +661,19 @@ class TreeBuilder:
                 d = dirs[i].lerp(dirs[i + 1], fr).normalized()
                 ref = Z if abs(d.z) < 0.9 else Vector((1, 0, 0))
                 a = d.cross(ref).normalized()
-                b = d.cross(a)
-                az = ti * 1.7 + k * GOLDEN + rng.uniform(-0.4, 0.4)
-                ang = math.radians(rng.uniform(25, 75)) if t < 0.98 else math.radians(rng.uniform(0, 30))
-                x = (d * math.cos(ang) + (a * math.cos(az) + b * math.sin(az)) * math.sin(ang)).normalized()
-                x = (x - Z * rng.uniform(0.0, 0.22)).normalized()           # leaves hang a little
-                zn = (Z - x * x.dot(Z))
-                zn = zn.normalized() if zn.length > 1e-3 else a
-                roll = math.radians(rng.uniform(-40, 40))
-                zn = (zn * math.cos(roll) + x.cross(zn) * math.sin(roll)).normalized()
-                L = spec['L'] * rng.uniform(0.8, 1.3)
                 radial = pos - centre
                 radial = radial.normalized() if radial.length > 1e-4 else Z
+                # a leaf faces out of the crown and up to the sky, with some scatter; its blade runs
+                # along the twig's direction as seen from there, swung about its own face
+                rnd = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1)))
+                zn = (radial * 0.6 + Z * 0.7 + rnd * 0.35).normalized()
+                x = d - zn * d.dot(zn)
+                x = x.normalized() if x.length > 1e-3 else (a - zn * a.dot(zn)).normalized()
+                sw = math.radians(rng.uniform(-75, 75))
+                x = (x * math.cos(sw) + zn.cross(x) * math.sin(sw)).normalized()
+                x = (x - Z * rng.uniform(0.0, 0.25)).normalized()           # leaves hang a little
+                zn = (zn - x * zn.dot(x)).normalized()
+                L = spec['L'] * rng.uniform(0.8, 1.3)
                 light_n = (radial * 0.75 + Z * 0.3 + zn * 0.35).normalized()
                 self.leaf3d(pos, x, zn, L, light_n, self.leaf_colour(rng), self.occ(pos + x * L * 0.5))
                 made += 1

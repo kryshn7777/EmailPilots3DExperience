@@ -29,7 +29,7 @@ import { CURTAIN_WALL, curtainWallMaps } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { createLaptop } from './Laptop';
 import { requestCompile } from '../warm';
-import { Kit, bevelBox, helix, lathe, rod, tube, uvScale } from './StudyKit';
+import { Kit, bevelBox, glowCard, helix, lathe, rod, skipInNormalPass, tube } from './StudyKit';
 import { studyMaterials, type Dispose } from './StudyMaterials';
 import { buildRoom, ROOM, type Room } from './StudyRoom';
 import { FLOOR_Y, buildChair, buildFurniture, type Furniture } from './StudyFurniture';
@@ -59,6 +59,9 @@ export class Desk {
   private dust: Points;
   private dustBase: Float32Array;
   private dustGeometry = new BufferGeometry();
+  private dustMotes = 0;
+  private lampPos = new Vector3();
+  private lampAxis = new Vector3();
   private disposables: Dispose[] = [];
   private room: Room;
   private furniture: Furniture;
@@ -320,10 +323,11 @@ export class Desk {
     this.group.add(lampBulb);
     own.push(lampBulb.geometry);
     // the glow of the bulb through the open shade, a soft flare toward the viewer
-    const flare = new SpriteMaterialHolder(keep(glowTexture()));
-    flare.sprite.position.copy(lampBulb.position).addScaledVector(toAim, 0.12);
-    this.group.add(flare.sprite);
-    own.push(flare.material);
+    const flare = glowCard(keep(glowTexture()), '#ffc98a', 0.45);
+    flare.mesh.position.copy(lampBulb.position).addScaledVector(toAim, 0.12);
+    flare.mesh.scale.setScalar(0.55);
+    this.group.add(flare.mesh);
+    own.push(flare.material, flare.mesh.geometry);
 
     this.lamp = new SpotLight('#ffcc8f', 10, 0, 0.82, 0.6, 1.5);
     this.lamp.position.copy(lampBulb.position);
@@ -357,7 +361,9 @@ export class Desk {
     moon.position.set(3.5, 2.6, 2.5);
     this.group.add(moon);
 
-    // ——— dust: motes in the lamp's cone, and a drift of them in the window's light ———
+    // ——— dust: motes that only show where light finds them (the lamp's cone, the window's shafts) ———
+    this.lampPos.copy(lampBulb.position);
+    this.lampAxis.copy(toAim);
     const positions = new Float32Array(dustCount * 3);
     for (let i = 0; i < dustCount; i++) {
       const window = i > dustCount * 0.7;
@@ -367,18 +373,23 @@ export class Desk {
     }
     this.dustBase = positions.slice();
     this.dustGeometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    this.dustGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(dustCount * 3), 3));
+    this.dustGeometry.computeBoundingSphere();
     const dustMaterial = new PointsMaterial({
-      map: glowTexture(), color: '#dde5f4', size: 0.035, transparent: true, opacity: 0.5, depthWrite: false, blending: AdditiveBlending,
+      map: glowTexture(), vertexColors: true, size: 0.045, transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false,
     });
     this.dust = new Points(this.dustGeometry, dustMaterial);
+    this.dust.frustumCulled = false;
+    skipInNormalPass(this.dust);
+    this.dust.userData.glow = true;
     this.group.add(this.dust);
     own.push(this.dustGeometry, dustMaterial);
+    this.dustMotes = dustCount;
 
     // ——— ship everything baked, one mesh per material ———
     this.triangles = kit.triangles;
     kit.flush(this.group, own);
     this.lit(this.group);
-    void uvScale;
   }
 
   /** On HIGH the lamp's shadows fall on everything in the room, and everything in it throws them. */
@@ -406,29 +417,38 @@ export class Desk {
     this.room.update(time);
     this.furniture.update(time);
     this.props.update(time);
+    // each mote drifts, and glows only as much light as reaches it: bright inside the lamp's cone
+    // (fading with distance down the beam), a faint warm glint in the window's shafts, black (so
+    // invisible under additive blending) everywhere else
     const attr = this.dustGeometry.attributes.position!;
+    const col = this.dustGeometry.attributes.color!;
     const arr = attr.array as Float32Array;
-    for (let i = 0; i < arr.length; i += 3) {
-      arr[i] = this.dustBase[i]! + Math.sin(time * 0.12 + i) * 0.12;
-      arr[i + 1] = this.dustBase[i + 1]! + Math.sin(time * 0.07 + i * 1.7) * 0.08;
+    const carr = col.array as Float32Array;
+    const tanCone = Math.tan(0.82);
+    for (let n = 0; n < this.dustMotes; n++) {
+      const i = n * 3;
+      const x = this.dustBase[i]! + Math.sin(time * 0.12 + i) * 0.12;
+      const y = this.dustBase[i + 1]! + Math.sin(time * 0.07 + i * 1.7) * 0.08;
+      const z = this.dustBase[i + 2]! + Math.sin(time * 0.09 + i * 0.6) * 0.06;
+      arr[i] = x; arr[i + 1] = y; arr[i + 2] = z;
+      const dx = x - this.lampPos.x; const dy = y - this.lampPos.y; const dz = z - this.lampPos.z;
+      const along = dx * this.lampAxis.x + dy * this.lampAxis.y + dz * this.lampAxis.z;
+      let b = 0;
+      if (along > 0.15) {
+        const px = dx - this.lampAxis.x * along; const py = dy - this.lampAxis.y * along; const pz = dz - this.lampAxis.z * along;
+        const edge = Math.hypot(px, py, pz) / (along * tanCone);
+        b = (1 - Math.min(Math.max((edge - 0.45) / 0.55, 0), 1)) / (1 + 0.45 * along * along);
+      }
+      const win = n > this.dustMotes * 0.7 ? 0.22 : 0;
+      const twinkle = 0.7 + 0.3 * Math.sin(time * 1.3 + n * 1.9);
+      const v = (b * 1.25 + win) * twinkle;
+      carr[i] = v; carr[i + 1] = v * 0.84; carr[i + 2] = v * 0.62;
     }
     attr.needsUpdate = true;
+    col.needsUpdate = true;
   }
 
   dispose(): void {
     for (const d of this.disposables) d.dispose();
-  }
-}
-
-import { Sprite, SpriteMaterial, type Texture } from 'three';
-/** a soft additive flare sprite */
-class SpriteMaterialHolder {
-  readonly material: SpriteMaterial;
-  readonly sprite: Sprite;
-  constructor(map: Texture) {
-    this.material = new SpriteMaterial({ map, color: '#ffc98a', transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0.45 });
-    this.sprite = new Sprite(this.material);
-    this.sprite.scale.setScalar(0.55);
-    this.sprite.userData.glow = true;
   }
 }

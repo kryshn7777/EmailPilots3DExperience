@@ -31,7 +31,7 @@ export function mugTexture(spec: MugSpec): CanvasTexture {
     ctx.fillStyle = spec.drip;
     ctx.beginPath();
     ctx.moveTo(0, 0); // canvas top is the lip (v = 1)
-    for (let x = 0; x <= W; x += 4) ctx.lineTo(x, 24 + Math.sin(x * 0.11) * 6 + Math.max(0, Math.sin(x * 0.047 + 1)) * 16 + rand() * 3);
+    for (let x = 0; x <= W; x += 2) ctx.lineTo(x, 13 + 20 * Math.max(0, Math.sin(x * 0.09 + 1.3)) ** 3 + 8 * Math.max(0, Math.sin(x * 0.23)) ** 4);
     ctx.lineTo(W, 0);
     ctx.fill();
   }

@@ -2,7 +2,7 @@
 
     python blender/make_buildings.py --set city                  # towers + blocks (the night city)
     python blender/make_buildings.py --set homes                 # every sheet of the homes set
-    python blender/make_buildings.py --set homes --sheet hero-trees --only tree-oak-hero
+    python blender/make_buildings.py --set homes --sheet hero-trees --only tree-oak-ultra
     blender -b -P blender/make_buildings.py -- --set homes
 
 A set is one folder under public/models/ and one manifest.json. Each set has one or
@@ -10,7 +10,7 @@ more SHEETS, a sheet being a group of modules that share one atlas (one material
 runtime):
 
   main         the lean modules, baked from high-poly twins (every set has one)
-  hero-trees   close-up trees: bark tubes and leaf cards, built directly (homes only)
+  hero-trees   close-up trees: bark tubes, leaf cards and 3D leaves, built directly (homes only)
   hero-houses  close-up houses: the high-poly twin itself on a denser bake (homes only)
   hero-towers  close-up towers and blocks for the night city's canyon, the same way (city only)
 
@@ -53,10 +53,14 @@ SETS = {
     }),
 }
 
-# module id -> (species, the lean module it replaces, tier). 'hero' is for lots the
-# camera passes close to, 'detail' for the ring of trees it still sees clearly, 'lite'
-# for the many trees beyond that.
+# module id -> (species, the lean module it replaces, tier). 'ultra' (~50k triangles) is for the
+# few trees the camera passes within a few metres of, 'hero' (~15k) for the lots it passes close
+# to, 'detail' for the ring of trees it still sees clearly, 'lite' for the many trees beyond that.
 HERO_TREES = {
+    'tree-oak-ultra': ('oak', 'tree-oak', 'ultra'),
+    'tree-maple-ultra': ('maple', 'tree-maple', 'ultra'),
+    'tree-pine-ultra': ('pine', 'tree-pine', 'ultra'),
+    'tree-poplar-ultra': ('poplar', 'tree-poplar', 'ultra'),
     'tree-oak-hero': ('oak', 'tree-oak', 'hero'),
     'tree-maple-hero': ('maple', 'tree-maple', 'hero'),
     'tree-pine-hero': ('pine', 'tree-pine', 'hero'),
@@ -195,29 +199,35 @@ def build_baked(setname, sheet, cfg, args, out):
 
 def build_trees(setname, sheet, cfg, args, out):
     layout = atlas.LAYOUTS[cfg['layout']]
-    t = time.time()
-    cards = foliage.all_cards()
-    barks = hero_trees.barks(layout)
-    print(f'[{sheet}] {len(cards)} leaf cards and {len(barks)} bark strips in {time.time() - t:.0f}s')
+    sizes = {}
+    if not args.reuse_maps:
+        t = time.time()
+        cards = foliage.all_cards()
+        barks = hero_trees.barks(layout)
+        print(f'[{sheet}] {len(cards)} leaf cards and {len(barks)} bark strips in {time.time() - t:.0f}s')
 
-    n = layout.size
-    color = np.zeros((n, n, 4), np.uint8)
-    orm = np.zeros((n, n, 3), np.uint8)
-    orm[...] = (255, 204, 0)
-    # the cards keep their soft radial lighting normals (a flat normal map there); the bark
-    # gets the relief of its own furrows, which is what a trunk at arm's length is made of
-    normal = np.zeros((n, n, 3), np.uint8)
-    normal[...] = (128, 128, 255)
-    for key, rect in layout.cards.items():
-        x, y, w, h = rect
-        color[y:y + h, x:x + w] = cards[key]
-    for sp, rect in layout.bark.items():
-        x, y, w, h = rect
-        rgb, o, height = barks[sp]
-        color[y:y + h, x:x + w, :3] = rgb
-        color[y:y + h, x:x + w, 3] = 255
-        orm[y:y + h, x:x + w] = o
-        normal[y:y + h, x:x + w] = bark_normals(height, 9.0)
+        n = layout.size
+        color = np.zeros((n, n, 4), np.uint8)
+        orm = np.zeros((n, n, 3), np.uint8)
+        orm[...] = (255, 204, 0)
+        # the cards keep their soft radial lighting normals (a flat normal map there); the bark
+        # gets the relief of its own furrows, which is what a trunk at arm's length is made of
+        normal = np.zeros((n, n, 3), np.uint8)
+        normal[...] = (128, 128, 255)
+        for key, rect in layout.cards.items():
+            x, y, w, h = rect
+            color[y:y + h, x:x + w] = cards[key]
+        for sp, rect in layout.bark.items():
+            x, y, w, h = rect
+            rgb, o, height = barks[sp]
+            color[y:y + h, x:x + w, :3] = rgb
+            color[y:y + h, x:x + w, 3] = 255
+            orm[y:y + h, x:x + w] = o
+            normal[y:y + h, x:x + w] = bark_normals(height, 5.0)
+        # a strip of plain white: the 3D leaves and needles sample it, so their colour is their vertex colours'
+        x, y, w, h = layout.swatch
+        color[y:y + h, x:x + w] = 255
+        sizes = save_maps(sheet, dict(color=color, orm=orm, normal=normal), out, args.debug, n)
 
     entries = []
     for mid, (species, lean, lod) in HERO_TREES.items():
@@ -233,8 +243,8 @@ def build_trees(setname, sheet, cfg, args, out):
             footprint=[round(dx * homes.SCALE, 3), round(dy * homes.SCALE, 3)],
             height=round(dz * homes.SCALE, 3), tris0=tree.tris(),
         ))
-        print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s')
-    sizes = save_maps(sheet, dict(color=color, orm=orm, normal=normal), out, args.debug, n)
+        kinds = ' '.join(f'{k} {v}' for k, v in tree.builder.tris.items())
+        print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s  ({kinds})')
     return entries, sizes, dict(normal=True, emissive=False, alpha=True)
 
 

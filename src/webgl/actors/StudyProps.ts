@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   BoxGeometry,
   CircleGeometry,
   Color,
@@ -8,14 +7,12 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
-  Sprite,
-  SpriteMaterial,
   SphereGeometry,
   TorusGeometry,
   Vector3,
 } from 'three';
 import { cremaTexture, mugTexture, phoneScreenTexture, ringStainTexture, steamTexture, ATLAS, type MugSpec } from '../bake/StudyPropTextures';
-import { Kit, atlasBox, bevelBox, lathe, placement, rod, tube } from './StudyKit';
+import { Kit, atlasBox, bevelBox, glowCard, lathe, placement, rod, tube } from './StudyKit';
 import type { Dispose, StudyMats } from './StudyMaterials';
 
 /** the desk top, local y: props rest here */
@@ -51,11 +48,12 @@ export function buildDeskProps(k: Kit, parent: Group, m: StudyMats, own: Dispose
       ? new MeshPhysicalMaterial({ map, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06 })
       : new MeshStandardMaterial({ map, roughness: 0.25 }));
     const inner = keep(new MeshStandardMaterial({ color: new Color(spec.glaze).lerp(new Color('#f2e8d4'), 0.55), roughness: 0.22 }));
+    const solid = keep(high ? new MeshPhysicalMaterial({ color: spec.glaze, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.06 }) : new MeshStandardMaterial({ color: spec.glaze, roughness: 0.25 }));
     const o = k.at({ x, y: TOP, z, ry: yaw });
     o.add(lathe(MUG_OUT, seg, [0, 0.434]), outer);
     o.add(lathe(MUG_IN, seg), inner);
     // the handle: a swept oval section leaving the body at the shoulder and rejoining low
-    o.add(tube([[0.17, 0.355, 0], [0.255, 0.372, 0], [0.322, 0.31, 0], [0.332, 0.205, 0], [0.285, 0.115, 0], [0.18, 0.088, 0]], 0.028, high ? 22 : 12, high ? 10 : 6, 1.3), outer);
+    o.add(tube([[0.17, 0.355, 0], [0.255, 0.372, 0], [0.322, 0.31, 0], [0.332, 0.205, 0], [0.285, 0.115, 0], [0.18, 0.088, 0]], 0.028, high ? 22 : 12, high ? 10 : 6, 1.3), solid);
     // coffee: a meniscus climbing the wall, and a crema surface with a ring of bubbles
     const cremaMap = keep(cremaTexture());
     const coffee = keep(new MeshPhysicalMaterial({ map: cremaMap, roughness: 0.14, clearcoat: high ? 0.6 : 0, clearcoatRoughness: 0.1, color: '#e8d6c6' }));
@@ -245,29 +243,28 @@ export function buildDeskProps(k: Kit, parent: Group, m: StudyMats, own: Dispose
 
   // ——— steam: five soft wisps that rise from the hot mug, a pure function of time ———
   const steamMap = keep(steamTexture());
-  const wisps: { sprite: Sprite; mat: SpriteMaterial; phase: number; sway: number }[] = [];
+  const wisps: { card: ReturnType<typeof glowCard>; phase: number; sway: number }[] = [];
   const n = high ? 5 : 3;
   for (let i = 0; i < n; i++) {
-    const mat = keep(new SpriteMaterial({ map: steamMap, color: '#ffe9d2', transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0 }));
-    const sprite = new Sprite(mat);
-    sprite.userData.glow = true;
-    parent.add(sprite);
-    wisps.push({ sprite, mat, phase: i / n, sway: 0.7 + i * 1.3 });
+    const card = glowCard(steamMap, '#ffe9d2', 0);
+    parent.add(card.mesh);
+    own.push(card.material, card.mesh.geometry);
+    wisps.push({ card, phase: i / n, sway: 0.7 + i * 1.3 });
   }
   const MUG = new Vector3(-1.95, TOP + 0.38, 0.95);
   return {
     update(time: number): void {
       for (const w of wisps) {
         const t = (time * 0.13 + w.phase) % 1;
-        w.sprite.position.set(
+        w.card.mesh.position.set(
           MUG.x - 0.03 + Math.sin(time * 0.6 + w.sway) * 0.05 * (0.3 + t) + t * 0.04,
           MUG.y + 0.05 + t * 0.85,
           MUG.z + Math.cos(time * 0.5 + w.sway) * 0.04 * (0.3 + t),
         );
         const s = 0.16 + t * 0.34;
-        w.sprite.scale.set(s, s * 1.7, 1);
-        w.mat.opacity = Math.sin(Math.PI * t) ** 1.3 * 0.42;
-        w.mat.rotation = Math.sin(time * 0.3 + w.sway) * 0.2;
+        w.card.mesh.scale.set(s, s * 1.7, 1);
+        w.card.material.opacity = Math.sin(Math.PI * t) ** 1.3 * 0.42;
+        w.card.mesh.userData.roll = Math.sin(time * 0.3 + w.sway) * 0.2;
       }
     },
   };
