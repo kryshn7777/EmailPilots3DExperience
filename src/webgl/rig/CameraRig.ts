@@ -262,7 +262,7 @@ export class CameraRig {
     // the study: low beside the desk on the laptop, then along with the planes to the window
     const study = 1 - MathUtils.smoothstep(t, 0.1, 0.112);
     if (study > 0) {
-      studyShot(t, this.path, this.studyPos, this.studyLook);
+      studyShot(t, this.path, this.studyPos, this.studyLook, this.camera.aspect);
       this.camPos.lerp(this.studyPos, study);
     }
     if (hold > 0) this.camPos.lerp(this.holdPos, hold);
@@ -301,7 +301,10 @@ export class CameraRig {
     if (Math.abs(this.camRoll) > 1e-4) this.camera.rotateZ(this.camRoll);
 
     // focal length: the chapter's lens times the beat's push, plus a kick when lightning hits
-    const fov = rig.fov * (calm ? 1 : fovMul) + (calm ? 0 : this.jolt * 0.8);
+    let fov = rig.fov * (calm ? 1 : fovMul) + (calm ? 0 : this.jolt * 0.8);
+    // a tall phone screen sees a thin slice sideways: the study opens its lens so the laptop still fits
+    const widen = MathUtils.lerp(1, MathUtils.clamp(1.25 / this.camera.aspect, 1, 1.9), study);
+    if (widen > 1.001) fov = (2 * Math.atan(Math.tan((fov * DEG) / 2) * widen)) / DEG;
     this.fovTarget = calm ? fov : MathUtils.damp(this.fovTarget, fov, 5, dt);
     if (Math.abs(this.camera.fov - this.fovTarget) > 0.01) {
       this.camera.fov = this.fovTarget;

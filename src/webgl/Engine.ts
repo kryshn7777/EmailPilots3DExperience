@@ -956,7 +956,7 @@ export class Engine {
       // the live laptop display, and the screen's spill on the desk swelling with each launch
       const launchT = this.idlePreset ? 1 : t;
       liveLaptopScreen()?.update(launchT, this.options.reducedMotion);
-      if (this.screenSpill) this.screenSpill.intensity += launchPulse(launchT) * (this.options.reducedMotion ? 0.8 : 2.6);
+      if (this.screenSpill) this.screenSpill.intensity += launchPulse(launchT) * (this.options.reducedMotion ? 0.4 : 1.0);
     }
     this.panel.update(t);
     this.clouds.update(time, this.sunScreenDir, this.fog.near, this.fog.far, t);
@@ -1177,6 +1177,7 @@ export class Engine {
     this.launchString.dispose();
     this.sky.dispose();
     this.desk.dispose();
+    liveLaptopScreen()?.dispose();
     this.panel.dispose();
     this.windowFrame.dispose();
     this.rooftops.dispose();

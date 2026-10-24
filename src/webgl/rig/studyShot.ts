@@ -23,6 +23,7 @@ const KEYS: Key[] = [
 
 /** where the lens rests while it looks at the screen: left of the screen, so the laptop sits right of the HUD */
 const SCREEN_LOOK = new Vector3(-0.95, 1.55, 0.38);
+const SCREEN_CENTRE = new Vector3(-0.64, 1.6, 0);
 
 /** the middle of the three planes is what the camera watches once they are in the air */
 const CENTRE = new Vector3();
@@ -61,7 +62,7 @@ function sampleKeys(t: number, out: Vector3): Vector3 {
 }
 
 /** The camera's place and aim at story-t, in the study. Valid up to the window hold (t ~ 0.1). */
-export function studyShot(t: number, path: FlightPath, pos: Vector3, look: Vector3): void {
+export function studyShot(t: number, path: FlightPath, pos: Vector3, look: Vector3, aspect = 16 / 9): void {
   sampleKeys(t, pos);
   // the group of planes: the mean of where each stands on the flight line (unreleased ones sit on the screen)
   CENTRE.set(0, 0, 0);
@@ -71,7 +72,8 @@ export function studyShot(t: number, path: FlightPath, pos: Vector3, look: Vecto
   // the hero (the one the story follows) takes the frame from the scouts while it folds
   path.pointAt(launchParam(t, SPECS[2]!.release, SPECS[2]!.sEnd), P);
   CENTRE.lerp(P, 0.8 * MathUtils.smoothstep(t, 0.028, 0.06));
-  look.copy(SCREEN_LOOK).lerp(CENTRE, follow);
+  // on a tall phone screen the laptop is centred (there is no room to one side of the HUD)
+  look.copy(SCREEN_CENTRE).lerp(SCREEN_LOOK, MathUtils.clamp((aspect - 0.7) / 0.7, 0, 1)).lerp(CENTRE, follow);
   // looking at the opening as the planes go through it
   const toHold = MathUtils.smoothstep(t, 0.072, 0.098);
   if (toHold > 0) look.lerp(path.pointAt(Math.max(t, 0), P), toHold);

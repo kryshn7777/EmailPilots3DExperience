@@ -157,7 +157,7 @@ export type Rect = [number, number, number, number];
 const AW = 512;
 const px = (x: number, y: number, w: number, h: number): Rect => [x / AW, 1 - (y + h) / AW, (x + w) / AW, 1 - y / AW];
 export const ATLAS = {
-  bookFront: px(0, 0, 150, 210), bookSpine: px(150, 0, 40, 210), bookPages: px(190, 0, 150, 40),
+  bookFront: px(0, 0, 150, 210), bookSpine: px(0, 460, 210, 40), bookPages: px(190, 0, 150, 40),
   nb0: px(0, 215, 120, 170), nb1: px(120, 215, 120, 170), nb2: px(240, 215, 120, 170),
   note0: px(0, 390, 64, 64), note1: px(64, 390, 64, 64), note2: px(128, 390, 64, 64), note3: px(192, 390, 64, 64),
   calendar: px(260, 390, 150, 100), photo: px(365, 215, 140, 100), paper: px(260, 45, 80, 50), cream: px(345, 0, 24, 24),
@@ -186,9 +186,9 @@ export function propAtlas(): CanvasTexture {
   ctx.fillText('ATLAS', 75, 74); ctx.fillText('OF SKIES', 75, 94);
   ctx.fillRect(40, 104, 70, 1.2); ctx.font = 'italic 600 8px Georgia, serif'; ctx.fillText('a history of flight', 75, 120);
   ctx.beginPath(); ctx.moveTo(75, 148); ctx.lineTo(90, 170); ctx.lineTo(75, 164); ctx.lineTo(60, 170); ctx.closePath(); ctx.fill();
-  cloth(150, 0, 40, 210, '#27493a');
-  ctx.fillStyle = '#d6b66a'; ctx.fillRect(152, 22, 36, 2); ctx.fillRect(152, 28, 36, 1); ctx.fillRect(152, 186, 36, 1); ctx.fillRect(152, 190, 36, 2);
-  ctx.save(); ctx.translate(171, 105); ctx.rotate(Math.PI / 2); ctx.font = '700 11px Georgia, serif'; ctx.textBaseline = 'middle'; ctx.fillText('ATLAS OF SKIES', 0, 0); ctx.restore();
+  cloth(0, 460, 210, 40, '#27493a');
+  ctx.fillStyle = '#d6b66a'; ctx.fillRect(22, 462, 2, 36); ctx.fillRect(28, 462, 1, 36); ctx.fillRect(186, 462, 1, 36); ctx.fillRect(190, 462, 2, 36);
+  ctx.font = '700 12px Georgia, serif'; ctx.textBaseline = 'middle'; ctx.fillText('ATLAS OF SKIES', 105, 481);
   ctx.fillStyle = '#efe6cf'; ctx.fillRect(190, 0, 150, 40);
   for (let k = 0; k < 40; k += 1.6) { ctx.fillStyle = `rgba(110, 80, 40, ${0.1 + rand() * 0.14})`; ctx.fillRect(190, k, 150, 0.7); }
   // notebooks

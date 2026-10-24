@@ -40,7 +40,7 @@ export class LaunchString {
   constructor() {
     const colours = new Float32Array(POINTS * 3);
     // additive, so black is clear: white at the plane, nothing at the far end
-    for (let i = 0; i < POINTS; i++) colours.fill(Math.pow(1 - i / (POINTS - 1), 1.6), i * 3, i * 3 + 3);
+    for (let i = 0; i < POINTS; i++) colours.fill(Math.pow(1 - i / (POINTS - 1), 2.1), i * 3, i * 3 + 3);
     this.geometry.setAttribute('position', new BufferAttribute(this.positions, 3).setUsage(DynamicDrawUsage));
     this.geometry.setAttribute('color', new BufferAttribute(colours, 3));
     this.line = new Line(this.geometry, this.material);

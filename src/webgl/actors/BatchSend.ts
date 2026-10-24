@@ -62,7 +62,7 @@ const TAG_FROM = 0.085;
 const TRAIL_POINTS = 26;
 const TRAIL_STEP = 0.0016;
 /** in the room the contrails are short and tight: a thin streak, not a wire across the frame */
-const ROOM_TRAIL = 0.45;
+const ROOM_TRAIL = 0.3;
 /** the horizontal run before the house at which a scout leaves the street */
 const LEG_RUN = 9.5;
 /** which houses are candidates: along the street from the yards behind it to a few lots ahead */
@@ -345,7 +345,7 @@ export class BatchSend {
       // the contrail: white at the plane, fading to nothing down the line (additive, so black is clear)
       const trailPositions = new Float32Array(TRAIL_POINTS * 3);
       const trailColours = new Float32Array(TRAIL_POINTS * 3);
-      for (let k = 0; k < TRAIL_POINTS; k++) trailColours.fill(Math.pow(1 - k / (TRAIL_POINTS - 1), 1.5), k * 3, k * 3 + 3);
+      for (let k = 0; k < TRAIL_POINTS; k++) trailColours.fill(Math.pow(1 - k / (TRAIL_POINTS - 1), 2.1), k * 3, k * 3 + 3);
       const trailGeometry = new BufferGeometry();
       trailGeometry.setAttribute('position', new BufferAttribute(trailPositions, 3).setUsage(DynamicDrawUsage));
       trailGeometry.setAttribute('color', new BufferAttribute(trailColours, 3));
@@ -647,6 +647,8 @@ export class BatchSend {
       sc.plane.group.scale.setScalar(Math.max(SCALE * grown * (0.45 + 0.55 * open) * fade * (stray ? 1 - MathUtils.smoothstep(t, 0.13, 0.15) : 1), 1e-4));
       sc.plane.setFold(fold);
       sc.plane.flex(time + sc.side * 3, t < sc.landT ? 1 : 0);
+      // out of the window the dusk grade has not caught up with them yet: a little glow keeps the paper pale, not black
+      sc.plane.setBeamHit(0.3 * MathUtils.smoothstep(t, 0.05, 0.075) * (1 - MathUtils.smoothstep(t, 0.11, 0.14)));
 
       // the envelope: facing the screen as it pops out, turning flat as the letter slides out of it
       if (sc.env.visible) {

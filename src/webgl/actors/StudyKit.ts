@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  Curve,
   CatmullRomCurve3,
   CylinderGeometry,
   Euler,
@@ -61,12 +62,25 @@ export class Kit {
 
   /** bake `g` through `p` into the bucket for `m` */
   add(g: BufferGeometry, m: Material, p: Place = {}): void {
+    this.addMatrix(g, m, placement(p, M));
+  }
+
+  addMatrix(g: BufferGeometry, m: Material, mat: Matrix4): void {
     const flat = normalise(g);
-    flat.applyMatrix4(placement(p, M));
+    flat.applyMatrix4(mat);
     this.triangles += flat.attributes.position!.count / 3;
     const bucket = this.buckets.get(m);
     if (bucket) bucket.push(flat);
     else this.buckets.set(m, [flat]);
+  }
+
+  /** a placed sub-assembly: its parts are positioned relative to `origin` */
+  at(origin: Place | Matrix4): { add(g: BufferGeometry, m: Material, p?: Place): void; origin: Matrix4 } {
+    const o = origin instanceof Matrix4 ? origin.clone() : placement(origin, new Matrix4());
+    return {
+      origin: o,
+      add: (g, m, p = {}) => this.addMatrix(g, m, placement(p, new Matrix4()).premultiply(o)),
+    };
   }
 
   /** one mesh per material, added to `parent`; the merged geometry goes to `owned` for disposal */
@@ -86,9 +100,15 @@ export class Kit {
   }
 }
 
-/** profile is [radius, y] from the bottom up; a lathe around the y axis */
-export function lathe(profile: [number, number][], seg: number): LatheGeometry {
-  return new LatheGeometry(profile.map(([r, y]) => new Vector2(r, y)), seg);
+/** profile is [radius, y] from the bottom up; a lathe around the y axis. `vFromY` maps v to height instead of profile index. */
+export function lathe(profile: [number, number][], seg: number, vFromY?: [number, number]): LatheGeometry {
+  const g = new LatheGeometry(profile.map(([r, y]) => new Vector2(r, y)), seg);
+  if (vFromY) {
+    const pos = g.attributes.position!;
+    const uv = g.attributes.uv!;
+    for (let i = 0; i < pos.count; i++) uv.setY(i, (pos.getY(i) - vFromY[0]) / (vFromY[1] - vFromY[0]));
+  }
+  return g;
 }
 
 /** a tube along a smooth path through `pts`, flattened along z by `flat` (1 = round) */
@@ -111,7 +131,8 @@ export function rod(a: Vector3, b: Vector3, r: number, seg = 8, rb = r): Cylinde
  * A slab with chamfered edges: w x h x d centred on the origin, the bevel `c` on every edge.
  * UVs are in world units on the large faces (u along x, v along z), so scale them to taste.
  */
-export function bevelBox(w: number, h: number, d: number, c: number): BufferGeometry {
+export function bevelBox(w: number, h: number, d: number, c0: number): BufferGeometry {
+  const c = Math.min(c0, Math.min(w, h, d) / 2.4);
   const sh = new Shape();
   const hw = w / 2 - c;
   const hd = d / 2 - c;
@@ -153,4 +174,26 @@ export function uvScale<T extends BufferGeometry>(g: T, su: number, sv: number, 
   const uv = g.attributes.uv!;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, ou + uv.getX(i) * su, ov + uv.getY(i) * sv);
   return g;
+}
+
+class HelixCurve extends Curve<Vector3> {
+  private axis: Vector3;
+  private u = new Vector3();
+  private v = new Vector3();
+  constructor(private a: Vector3, private b: Vector3, private r: number, private turns: number) {
+    super();
+    this.axis = b.clone().sub(a);
+    const ref = Math.abs(this.axis.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+    this.u.crossVectors(this.axis, ref).normalize();
+    this.v.crossVectors(this.axis, this.u).normalize();
+  }
+  override getPoint(t: number, out = new Vector3()): Vector3 {
+    const ang = t * this.turns * Math.PI * 2;
+    return out.copy(this.a).addScaledVector(this.axis, t).addScaledVector(this.u, Math.cos(ang) * this.r).addScaledVector(this.v, Math.sin(ang) * this.r);
+  }
+}
+
+/** a coil spring from a to b */
+export function helix(a: Vector3, b: Vector3, r: number, turns: number, wire: number, seg = 60): TubeGeometry {
+  return new TubeGeometry(new HelixCurve(a, b, r, turns), seg, wire, 5, false);
 }
