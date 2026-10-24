@@ -23,34 +23,36 @@ export function studyMaterials(tier: StudyTier, own: Dispose[]) {
   const keepMaps = (m: SurfaceMaps): void => { own.push(m.map, m.normalMap); if (m.roughnessMap) own.push(m.roughnessMap); };
 
   // walnut: carcass wood and a lacquered top border (the same drawing, different finish)
-  const walnutMaps = woodMaps({ boards: 3, base: [128, 82, 52], seed: 21, joints: 1, gap: 0.8, roughness: 0.4, normal: 1.4 });
+  const walnutMaps = woodMaps({ boards: 3, base: [122, 72, 40], seed: 21, joints: 1, gap: 0.8, roughness: 0.4, normal: 1.4 });
   keepMaps(walnutMaps);
   const walnut = keep(new MeshStandardMaterial({
-    map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1, color: '#c4a88c', envMapIntensity: 0.9,
+    map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1, color: '#d2ae88', envMapIntensity: 0.8,
   }));
   const walnutLacquer = keep(new MeshPhysicalMaterial({
     map: walnutMaps.map, normalMap: walnutMaps.normalMap, roughnessMap: walnutMaps.roughnessMap, roughness: 1,
-    clearcoat: high ? 0.6 : 0, clearcoatRoughness: 0.2, envMapIntensity: 1.1,
+    clearcoat: high ? 0.45 : 0, clearcoatRoughness: 0.25, envMapIntensity: 0.8, color: '#d2ae88',
   }));
-  // a lighter, redder wood for drawer fronts and shelves, so the carcass reads as joinery
-  const shelfMaps = woodMaps({ boards: 2, base: [122, 84, 56], seed: 33, roughness: 0.46, normal: 1.6 });
-  keepMaps(shelfMaps);
-  const shelfWood = keep(new MeshStandardMaterial({
-    map: shelfMaps.map, normalMap: shelfMaps.normalMap, roughnessMap: shelfMaps.roughnessMap, roughness: 1, color: '#a8927c',
-  }));
+  // a lighter, redder wood for drawer fronts and shelves, so the carcass reads as joinery (phones share the walnut)
+  let shelfWood = walnut;
+  if (high) {
+    const shelfMaps = woodMaps({ boards: 2, base: [122, 84, 56], seed: 33, roughness: 0.46, normal: 1.6 });
+    keepMaps(shelfMaps);
+    shelfWood = keep(new MeshStandardMaterial({
+      map: shelfMaps.map, normalMap: shelfMaps.normalMap, roughnessMap: shelfMaps.roughnessMap, roughness: 1, color: '#a8927c',
+    }));
+  }
 
-  const leatherSet = leatherMaps([34, 74, 54], 41, 512);
+  const leatherSet = leatherMaps([34, 74, 54], 41, high ? 512 : 256);
   keepMaps(leatherSet);
   const leather = keep(new MeshStandardMaterial({
     map: leatherSet.map, normalMap: leatherSet.normalMap, roughnessMap: leatherSet.roughnessMap, roughness: 1,
-    normalScale: new Vector2(0.9, 0.9), envMapIntensity: 0.9,
+    normalScale: new Vector2(0.4, 0.4), envMapIntensity: 0.9,
   }));
-  const chairLeatherSet = leatherMaps([104, 62, 38], 31);
-  keepMaps(chairLeatherSet);
-  const chairLeather = keep(new MeshStandardMaterial({
-    map: chairLeatherSet.map, normalMap: chairLeatherSet.normalMap, roughnessMap: chairLeatherSet.roughnessMap, roughness: 1,
-    normalScale: new Vector2(0.9, 0.9),
-  }));
+  const chairLeatherSet = high ? leatherMaps([104, 62, 38], 31) : null;
+  if (chairLeatherSet) keepMaps(chairLeatherSet);
+  const chairLeather = keep(new MeshStandardMaterial(chairLeatherSet
+    ? { map: chairLeatherSet.map, normalMap: chairLeatherSet.normalMap, roughnessMap: chairLeatherSet.roughnessMap, roughness: 1, normalScale: new Vector2(0.9, 0.9) }
+    : { color: '#68402a', roughness: 0.55 }));
 
   const brass = keep(new MeshStandardMaterial({ color: '#c09a5e', roughness: 0.3, metalness: 1, envMapIntensity: 1.2 }));
   const brassAged = keep(new MeshStandardMaterial({ color: '#8e6c3c', roughness: 0.48, metalness: 1, envMapIntensity: 1 }));

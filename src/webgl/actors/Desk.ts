@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   Box3,
   BoxGeometry,
   BufferGeometry,
@@ -29,7 +28,7 @@ import { CURTAIN_WALL, curtainWallMaps } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import { createLaptop } from './Laptop';
 import { requestCompile } from '../warm';
-import { Kit, bevelBox, glowCard, helix, lathe, rod, skipInNormalPass, tube } from './StudyKit';
+import { Kit, additiveKeepAlpha, bevelBox, glowCard, helix, lathe, rod, skipInNormalPass, tube } from './StudyKit';
 import { studyMaterials, type Dispose } from './StudyMaterials';
 import { buildRoom, ROOM, type Room } from './StudyRoom';
 import { FLOOR_Y, buildChair, buildFurniture, type Furniture } from './StudyFurniture';
@@ -200,7 +199,6 @@ export class Desk {
         requestCompile(s);
       });
     };
-    flatProp(asset('/models/office_notepads.glb'), 0.68, 1.95, 0.62, -0.5);
     flatProp(asset('/models/binder_notebook.glb'), 0.62, -2.05, -1.2, 0.22);
     flatProp(asset('/models/binder_notebook.glb'), 0.62, -1.4, -1.15, -0.14);
     flatProp(asset('/models/clipboard.glb'), 0.7, 3.05, 1.18, 1.15);
@@ -356,8 +354,8 @@ export class Desk {
     tableLight.position.set(TLX, TLY + 0.8, TLZ + 0.15);
     this.group.add(tableLight);
 
-    // cool light from the window side: the counterpoint to all that tungsten
-    const moon = new PointLight('#86a2d6', 3.4, 22, 1.6);
+    // dusk light from the window side (cool, with a trace of the town's warmth): the counterpoint to all that tungsten
+    const moon = new PointLight('#b8a6c6', 3.4, 22, 1.6);
     moon.position.set(3.5, 2.6, 2.5);
     this.group.add(moon);
 
@@ -375,9 +373,9 @@ export class Desk {
     this.dustGeometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
     this.dustGeometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(dustCount * 3), 3));
     this.dustGeometry.computeBoundingSphere();
-    const dustMaterial = new PointsMaterial({
-      map: glowTexture(), vertexColors: true, size: 0.045, transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false,
-    });
+    const dustMaterial = additiveKeepAlpha(new PointsMaterial({
+      map: glowTexture(), vertexColors: true, size: 0.045, transparent: true, depthWrite: false, toneMapped: false,
+    }));
     this.dust = new Points(this.dustGeometry, dustMaterial);
     this.dust.frustumCulled = false;
     skipInNormalPass(this.dust);

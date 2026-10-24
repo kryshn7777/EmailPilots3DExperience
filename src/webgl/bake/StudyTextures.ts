@@ -147,11 +147,11 @@ export function studyRugMaps(seed: number): { map: CanvasTexture; normalMap: Can
     ctx.fill();
   };
   const bandX = (y: number): void => {
-    for (let x = 40; x < W - 30; x += 46) { rosette(x, y, 15, ivory, gold); }
-    for (let x = 63; x < W - 50; x += 46) { ctx.fillStyle = '#5b2530'; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 7, y); ctx.fill(); }
+    for (let x = 40; x < W - 30; x += 28) { rosette(x, y, 10, ivory, gold); }
+    for (let x = 54; x < W - 50; x += 28) { ctx.fillStyle = '#5b2530'; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 7, y); ctx.fill(); }
   };
   const bandY = (x: number): void => {
-    for (let y = 140; y < H - 130; y += 46) rosette(x, y, 15, ivory, gold);
+    for (let y = 134; y < H - 120; y += 28) rosette(x, y, 10, ivory, gold);
   };
   bandX(57); bandX(H - 57); bandY(57); bandY(W - 57);
   for (const [cx, cy] of [[57, 57], [W - 57, 57], [57, H - 57], [W - 57, H - 57]] as const) rosette(cx, cy, 22, gold, indigo);
@@ -173,7 +173,7 @@ export function studyRugMaps(seed: number): { map: CanvasTexture; normalMap: Can
     ctx.beginPath();
     for (let i = 0; i <= 64; i++) {
       const a = (i / 64) * TAU;
-      const rr = r * (0.78 + 0.22 * Math.abs(Math.cos(a * 2))) * (1 + 0.1 * Math.cos(a * 8));
+      const rr = r * (0.86 + 0.14 * Math.abs(Math.cos(a * 2))) * (1 + 0.04 * Math.cos(a * 8));
       const px = cx + Math.cos(a) * rr * 1.3;
       const py = cy + Math.sin(a) * rr * 0.92;
       if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);

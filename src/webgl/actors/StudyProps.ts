@@ -151,7 +151,7 @@ export function buildDeskProps(k: Kit, parent: Group, m: StudyMats, own: Dispose
     const r = ATLAS.photo;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, r[0] + uv.getX(i) * (r[2] - r[0]), r[1] + uv.getY(i) * (r[3] - r[1]));
     o.add(photo, m.printed, { y: h / 2, z: 0.0 });
-    o.add(rod(new Vector3(0, h * 0.9, -0.02), new Vector3(0, 0.0, -0.3), 0.012, 5), m.walnut, { rx: 0.2 });
+    o.add(new BoxGeometry(0.05, 0.42, 0.02), m.walnut, { y: h * 0.4, z: -0.13, rx: 0.5 });
   }
 
   // ——— stapler ———
@@ -168,7 +168,7 @@ export function buildDeskProps(k: Kit, parent: Group, m: StudyMats, own: Dispose
   if (high) {
     const o = k.at({ x: 0.45, y: TOP, z: -1.5 });
     o.add(lathe([[0, 0], [0.12, 0], [0.18, 0.04], [0.19, 0.075], [0.182, 0.075], [0.172, 0.045], [0.11, 0.012], [0, 0.012]], seg), m.brass);
-    const clip = new TorusGeometry(0.036, 0.0035, 5, 12).scale(0.5, 1.5, 1);
+    const clip = new TorusGeometry(0.036, 0.0035, 4, 8).scale(0.5, 1.5, 1);
     for (let i = 0; i < 9; i++) {
       const a = i * 2.4;
       o.add(clip.clone(), m.steel, { x: Math.cos(a) * 0.07 * (0.3 + (i % 3) * 0.3), y: 0.035 + (i % 3) * 0.012, z: Math.sin(a) * 0.07 * (0.3 + (i % 3) * 0.3), ry: a * 1.7, rx: 1.2 + (i % 2) * 0.4, rz: a });
@@ -235,7 +235,7 @@ export function buildDeskProps(k: Kit, parent: Group, m: StudyMats, own: Dispose
 
   // ——— brass desk bell ———
   if (high) {
-    const o = k.at({ x: -1.1, y: TOP, z: 1.78 });
+    const o = k.at({ x: -3.1, y: TOP, z: 0.7, s: 0.85 });
     o.add(lathe([[0, 0.05], [0.12, 0.05], [0.15, 0.03], [0.17, 0.0], [0.168, 0.012], [0.15, 0.06], [0.1, 0.16], [0.06, 0.24], [0.03, 0.27], [0, 0.275]], seg), m.brass);
     o.add(new CylinderGeometry(0.02, 0.026, 0.1, 8), m.brassAged, { y: 0.31 });
     o.add(new SphereGeometry(0.032, 10, 8), m.brass, { y: 0.37 });

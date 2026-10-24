@@ -31,7 +31,7 @@ export function mugTexture(spec: MugSpec): CanvasTexture {
     ctx.fillStyle = spec.drip;
     ctx.beginPath();
     ctx.moveTo(0, 0); // canvas top is the lip (v = 1)
-    for (let x = 0; x <= W; x += 2) ctx.lineTo(x, 13 + 20 * Math.max(0, Math.sin(x * 0.09 + 1.3)) ** 3 + 8 * Math.max(0, Math.sin(x * 0.23)) ** 4);
+    for (let x = 0; x <= W; x += 2) ctx.lineTo(x, 17 + Math.sin(x * 0.05 + 1) * 2.2 + Math.max(0, Math.sin(x * 0.12 + 2.1)) ** 6 * 12);
     ctx.lineTo(W, 0);
     ctx.fill();
   }
@@ -101,7 +101,7 @@ export function ringStainTexture(): CanvasTexture {
   const [c, ctx] = canvasWH(128, 128);
   const rand = mulberry32(9);
   for (let pass = 0; pass < 3; pass++) {
-    ctx.strokeStyle = `rgba(70, 38, 16, ${0.22 + pass * 0.07})`;
+    ctx.strokeStyle = `rgba(150, 100, 52, ${0.4 + pass * 0.1})`;
     ctx.lineWidth = 2.4 - pass * 0.5;
     ctx.beginPath();
     for (let i = 0; i <= 60; i++) {
@@ -113,7 +113,7 @@ export function ringStainTexture(): CanvasTexture {
     }
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(70, 38, 16, 0.18)';
+  ctx.fillStyle = 'rgba(150, 100, 52, 0.32)';
   ctx.beginPath(); ctx.ellipse(64 + 36, 64 + 26, 5, 8, 0.6, 0, TAU); ctx.fill();
   return tex(c);
 }

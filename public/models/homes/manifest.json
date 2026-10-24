@@ -432,11 +432,11 @@
       "lod": "ultra",
       "lod0": "tree-oak-ultra.lod0.glb",
       "footprint": [
-        3.428,
-        3.483
+        3.383,
+        3.444
       ],
-      "height": 4.024,
-      "tris0": 47612
+      "height": 3.951,
+      "tris0": 49372
     },
     {
       "id": "tree-maple-ultra",
@@ -446,11 +446,11 @@
       "lod": "ultra",
       "lod0": "tree-maple-ultra.lod0.glb",
       "footprint": [
-        2.885,
-        2.876
+        2.899,
+        2.909
       ],
-      "height": 3.657,
-      "tris0": 39768
+      "height": 3.689,
+      "tris0": 47288
     },
     {
       "id": "tree-pine-ultra",
@@ -460,11 +460,11 @@
       "lod": "ultra",
       "lod0": "tree-pine-ultra.lod0.glb",
       "footprint": [
-        2.303,
-        2.158
+        2.219,
+        2.199
       ],
-      "height": 3.716,
-      "tris0": 51424
+      "height": 3.71,
+      "tris0": 50664
     },
     {
       "id": "tree-poplar-ultra",
@@ -474,11 +474,11 @@
       "lod": "ultra",
       "lod0": "tree-poplar-ultra.lod0.glb",
       "footprint": [
-        1.616,
-        1.629
+        1.642,
+        1.566
       ],
-      "height": 4.946,
-      "tris0": 46038
+      "height": 4.918,
+      "tris0": 48798
     },
     {
       "id": "tree-oak-hero",
@@ -488,10 +488,10 @@
       "lod": "hero",
       "lod0": "tree-oak-hero.lod0.glb",
       "footprint": [
-        3.39,
-        3.28
+        3.347,
+        3.33
       ],
-      "height": 3.94,
+      "height": 3.978,
       "tris0": 17050
     },
     {
@@ -502,10 +502,10 @@
       "lod": "hero",
       "lod0": "tree-maple-hero.lod0.glb",
       "footprint": [
-        2.8,
-        2.769
+        2.752,
+        2.791
       ],
-      "height": 3.621,
+      "height": 3.634,
       "tris0": 15586
     },
     {
@@ -516,8 +516,8 @@
       "lod": "hero",
       "lod0": "tree-pine-hero.lod0.glb",
       "footprint": [
-        2.164,
-        2.196
+        2.211,
+        2.112
       ],
       "height": 3.697,
       "tris0": 13528
@@ -530,10 +530,10 @@
       "lod": "hero",
       "lod0": "tree-poplar-hero.lod0.glb",
       "footprint": [
-        1.53,
-        1.536
+        1.526,
+        1.527
       ],
-      "height": 4.832,
+      "height": 4.819,
       "tris0": 15572
     },
     {
@@ -544,10 +544,10 @@
       "lod": "detail",
       "lod0": "tree-oak-detail.lod0.glb",
       "footprint": [
-        3.411,
-        3.553
+        3.514,
+        3.54
       ],
-      "height": 4.014,
+      "height": 4.099,
       "tris0": 2158
     },
     {
@@ -558,10 +558,10 @@
       "lod": "detail",
       "lod0": "tree-maple-detail.lod0.glb",
       "footprint": [
-        2.891,
-        3.025
+        2.974,
+        2.968
       ],
-      "height": 3.681,
+      "height": 3.75,
       "tris0": 2011
     },
     {
@@ -572,8 +572,8 @@
       "lod": "detail",
       "lod0": "tree-pine-detail.lod0.glb",
       "footprint": [
-        2.294,
-        2.241
+        2.267,
+        2.285
       ],
       "height": 3.697,
       "tris0": 3444
@@ -586,10 +586,10 @@
       "lod": "detail",
       "lod0": "tree-poplar-detail.lod0.glb",
       "footprint": [
-        1.707,
-        1.77
+        1.657,
+        1.75
       ],
-      "height": 4.946,
+      "height": 4.835,
       "tris0": 2148
     },
     {
@@ -600,10 +600,10 @@
       "lod": "lite",
       "lod0": "tree-oak-lite.lod0.glb",
       "footprint": [
-        3.479,
-        3.932
+        3.895,
+        3.204
       ],
-      "height": 4.093,
+      "height": 4.191,
       "tris0": 738
     },
     {
@@ -614,10 +614,10 @@
       "lod": "lite",
       "lod0": "tree-maple-lite.lod0.glb",
       "footprint": [
-        3.275,
-        3.133
+        3.201,
+        3.166
       ],
-      "height": 3.663,
+      "height": 3.673,
       "tris0": 670
     },
     {
@@ -628,8 +628,8 @@
       "lod": "lite",
       "lod0": "tree-pine-lite.lod0.glb",
       "footprint": [
-        2.478,
-        2.414
+        2.401,
+        2.3
       ],
       "height": 3.697,
       "tris0": 900
@@ -642,10 +642,10 @@
       "lod": "lite",
       "lod0": "tree-poplar-lite.lod0.glb",
       "footprint": [
-        2.026,
-        1.89
+        2.057,
+        1.883
       ],
-      "height": 4.667,
+      "height": 4.389,
       "tris0": 718
     }
   ],

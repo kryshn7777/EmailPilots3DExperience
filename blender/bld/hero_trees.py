@@ -82,24 +82,24 @@ ULTRA = {
         lens=[4.6, 3.6, 2.5, 1.7, 1.1], kids=[7, 5, 4, 3], sides=(28, 14, 9, 6, 5),
         segs=(15, 9, 6, 5, 4), bend=0.55, droop=(0, 0.1, 0.2, 0.3, 0.35), collar=1.5,
         roots=6, root_amp=1.1, root_h=1.4, knots=18, stubs=6, lean=2.5, tip_k=0.32,
-        cards=3500, sizes3=((0.8, 1.2), (0.5, 0.84), (0.26, 0.46)), lobes=13,
-        leaves3d=440, autumn=0.07),
+        cards=3500, sizes3=((0.8, 1.2), (0.5, 0.84), (0.26, 0.46)), lobes=13, fill=0.22,
+        leaves3d=480, autumn=0.07),
     'maple': dict(
         lens=[4.0, 3.0, 2.1, 1.4, 0.9], kids=[6, 5, 4, 3], sides=(26, 14, 9, 6, 5),
         segs=(14, 9, 6, 5, 4), bend=0.5, droop=(0, 0.05, 0.15, 0.25, 0.3), collar=1.45,
         roots=5, root_amp=0.9, root_h=1.2, knots=14, stubs=5, lean=3.0, tip_k=0.32,
-        cards=3300, sizes3=((0.75, 1.1), (0.48, 0.78), (0.24, 0.42)), lobes=12,
-        leaves3d=520, autumn=0.09),
+        cards=3500, sizes3=((0.75, 1.1), (0.48, 0.78), (0.24, 0.42)), lobes=12, fill=0.22,
+        leaves3d=800, autumn=0.09),
     'poplar': dict(
         lens=[10.0, 2.1, 1.4, 1.0, 0.6], kids=[14, 4, 3, 2], sides=(24, 10, 7, 5, 4),
         segs=(18, 6, 5, 4, 3), bend=0.3, droop=(0, 0.0, 0.1, 0.15, 0.2), collar=1.4,
         roots=5, root_amp=0.7, root_h=1.0, knots=22, stubs=4, lean=1.5, tip_k=0.4,
-        cards=2900, sizes3=((0.62, 0.95), (0.4, 0.66), (0.2, 0.36)), lobes=12,
-        leaves3d=620, autumn=0.08),
+        cards=3100, sizes3=((0.62, 0.95), (0.4, 0.66), (0.2, 0.36)), lobes=12, fill=0.24,
+        leaves3d=690, autumn=0.08),
     'pine': dict(
         whorl=(1.7, 0.36), branches=7, reach=2.7, trunk_n=18, trunk_sides=22,
         roots=6, root_amp=0.9, root_h=1.1, knots=14, stubs=7, lean=1.5,
-        cards_per_branch=8, size=(0.85, 1.3), skirt=14, sub=5, tufts=2, needles=6),
+        cards_per_branch=8, size=(0.85, 1.3), skirt=12, sub=5, tufts=2, needles=6),
 }
 
 # 'detail' is the tier for trees the camera sees clearly but not up close: the same
@@ -211,13 +211,13 @@ class TreeBuilder:
         if self.species == 'pine':
             frac = clamp(p.z / P['height'])
             reach = max(P['reach'] * (1 - frac) ** 0.9, 0.3)
-            outer = smooth(0.1, 1.0, math.hypot(p.x, p.y) / reach)
-            return clamp((0.30 + 0.70 * outer ** 0.9) * (0.60 + 0.40 * smooth(0.0, 0.8, frac)), 0.1, 1.0)
+            outer = smooth(0.15, 0.95, math.hypot(p.x, p.y) / reach)
+            return clamp((0.32 + 0.68 * outer ** 0.8) * (0.76 + 0.24 * smooth(0.0, 0.8, frac)), 0.1, 1.0)
         c, r = self.crown
         q = Vector(((p.x - c.x) / r.x, (p.y - c.y) / r.y, (p.z - c.z) / r.z))
-        outer = smooth(0.1, 1.0, q.length)
+        outer = smooth(0.25, 0.95, q.length)
         under = smooth(-0.9, 0.6, q.z)
-        return clamp((0.28 + 0.72 * outer ** 0.9) * (0.62 + 0.38 * under), 0.1, 1.0)
+        return clamp((0.28 + 0.72 * outer ** 0.8) * (0.80 + 0.20 * under), 0.1, 1.0)
 
     def bark_light(self, p):
         """Bark under the crown is in its shade; a trunk's foot is in the ground's."""
@@ -524,15 +524,21 @@ class TreeBuilder:
             c = centre + Vector((d.x * radii.x, d.y * radii.y, d.z * radii.z)) * rng.uniform(0.4, 0.72)
             lobes.append((c, rng.uniform(0.36, 0.52) * min(radii.x, radii.y), self.pick_tone()))
         autumn = P.get('autumn', 0.0)
+        fill = P.get('fill')
         for i in range(P['cards']):
             lobe_c, tone = None, None
-            if i % 3 == 0:
-                # a third of the cards fill the volume directly, so the crown is
+            if fill is None:
+                src = i % 3
+            else:
+                k = rng.random()
+                src = 0 if k < fill else 1 if k < fill + 0.42 else 2
+            if src == 0:
+                # some of the cards fill the volume directly, so the crown is
                 # one mass rather than a clump per branch tip with sky between
                 base = centre + Vector((rng.gauss(0, 0.55) * radii.x, rng.gauss(0, 0.55) * radii.y,
                                         rng.gauss(0, 0.5) * radii.z))
                 size = rng.uniform(*sizes3[0]) if sizes3 else rng.uniform(*P['size'])
-            elif i % 3 == 1:
+            elif src == 1:
                 lobe_c, lobe_r, tone = lobes[rng.randrange(len(lobes))]
                 base = lobe_c + Vector((rng.gauss(0, 0.5), rng.gauss(0, 0.5), rng.gauss(0, 0.5))) * lobe_r
                 size = rng.uniform(*sizes3[1]) if sizes3 else rng.uniform(*P['size'])
@@ -555,8 +561,14 @@ class TreeBuilder:
             if tone is None:
                 tone = self.pick_tone()
             variant = rng.randrange(2)
-            # a few cards are in their autumn colours, on the sunlit skin, towards the top
-            if autumn and q.length > 0.8 and rng.random() < autumn * (0.5 + max(q.z, 0.0) * 1.5):
+            if fill is not None and src != 0:
+                # the crevices where lobes meet are in the shade of both: a point inside two or more
+                # lobes is darker, so each lobe reads as a mass of its own with light on its skin
+                inside = sum(1 for c, r, _ in lobes if (p - c).length < r * 0.95)
+                tone = (tone[0] * 0.8 ** max(0, inside - 1), tone[1])
+            # a few of the small cards are in their autumn colours, on the sunlit skin, towards the top
+            if autumn and sizes3 and size < sizes3[2][1] and q.length > 0.8 \
+                    and rng.random() < autumn * 0.7 * (0.5 + max(q.z, 0.0) * 1.5):
                 variant = 2
             self.card(p, n_geo, light_n, size, variant, rng.random() < 0.5, self.occ(p) * tone[0], tone[1])
 
@@ -565,7 +577,7 @@ class TreeBuilder:
         rng = self.rng
         k = rng.random()
         tint = (1.0, 1.0, 1.0) if k < 0.66 else (1.0, 0.93, 0.62) if k < 0.84 else (0.78, 0.95, 0.9)
-        return (rng.uniform(0.78, 1.0), tint)
+        return (rng.choice((1.0, 1.0, rng.uniform(0.84, 1.0))), tint)
 
     # -- individual 3D leaves and needles ---------------------------------------------
 

@@ -1,6 +1,9 @@
 import {
-  AdditiveBlending,
   BufferGeometry,
+  CustomBlending,
+  OneFactor,
+  SrcAlphaFactor,
+  ZeroFactor,
   Curve,
   CatmullRomCurve3,
   CylinderGeometry,
@@ -215,8 +218,6 @@ export function helix(a: Vector3, b: Vector3, r: number, turns: number, wire: nu
  */
 export function skipInNormalPass(o: Object3D): void {
   o.onBeforeRender = (_r, scene, _c, geometry) => {
-    const w = window as unknown as { __skips?: number; __draws?: number };
-    if (scene.overrideMaterial) w.__skips = (w.__skips ?? 0) + 1; else w.__draws = (w.__draws ?? 0) + 1;
     geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
   };
 }
@@ -230,7 +231,7 @@ const Z = new Vector3(0, 0, 1);
 
 /** an additive billboard (a flare, a halo, a wisp of steam) that stays out of the normal pass; `userData.roll` spins it */
 export function glowCard(map: Texture, color: string, opacity: number): { mesh: Mesh; material: MeshBasicMaterial } {
-  const material = new MeshBasicMaterial({ map, color, transparent: true, depthWrite: false, blending: AdditiveBlending, opacity, toneMapped: false });
+  const material = additiveKeepAlpha(new MeshBasicMaterial({ map, color, transparent: true, depthWrite: false, opacity, toneMapped: false }));
   const mesh = new Mesh(new PlaneGeometry(1, 1), material);
   mesh.userData.glow = true;
   mesh.userData.roll = 0;
@@ -243,4 +244,20 @@ export function glowCard(map: Texture, color: string, opacity: number): { mesh: 
     mesh.matrixWorld.copy(_m.compose(_p, _q, _s));
   };
   return { mesh, material };
+}
+
+/**
+ * Additive light that leaves the frame's alpha alone. Plain AdditiveBlending also adds the source
+ * alpha to the frame's alpha, and that channel is not opacity here: the sky writes the fraction of
+ * the sun's light still reaching each pixel into it and the god-ray march reads it back
+ * (materials/skyVisibility.ts). Motes and glows that raised it showed up as dark blocks on the wall
+ * once the post chain had its way with them.
+ */
+export function additiveKeepAlpha<T extends Material>(material: T): T {
+  material.blending = CustomBlending;
+  material.blendSrc = SrcAlphaFactor;
+  material.blendDst = OneFactor;
+  material.blendSrcAlpha = ZeroFactor;
+  material.blendDstAlpha = OneFactor;
+  return material;
 }

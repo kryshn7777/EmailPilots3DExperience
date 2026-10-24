@@ -95,7 +95,7 @@ export function buildFurniture(k: Kit, parent: Group, m: StudyMats, own: Dispose
       o.add(new CylinderGeometry(0.034, 0.038, 0.012, 14).rotateX(Math.PI / 2), m.brass, { x: dx, y: 0.0, z: 0.05 });
       o.add(new SphereGeometry(0.014, 8, 6), m.brass, { x: dx, y: 0.0, z: 0.062 });
     }
-    o.add(new TorusGeometry(0.2, 0.0085, 6, high ? 18 : 10, Math.PI).rotateZ(Math.PI), m.brass, { y: 0.0, z: 0.064 });
+    o.add(new TorusGeometry(0.2, 0.0085, 5, high ? 14 : 8, Math.PI).rotateZ(Math.PI), m.brass, { y: 0.0, z: 0.064 });
     if (key) {
       o.add(new CylinderGeometry(0.03, 0.03, 0.006, 14).rotateX(Math.PI / 2), m.brass, { x: 0, y: h / 2 - 0.1, z: 0.036 });
       o.add(new CircleGeometry(0.008, 8), m.black, { x: 0, y: h / 2 - 0.095, z: 0.0405 });
@@ -339,8 +339,8 @@ export function buildChair(k: Kit, m: StudyMats, high: boolean): void {
     o.add(rod(new Vector3(sx, 0.7, 0.18), new Vector3(sx, 0.96, 0.18), 0.018, 8), m.walnut);
   }
   if (high) {
-    for (let i = 0; i < 15; i++) o.add(new SphereGeometry(0.012, 6, 5), m.brass, { x: -0.3 + i * 0.043, y: 0.595, z: 0.335 });
-    for (let i = 0; i < 12; i++) o.add(new SphereGeometry(0.012, 6, 5), m.brass, { x: -0.26 + i * 0.047, y: 1.54, z: -0.255 });
+    for (let i = 0; i < 15; i++) o.add(new SphereGeometry(0.012, 5, 4), m.brass, { x: -0.3 + i * 0.043, y: 0.595, z: 0.335 });
+    for (let i = 0; i < 12; i++) o.add(new SphereGeometry(0.012, 5, 4), m.brass, { x: -0.26 + i * 0.047, y: 1.54, z: -0.255 });
   }
   o.add(new CylinderGeometry(0.05, 0.065, 0.5, 12), m.steel, { y: 0.34 });
   o.add(new CylinderGeometry(0.1, 0.1, 0.05, 14), m.steel, { y: 0.1 });

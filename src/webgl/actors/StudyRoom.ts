@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   BufferGeometry,
   BoxGeometry,
   CylinderGeometry,
@@ -19,7 +18,7 @@ import {
 import { glowTexture } from '../bake/CanvasTextures';
 import { fringeTexture, paintingTexture, shaftTexture } from '../bake/StudyTextures';
 import { FLOOR_Y } from './StudyFurniture';
-import { Kit, bevelBox, glowCard, lathe, moulding, rod, skipInNormalPass, tube, uvScale } from './StudyKit';
+import { Kit, additiveKeepAlpha, bevelBox, glowCard, lathe, moulding, rod, skipInNormalPass, tube, uvScale } from './StudyKit';
 import type { Dispose, StudyMats } from './StudyMaterials';
 
 export const ROOM = {
@@ -254,7 +253,7 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
       const u = pos.getX(i) / W + 0.5;
       const v = Ht / 2 - pos.getY(i);
       const yw = yTop - v;
-      const pinch = 1 - 0.55 * Math.exp(-(((yw - tieY) / 0.5) ** 2));
+      const pinch = 1 - 0.42 * Math.exp(-(((yw - tieY) / 0.5) ** 2));
       const flare = yw < tieY - 0.2 ? 1 + (tieY - 0.2 - yw) * 0.04 : 1;
       const across = u * W * pinch * flare;
       const amp = 0.085 * (0.55 + 0.45 * Math.min(1, u * 5)) * (0.65 + 0.35 * pinch);
@@ -266,13 +265,13 @@ export function buildRoom(k: Kit, parent: Group, m: StudyMats, own: Dispose[], t
     // the tie-back rope round the pinch, and the brass hook it hangs on
     k.add(new TorusGeometry(0.22, 0.02, 6, 18).rotateX(Math.PI / 2).scale(0.5, 1, 1), m.brassAged, { x: X0, y: tieY, z: zOuter + dir * W * 0.225 });
     k.add(new SphereGeometry(0.04, 8, 6), m.brass, { x: x1 - 0.04, y: tieY, z: zOuter + dir * 0.18 });
-    for (let i = 0; i < 8; i++) k.add(new TorusGeometry(0.05, 0.007, 5, 12).rotateY(Math.PI / 2), m.brass, { x: rodX, y: rodY, z: zOuter + dir * (i + 0.5) * (W / 8) });
+    for (let i = 0; i < 8; i++) k.add(new TorusGeometry(0.05, 0.007, 4, 9).rotateY(Math.PI / 2), m.brass, { x: rodX, y: rodY, z: zOuter + dir * (i + 0.5) * (W / 8) });
   };
   drape(-2.9, 1);
   drape(4.5, -1);
 
   // ——— the window's light: a few soft slanted shafts, faint, drifting a little ———
-  const shaftMat = keep(new MeshBasicMaterial({ map: keep(shaftTexture()), color: '#ffd7a6', transparent: true, opacity: 0.07, depthWrite: false, blending: AdditiveBlending, side: DoubleSide }));
+  const shaftMat = keep(additiveKeepAlpha(new MeshBasicMaterial({ map: keep(shaftTexture()), color: '#ffd7a6', transparent: true, opacity: 0.07, depthWrite: false, side: DoubleSide })));
   const shafts: Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const z = -0.5 + i * 1.3;
