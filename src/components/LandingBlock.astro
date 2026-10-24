@@ -1,0 +1,32 @@
+---
+/**
+ * One titled grid of cards on the landing page. Four or eight cards sit 4 across (2 by 2 on tablets);
+ * anything else uses the auto-fill grid.
+ */
+import type { BlockCopy } from '../story/copy';
+
+interface Props {
+  id: string;
+  block: BlockCopy;
+}
+
+const { id, block } = Astro.props;
+const four = block.items.length % 4 === 0;
+---
+
+<section class="landing__section" aria-labelledby={id}>
+  <p class="page__kicker">{block.kicker}</p>
+  <h2 id={id}>{block.title}</h2>
+  {block.lede && <p class="page__lede">{block.lede}</p>}
+  <div class={four ? 'landing__grid landing__grid--four' : 'landing__grid'}>
+    {
+      block.items.map((item) => (
+        <article class="landing__card" data-reveal>
+          {item.kicker && <p class="landing__card-kicker">{item.kicker}</p>}
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </article>
+      ))
+    }
+  </div>
+</section>
