@@ -178,8 +178,12 @@ export const CHAPTERS: Chapter[] = [
   },
 ];
 
-/** The letter folds into the plane across this t-window inside CH1. */
-export const FOLD_WINDOW = { start: 0.03, end: 0.08 };
+/**
+ * The hero's letter folds into the dart across this t-window, in the air over the desk: it is
+ * the third envelope to leave the laptop (webgl/rig/launch.ts: released at 0.025, folding from
+ * +0.012 to +0.030 after it).
+ */
+export const FOLD_WINDOW = { start: 0.037, end: 0.055 };
 
 /** Contrail becomes visible once airborne. */
 export const CONTRAIL_FROM = 0.17;

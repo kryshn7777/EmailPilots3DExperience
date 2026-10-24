@@ -12,6 +12,7 @@ import {
   PCFShadowMap,
   PMREMGenerator,
   PerspectiveCamera,
+  PointLight,
   Scene,
   Vector2,
   Vector3,
@@ -72,7 +73,9 @@ import { AirTrail } from './actors/AirTrail';
 import { Flock } from './actors/Flock';
 import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
-import { BatchSend, RELEASE_T } from './actors/BatchSend';
+import { BatchSend } from './actors/BatchSend';
+import { liveLaptopScreen } from './actors/LaptopScreen';
+import { HERO_RELEASE, STAGE, launchPulse, planeScale } from './rig/launch';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
 import { BEACON_ANCHOR, CITY_ANCHOR, COPILOT_ANCHOR, LANTERN, PANEL_ANCHOR } from './rig/pathPoints.mjs';
@@ -136,6 +139,8 @@ export class Engine {
   private sun = new DirectionalLight('#ffd9a0', 1);
   private hemi = new HemisphereLight('#8fa8cc', '#1a1e2e', 0.35);
   private desk: Desk;
+  /** the cool light the laptop screen throws on the desk, found in the Desk's lights (null if there is none) */
+  private screenSpill: PointLight | null = null;
   private panel: Panel;
   private windowFrame: WindowFrame;
   private rooftops!: Rooftops;
@@ -289,6 +294,10 @@ export class Engine {
 
     const rand = mulberry32(919);
     this.desk = new Desk(new Vector3(0.4, 1.29, 0), this.quality.dustCount, rand, this.quality.tier === 'high');
+    this.desk.group.traverse((o) => {
+      const light = o as PointLight;
+      if (!this.screenSpill && light.isPointLight && light.color.getHexString() === '9fc4ff') this.screenSpill = light;
+    });
     this.panel = new Panel(new Vector3(...PANEL_ANCHOR));
     this.windowFrame = new WindowFrame(new Vector3(7, 2, 0.8));
     this.rooftops = new Rooftops(rand, this.quality);
@@ -312,7 +321,7 @@ export class Engine {
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);
-    this.batch = new BatchSend(this.path);
+    this.batch = new BatchSend(this.path, { low: this.quality.tier === 'low', calm: this.options.reducedMotion });
     this.flock = new Flock(rand);
 
     this.scene.add(
@@ -763,9 +772,7 @@ export class Engine {
     const foldIn = MathUtils.smoothstep(t, FOLD_WINDOW.start, FOLD_WINDOW.end);
     const unfold = MathUtils.smoothstep(t, UNFOLD_WINDOW.start, UNFOLD_WINDOW.end);
     this.plane.setFold(foldIn * (1 - unfold));
-    if (this.prevT < FOLD_WINDOW.end && t >= FOLD_WINDOW.end) {
-      this.burst.trigger(this.rig.planeWorldPos, time);
-    }
+    // (the fold's puff of flecks is BatchSend's: pure in t, so it scrubs)
     if (this.prevT < TOUCHDOWN_T && t >= TOUCHDOWN_T) {
       this.confetti.trigger(this.rig.planeWorldPos, time);
     }
@@ -783,14 +790,18 @@ export class Engine {
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
-    // (it is the third plane of the batch: two scouts have left the laptop ahead of it)
-    this.plane.group.visible = this.idlePreset !== null || t > RELEASE_T[2];
+    // (it is the third plane of the batch: two scouts have left the laptop ahead of it, and it
+    // leaves the screen as an envelope (BatchSend's) that opens into this letter)
+    const heroOpen = this.idlePreset ? 1 : MathUtils.smoothstep(t - HERO_RELEASE, STAGE.openFrom, STAGE.openTo);
+    this.plane.group.visible = this.idlePreset !== null || t > HERO_RELEASE + STAGE.openFrom;
     // the dart is swallowed by the arrival screen it flies into
     const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
     // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
     const intoLamp = this.idlePreset ? 1 : MathUtils.smoothstep(this.rig.planeWorldPos.distanceTo(this.lanternCentre), 0.5, 4.2);
     this.delivered = 1 - intoLamp;
-    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp, 1e-4));
+    // small beside the laptop, full size once the flight opens up over the town
+    const size = this.idlePreset ? 1 : planeScale(t) * (0.45 + 0.55 * heroOpen);
+    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp * size, 1e-4));
     if (intoLamp < 0.02) this.plane.group.visible = false;
     this.launchString.update(this.idlePreset ? 1 : t, this.path);
     this.plane.flex(time, t > CONTRAIL_FROM || this.idlePreset ? 1 : 0);
@@ -940,7 +951,13 @@ export class Engine {
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
-    if (nearDesk) this.desk.update(time); // 250-mote dust loop, pointless offscreen
+    if (nearDesk) {
+      this.desk.update(time); // 250-mote dust loop, pointless offscreen
+      // the live laptop display, and the screen's spill on the desk swelling with each launch
+      const launchT = this.idlePreset ? 1 : t;
+      liveLaptopScreen()?.update(launchT, this.options.reducedMotion);
+      if (this.screenSpill) this.screenSpill.intensity += launchPulse(launchT) * (this.options.reducedMotion ? 0.8 : 2.6);
+    }
     this.panel.update(t);
     this.clouds.update(time, this.sunScreenDir, this.fog.near, this.fog.far, t);
     this.envelopes.update(

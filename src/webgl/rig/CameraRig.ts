@@ -2,9 +2,12 @@ import { MathUtils, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'thre
 import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import { rigParamsAt, type RigParams } from '../../story/chapters';
 import type { FlightPath } from './FlightPath';
+import { HERO_RELEASE, heroParam, launchAttitude } from './launch';
+import { studyShot } from './studyShot';
 import type { PaperPlane } from '../actors/PaperPlane';
 
 const UP = new Vector3(0, 1, 0);
+const X_AXIS = new Vector3(1, 0, 0);
 const DEG = Math.PI / 180;
 
 /**
@@ -38,9 +41,9 @@ interface Beat {
 const BEATS: Beat[] = [
   // the opening is matted like a title sequence; the bars open as the dart drops into the town
   { id: 'title', at: [0, 0, 0.11, 0.15], bars: 0.8 },
-  // the launch: a slightly longer lens on the laptop, opening up as the folded dart comes at us,
-  // the room behind it soft
-  { id: 'launch', at: [0, 0, 0.03, 0.08], fov: 0.95, bokeh: 3 },
+  // the launch (studyShot.ts carries the camera): a longer lens close on the laptop screen with the
+  // room soft behind it, easing open as the three planes cross the desk to the window
+  { id: 'launch', at: [0, 0, 0.05, 0.092], fov: 0.9, bokeh: 3.2 },
   // out of the window: the camera stops in the opening and pans to watch the dart drop away over
   // the yards, then follows it out (the release flies the lens out through the same opening)
   { id: 'window', at: [0.086, 0.098, 0.112, 0.15], holdAt: [6.5, 2.85, 0.9], fov: 0.92 },
@@ -136,6 +139,9 @@ export class CameraRig {
   private tB = new Vector3();
   private sideScratch = new Vector3();
   private planeScratch = new Vector3();
+  private studyPos = new Vector3();
+  private studyLook = new Vector3();
+  private qLaunch = new Quaternion();
 
   constructor(
     private path: FlightPath,
@@ -185,7 +191,9 @@ export class CameraRig {
     const calm = this.options.reducedMotion;
 
     // --- plane ---
-    this.path.pointAt(t, this.planePos);
+    // in the study the hero leaves the laptop on its own time (launch.ts); from the window on it is the path's t
+    const sHero = heroParam(t);
+    this.path.pointAt(sHero, this.planePos);
     const a = rig.turbAmp;
     if (a > 0) {
       this.planePos.x += this.noise.noise(time * 0.6, 0, 0) * a;
@@ -193,7 +201,7 @@ export class CameraRig {
       this.planePos.z += this.noise.noise(0, 0, time * 0.5 + 71.3) * a;
     }
 
-    this.path.tangentAt(t, this.tangent);
+    this.path.tangentAt(sHero, this.tangent);
 
     // banking: signed yaw rate between successive tangents
     if (this.prevTangent.lengthSq() === 0) this.prevTangent.copy(this.tangent);
@@ -208,8 +216,12 @@ export class CameraRig {
     this.lookAtPoint.copy(this.planePos).add(this.tangent);
     this.lookMatrix.lookAt(this.lookAtPoint, this.planePos, UP);
     this.baseQuat.setFromRotationMatrix(this.lookMatrix);
-    this.rollQuat.setFromAxisAngle(this.tangent, this.roll);
+    // the letter sways and noses up while it opens and folds, over the desk
+    const tau = t - HERO_RELEASE;
+    const att = tau > 0 && t < 0.11 ? launchAttitude(tau, t, 4.2, calm) : null;
+    this.rollQuat.setFromAxisAngle(this.tangent, this.roll + (att ? att.sway : 0));
     this.plane.group.quaternion.copy(this.rollQuat).multiply(this.baseQuat);
+    if (att && att.pitch !== 0) this.plane.group.quaternion.multiply(this.qLaunch.setFromAxisAngle(X_AXIS, att.pitch));
 
     this.planeWorldPos.copy(this.planePos);
     this.currentTangent.copy(this.tangent);
@@ -247,6 +259,12 @@ export class CameraRig {
     // a held shot eases the camera to a stop and then back into the chase; smoothstepping the
     // weight again gives the catch-up a slow start instead of a lurch
     const hold = holdW * holdW * (3 - 2 * holdW);
+    // the study: low beside the desk on the laptop, then along with the planes to the window
+    const study = 1 - MathUtils.smoothstep(t, 0.1, 0.112);
+    if (study > 0) {
+      studyShot(t, this.path, this.studyPos, this.studyLook);
+      this.camPos.lerp(this.studyPos, study);
+    }
     if (hold > 0) this.camPos.lerp(this.holdPos, hold);
     // lightning: a short shake, as if the thunder reached the lens
     if (!calm && this.jolt > 0.01) {
@@ -268,6 +286,7 @@ export class CameraRig {
     this.lookTarget.y = MathUtils.damp(this.lookTarget.y, this.lookAtPoint.y, 6, dt);
     this.lookTarget.z = MathUtils.damp(this.lookTarget.z, this.lookAtPoint.z, 6, dt);
     this.lookAtPoint.copy(this.lookTarget);
+    if (study > 0) this.lookAtPoint.lerp(this.studyLook, study);
     // a held camera pans with the dart itself rather than with the point ahead of it
     if (hold > 0) this.lookAtPoint.lerp(this.planePos, hold);
     if (this.shot.weight > 0) this.lookAtPoint.lerp(this.shot.look, this.shot.weight);

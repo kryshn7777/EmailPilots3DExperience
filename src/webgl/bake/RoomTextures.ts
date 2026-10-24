@@ -52,7 +52,7 @@ function sibling(of: HTMLCanvasElement, size: number): [HTMLCanvasElement, Ctx] 
 }
 
 /** Tangent-space normal map from the luminance of a drawing (periodic, so tiles stay seamless). */
-function heightToNormal(src: HTMLCanvasElement, strength: number): CanvasTexture {
+export function heightToNormal(src: HTMLCanvasElement, strength: number): CanvasTexture {
   const w = src.width;
   const h = src.height;
   const px = src.getContext('2d')!.getImageData(0, 0, w, h).data;
@@ -87,7 +87,7 @@ function heightToNormal(src: HTMLCanvasElement, strength: number): CanvasTexture
 }
 
 /** Roughness map: mid grey that follows the drawing's darkness (pores and gaps hold dirt, so run rougher). */
-function roughnessFrom(src: HTMLCanvasElement, base: number, spread: number): CanvasTexture {
+export function roughnessFrom(src: HTMLCanvasElement, base: number, spread: number): CanvasTexture {
   const w = src.width;
   const h = src.height;
   const px = src.getContext('2d')!.getImageData(0, 0, w, h).data;

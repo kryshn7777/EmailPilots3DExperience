@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
@@ -14,26 +15,37 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PerspectiveCamera,
+  Points,
+  PointsMaterial,
   Quaternion,
   RingGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector3,
 } from 'three';
 import { HOME_CELL, ROOFTOP_BASE_Y } from '../bake/cityGen.mjs';
+import { glowTexture } from '../bake/CanvasTextures';
 import { rigParamsAt } from '../../story/chapters';
 import type { FlightPath } from '../rig/FlightPath';
+import { HERO_RELEASE, JOIN_T, RELEASE_T, STAGE, heroParam, launchAttitude, launchParam, launchPulse, planeScale } from '../rig/launch';
 import { mulberry32 } from '../util';
+import { envelopeTextures } from './Envelopes';
 import { PaperBurst } from './PaperBurst';
 import { PaperPlane } from './PaperPlane';
 import type { TownSite, TownSites } from './Rooftops';
 
 /** the mail-merge the story sends: "Email Pilots · batch sending 3/42" */
 export const BATCH_TOTAL = 42;
-/**
- * Story-t at which each of the three planes leaves the laptop screen: two scouts, then the hero
- * the camera follows. The hero's own appearance (Engine) is the third.
- */
-export const RELEASE_T = [0.001, 0.0065, 0.012] as const;
+export { RELEASE_T };
+
+/** where the display's centre is, and which way it faces (the screen leans back a little from vertical) */
+const SCREEN = new Vector3(-0.64, 1.66, 0);
+const SCREEN_N = new Vector3(Math.cos(0.24), Math.sin(0.24), 0);
+const SCREEN_RIGHT = new Vector3(0, 0, -1);
+/** the envelope: its box is 0.78 wide; scaled to sit beside a laptop whose display is 1.38 wide */
+const ENVELOPE_SCALE = 0.56;
 
 /** the street the flight runs down between the front yards, and the lawns' street-side edges */
 const STREET_Z = HOME_CELL.lotD + HOME_CELL.street / 2;
@@ -49,6 +61,8 @@ const TAG_FROM = 0.085;
 /** a scout's contrail: points, and the story-t between them */
 const TRAIL_POINTS = 26;
 const TRAIL_STEP = 0.0016;
+/** in the room the contrails are short and tight: a thin streak, not a wire across the frame */
+const ROOM_TRAIL = 0.45;
 /** the horizontal run before the house at which a scout leaves the street */
 const LEG_RUN = 9.5;
 /** which houses are candidates: along the street from the yards behind it to a few lots ahead */
@@ -58,10 +72,136 @@ const IN_VIEW = 0.8;
 
 const FADE_FROM = 0.27;
 const FADE_TO = 0.3;
+/** the scouts fly a touch bigger than the hero: they are the ones seen from the street */
 const SCALE = 1.05;
 const GROUND = ROOFTOP_BASE_Y;
 const UP = new Vector3(0, 1, 0);
 const X_AXIS = new Vector3(1, 0, 0);
+
+/**
+ * A little puff of paper flecks where a fold finishes: a handful of specks that drift apart and
+ * fall, not an explosion. Two emissions per plane (the envelope opening, the last crease), both
+ * pure functions of story-t so it scrubs both ways.
+ */
+const PUFF_LIFE = 0.014;
+class LaunchPuff {
+  readonly points: Points;
+  private geometry = new BufferGeometry();
+  private material: PointsMaterial;
+  private positions: Float32Array;
+  private colors: Float32Array;
+  private dirs: Float32Array;
+  private speeds: Float32Array;
+  private first: number;
+
+  constructor(count: number, map: CanvasTexture, rand: () => number) {
+    this.first = Math.ceil(count * 0.4);
+    this.positions = new Float32Array(count * 3);
+    this.colors = new Float32Array(count * 3);
+    this.dirs = new Float32Array(count * 3);
+    this.speeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const theta = rand() * Math.PI * 2;
+      const up = rand() * 1.1 - 0.15;
+      const r = Math.sqrt(Math.max(1 - up * up, 0));
+      this.dirs[i * 3] = Math.cos(theta) * r;
+      this.dirs[i * 3 + 1] = up;
+      this.dirs[i * 3 + 2] = Math.sin(theta) * r;
+      this.speeds[i] = (i < this.first ? 0.16 : 0.26) + rand() * (i < this.first ? 0.14 : 0.3);
+    }
+    this.geometry.setAttribute('position', new BufferAttribute(this.positions, 3).setUsage(DynamicDrawUsage));
+    this.geometry.setAttribute('color', new BufferAttribute(this.colors, 3).setUsage(DynamicDrawUsage));
+    this.material = new PointsMaterial({
+      map, size: 0.034, vertexColors: true, transparent: true, depthWrite: false, blending: AdditiveBlending, color: '#fff1d6',
+    });
+    this.points = new Points(this.geometry, this.material);
+    this.points.frustumCulled = false;
+    this.points.visible = false;
+  }
+
+  /** `a` and `b` are where, and `ta`, `tb` when, the two emissions happen. */
+  update(t: number, a: Vector3, ta: number, b: Vector3, tb: number): void {
+    const n = this.speeds.length;
+    let any = false;
+    for (let i = 0; i < n; i++) {
+      const origin = i < this.first ? a : b;
+      const u = (t - (i < this.first ? ta : tb)) / PUFF_LIFE;
+      let bright = 0;
+      if (u > 0 && u < 1) {
+        any = true;
+        const e = 1 - Math.pow(1 - u, 3);
+        const d = this.speeds[i]! * e;
+        this.positions[i * 3] = origin.x + this.dirs[i * 3]! * d;
+        this.positions[i * 3 + 1] = origin.y + this.dirs[i * 3 + 1]! * d - 0.12 * u * u;
+        this.positions[i * 3 + 2] = origin.z + this.dirs[i * 3 + 2]! * d;
+        bright = 0.9 * Math.pow(1 - u, 1.4);
+      }
+      this.colors[i * 3] = this.colors[i * 3 + 1] = this.colors[i * 3 + 2] = bright;
+    }
+    this.points.visible = any;
+    if (!any) return;
+    this.geometry.attributes.position!.needsUpdate = true;
+    this.geometry.attributes.color!.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.geometry.dispose();
+    this.material.dispose();
+  }
+}
+
+/** A few motes of dust turning slowly in the lamp's beam over the desk, in front of the lens. */
+class LaunchMotes {
+  readonly points: Points;
+  private geometry = new BufferGeometry();
+  private material: PointsMaterial;
+  private base: Float32Array;
+  private positions: Float32Array;
+
+  constructor(count: number, map: CanvasTexture) {
+    const rand = mulberry32(2024);
+    this.base = new Float32Array(count * 3);
+    this.positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    // the lamp's bulb and where its cone lands (Desk's lamp: world coordinates)
+    const bulb = new Vector3(1.59, 2.08, -1.36);
+    const aim = new Vector3(1.4, 1.19, -0.7);
+    const axis = aim.clone().sub(bulb);
+    for (let i = 0; i < count; i++) {
+      const u = 0.15 + rand() * 0.85;
+      const r = Math.sqrt(rand()) * (0.25 + u * 1.5);
+      const a = rand() * Math.PI * 2;
+      // across the beam, and drawn out toward the laptop, where the camera looks
+      this.base[i * 3] = bulb.x + axis.x * u + Math.cos(a) * r - rand() * 1.3 * u;
+      this.base[i * 3 + 1] = bulb.y + axis.y * u + (rand() - 0.5) * 0.5;
+      this.base[i * 3 + 2] = bulb.z + axis.z * u + Math.sin(a) * r * 0.9;
+      colors.fill(0.35 + 0.65 * (1 - Math.min(r / 1.3, 1)) * (1 - u * 0.3), i * 3, i * 3 + 3);
+    }
+    this.positions.set(this.base);
+    this.geometry.setAttribute('position', new BufferAttribute(this.positions, 3).setUsage(DynamicDrawUsage));
+    this.geometry.setAttribute('color', new BufferAttribute(colors, 3));
+    this.material = new PointsMaterial({
+      map, size: 0.022, vertexColors: true, transparent: true, opacity: 0.6, depthWrite: false, blending: AdditiveBlending, color: '#ffeccc',
+    });
+    this.points = new Points(this.geometry, this.material);
+    this.points.frustumCulled = false;
+  }
+
+  update(time: number, drift: boolean): void {
+    if (!drift) return;
+    for (let i = 0; i < this.positions.length; i += 3) {
+      this.positions[i] = this.base[i]! + Math.sin(time * 0.17 + i) * 0.08;
+      this.positions[i + 1] = this.base[i + 1]! + Math.sin(time * 0.11 + i * 1.7) * 0.06;
+      this.positions[i + 2] = this.base[i + 2]! + Math.cos(time * 0.13 + i * 0.6) * 0.07;
+    }
+    this.geometry.attributes.position!.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.geometry.dispose();
+    this.material.dispose();
+  }
+}
 
 interface Scout {
   plane: PaperPlane;
@@ -74,9 +214,18 @@ interface Scout {
   trailMaterial: LineBasicMaterial;
   trailPositions: Float32Array;
   release: number;
-  /** offset off the hero's line, in the street's width, and above it */
+  /** the envelope it leaves the screen as, and the puff of flecks as it opens and folds */
+  env: Mesh;
+  puff: LaunchPuff;
+  /** the offset off the hero's line (in the street's width) at the screen, in the room and out over the town; and above it */
+  side0: number;
+  sideRoom: number;
   side: number;
   lift: number;
+  /** a swoop over the room's length: + climbs over the desk first, - hugs it */
+  arc: number;
+  /** the wobble of its bank */
+  phase: number;
   /** how far ahead of the hero (in story-t) it is by the time it reaches the street */
   lead: number;
   /** filled in once the town's houses are known */
@@ -119,8 +268,43 @@ export class BatchSend {
   private qPitch = new Quaternion();
   private beamFade: CanvasTexture;
   private beamGeometry = new CylinderGeometry(0.3, 0.3, 1, 20, 1, true);
+  // the launch: three envelopes, the hero's among them, and the room's light around them
+  private envGeometry = new BoxGeometry(0.78, 0.02, 0.527);
+  private envFaces = envelopeTextures();
+  private envMaterials: MeshStandardMaterial[] = [];
+  private heroEnv: Mesh;
+  private heroPuff: LaunchPuff;
+  private flecks = glowTexture();
+  private glow: Sprite;
+  private motes: LaunchMotes;
+  private qFace = new Quaternion();
+  private mFace = new Matrix4();
+  private pA = new Vector3();
+  private pB = new Vector3();
 
-  constructor(private path: FlightPath) {
+  constructor(private path: FlightPath, private opts: { low: boolean; calm: boolean } = { low: false, calm: false }) {
+    // the envelope: air-mail paper, lit a little from within so it reads in the lamp's pool
+    const paper = (map?: CanvasTexture): MeshStandardMaterial => {
+      const m = new MeshStandardMaterial({
+        ...(map ? { map, emissiveMap: map } : { color: '#efe6cf' }),
+        emissive: '#ffd9a0', emissiveIntensity: 0.5, roughness: 0.75,
+      });
+      this.envMaterials.push(m);
+      return m;
+    };
+    const edge = paper();
+    const envMaterial = [edge, edge, paper(this.envFaces.front), paper(this.envFaces.back), edge, edge];
+    const makeEnvelope = (): Mesh => {
+      const m = new Mesh(this.envGeometry, envMaterial);
+      m.visible = false;
+      m.castShadow = false;
+      return m;
+    };
+    this.heroEnv = makeEnvelope();
+    // facing the screen: width along the display, the front toward its normal
+    this.mFace.makeBasis(SCREEN_RIGHT, SCREEN_N, new Vector3().crossVectors(SCREEN_RIGHT, SCREEN_N));
+    this.qFace.setFromRotationMatrix(this.mFace);
+
     // a column of light that fades out upward, marking a delivered house from afar
     const gc = document.createElement('canvas');
     gc.width = 4;
@@ -135,9 +319,13 @@ export class BatchSend {
     this.beamFade = new CanvasTexture(gc);
 
     const rand = mulberry32(31);
+    const puffCount = opts.low ? 12 : 22;
+    this.heroPuff = new LaunchPuff(puffCount, this.flecks, mulberry32(5));
+    // scout 1 leaves the screen's right, climbs over the desk on the lamp's side; scout 2 leaves the
+    // left, hugs the desk and swings wide; the hero (the Engine's plane) takes the middle, on the path
     const specs = [
-      { side: -0.85, lift: 0.45, lead: 0.03 },
-      { side: 0.75, lift: 0.15, lead: 0.024 },
+      { side0: -0.3, sideRoom: -0.62, side: -0.85, lift: 0.45, arc: 0.3, phase: 0, lead: 0.03 },
+      { side0: 0.3, sideRoom: 0.8, side: 0.75, lift: 0.15, arc: -0.08, phase: 2.1, lead: 0.024 },
     ];
     specs.forEach((spec, i) => {
       const plane = new PaperPlane();
@@ -168,32 +356,51 @@ export class BatchSend {
       trail.frustumCulled = false;
       trail.visible = false;
       const burst = new PaperBurst(rand);
-      this.group.add(plane.group, trail, ring, beam, burst.points);
+      const env = makeEnvelope();
+      const puff = new LaunchPuff(puffCount, this.flecks, mulberry32(11 + i));
+      this.group.add(plane.group, env, puff.points, trail, ring, beam, burst.points);
       this.scouts.push({
-        plane, burst, ring, ringMaterial, beam, beamMaterial, trail, trailMaterial, trailPositions, release: RELEASE_T[i]!, ...spec,
+        plane, burst, ring, ringMaterial, beam, beamMaterial, trail, trailMaterial, trailPositions, release: RELEASE_T[i]!, env, puff, ...spec,
         leg: null, branchT: 1, landT: 1, rest: new Vector3(), chip: new Vector3(),
       });
     });
+    this.group.add(this.heroEnv, this.heroPuff.points);
+
+    // the screen's light: a soft halo that swells as each envelope leaves it
+    this.glow = new Sprite(new SpriteMaterial({
+      map: this.flecks, color: '#8fe3ff', transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, fog: false,
+    }));
+    this.glow.position.copy(SCREEN).addScaledVector(SCREEN_N, 0.12);
+    this.glow.scale.set(2.5, 1.8, 1);
+    this.glow.visible = false;
+    this.motes = new LaunchMotes(opts.low ? 14 : 32, this.flecks);
+    this.group.add(this.glow, this.motes.points);
   }
 
-  /** Where the scout is on the shared airway at line parameter `s`: the hero's spline, offset. */
+  /**
+   * Where the scout is on the shared airway at line parameter `s`: the hero's spline, offset. It
+   * leaves the screen a little to one side, fans out over the room, and by the window and the
+   * town is on its own line either side of the hero's.
+   */
   private linePos(sc: Scout, s: number, out: Vector3): Vector3 {
-    const w = MathUtils.smoothstep(s, 0.004, 0.04);
     this.path.pointAt(s, out);
     this.path.tangentAt(s, this.tan);
     this.side.crossVectors(this.tan, UP).normalize();
-    return out.addScaledVector(this.side, sc.side * w).addScaledVector(UP, sc.lift * w);
+    const fan = MathUtils.smoothstep(s, 0, 0.05);
+    const wide = MathUtils.smoothstep(s, 0.055, 0.115);
+    const lateral = MathUtils.lerp(MathUtils.lerp(sc.side0, sc.sideRoom, fan), sc.side, wide);
+    const up = sc.lift * MathUtils.smoothstep(s, 0.004, 0.04) + sc.arc * Math.sin(Math.PI * MathUtils.smoothstep(s, 0, 0.09));
+    return out.addScaledVector(this.side, lateral).addScaledVector(UP, up);
+  }
+
+  /** Where the scout stands on the flight line at story-t: out of the laptop, through the room, then ahead of the hero. */
+  private param(sc: Scout, t: number): number {
+    return launchParam(t, sc.release, JOIN_T + sc.lead);
   }
 
   /** Position at story-t `t`: along the airway until the branch, then down the glide. */
   private posAt(sc: Scout, t: number, out: Vector3): Vector3 {
-    if (!sc.leg || t < sc.branchT) {
-      // the lead builds over the first stretch (out of the laptop, across the desk, out of the window)
-      // and is held from there to the street, so the scouts are well ahead of the camera's plane
-      const x = MathUtils.clamp((t - sc.release) / Math.max((sc.branchT - sc.release) * 0.4, 1e-3), 0, 1);
-      const lead = sc.leg ? sc.lead * MathUtils.smoothstep(x, 0, 1) : 0;
-      return this.linePos(sc, t + lead, out);
-    }
+    if (!sc.leg || t < sc.branchT) return this.linePos(sc, this.param(sc, t), out);
     const x = MathUtils.clamp((t - sc.branchT) / LEG_T, 0, 1);
     return sc.leg.getPoint(1 - Math.pow(1 - x, 2.2), out);
   }
@@ -362,9 +569,16 @@ export class BatchSend {
     if (!this.group.visible) { this.prevT = t; return; }
 
     const fade = 1 - MathUtils.smoothstep(t, FADE_FROM, FADE_TO);
+    const calm = this.opts.calm;
+    const grown = planeScale(t);
+    this.updateRoom(t, time, calm);
     for (const sc of this.scouts) {
-      const live = !!sc.leg && t >= sc.release;
-      sc.plane.group.visible = live;
+      const tau = t - sc.release;
+      // on stage from the envelope's release; a scout with no house to land at leaves quietly at the town
+      const stray = this.planned && !sc.leg;
+      const on = tau >= 0 && (!stray || t < 0.15);
+      sc.plane.group.visible = on && tau >= STAGE.openFrom;
+      sc.env.visible = on && tau < STAGE.openTo;
       // landing ping, and the paper-scrap burst the moment it touches down
       const ping = sc.leg ? (t - sc.landT) / 0.022 : -1;
       sc.ring.visible = ping >= 0 && ping <= 1;
@@ -384,7 +598,9 @@ export class BatchSend {
       }
       if (sc.leg && this.prevT < sc.landT && t >= sc.landT) sc.burst.trigger(sc.rest, time);
       sc.burst.update(time);
-      if (!live) { sc.trail.visible = false; continue; }
+      // the little puffs where the envelope opens and where the last crease goes in
+      this.puff(sc.puff, tau, t, (tt, out) => this.posAt(sc, tt, out), sc.release, calm);
+      if (!on) { sc.trail.visible = false; continue; }
 
       this.posAt(sc, t, this.p0);
       sc.plane.group.position.copy(this.p0);
@@ -395,18 +611,19 @@ export class BatchSend {
       // the contrail, sampled back along where it has been; it fades away once it has landed
       const base = Math.min(t, sc.landT);
       for (let k = 0; k < TRAIL_POINTS; k++) {
-        this.posAt(sc, Math.max(base - k * TRAIL_STEP, sc.release), this.p1);
+        this.posAt(sc, Math.max(base - k * TRAIL_STEP * (1 - (1 - ROOM_TRAIL) * (1 - MathUtils.smoothstep(base, JOIN_T, JOIN_T + 0.03))), sc.release), this.p1);
         sc.trailPositions[k * 3] = this.p1.x;
         sc.trailPositions[k * 3 + 1] = this.p1.y;
         sc.trailPositions[k * 3 + 2] = this.p1.z;
       }
       sc.trail.geometry.attributes.position!.needsUpdate = true;
-      sc.trailMaterial.opacity = 0.8 * fade * (1 - MathUtils.smoothstep(t, sc.landT, sc.landT + 0.012));
+      const lit = MathUtils.smoothstep(tau, STAGE.openFrom, STAGE.openTo + 0.004);
+      sc.trailMaterial.opacity = 0.8 * fade * lit * (1 - MathUtils.smoothstep(t, sc.landT, sc.landT + 0.012));
       sc.trail.visible = sc.trailMaterial.opacity > 0.01;
 
       // heading from where it is about to be; bank from how fast that heading turns. After
       // landing the attitude is frozen at its last flying value.
-      const tt = Math.min(t, sc.landT - 0.002);
+      const tt = Math.min(Math.max(t, sc.release), sc.landT - 0.002);
       this.posAt(sc, tt, this.p0);
       this.posAt(sc, tt + 0.0015, this.p1);
       this.tan.subVectors(this.p1, this.p0).normalize();
@@ -414,26 +631,80 @@ export class BatchSend {
       this.tan2.subVectors(this.p2, this.p1).normalize();
       const turn = this.tan.x * this.tan2.z - this.tan.z * this.tan2.x;
       const landing = sc.leg ? MathUtils.smoothstep(t, sc.landT - LEG_T * 0.3, sc.landT) : 0;
-      const roll = MathUtils.clamp(turn * 9, -0.8, 0.8) * (1 - landing * 0.85) + landing * 0.1;
+      // a gentle sway in the room, settling as it joins the airway (none when calm)
+      const { pitch, sway } = launchAttitude(tau, t, sc.phase, calm);
+      const roll = MathUtils.clamp(turn * 9, -0.8, 0.8) * (1 - landing * 0.85) + landing * 0.1 + sway;
       this.m4.lookAt(this.p1.copy(this.p0).add(this.tan), this.p0, UP);
       this.qBase.setFromRotationMatrix(this.m4);
       this.qRoll.setFromAxisAngle(this.tan, roll);
+      // the letter climbs nose-up as it opens, and levels out as it folds into the dart
+      const fold = MathUtils.smoothstep(tau, STAGE.foldFrom, STAGE.foldTo);
+      const open = MathUtils.smoothstep(tau, STAGE.openFrom, STAGE.openTo);
       // the flare: nose up just before it touches, settling flat as it stops
       const flare = MathUtils.smoothstep(t, sc.landT - LEG_T * 0.35, sc.landT - 0.004) * (1 - MathUtils.smoothstep(t, sc.landT - 0.004, sc.landT + 0.004));
-      this.qPitch.setFromAxisAngle(X_AXIS, -0.3 * flare);
+      this.qPitch.setFromAxisAngle(X_AXIS, -0.3 * flare + pitch);
       sc.plane.group.quaternion.copy(this.qRoll).multiply(this.qBase).multiply(this.qPitch);
-
-      const grow = MathUtils.smoothstep(t, sc.release, sc.release + 0.005);
-      sc.plane.group.scale.setScalar(Math.max(SCALE * grow * fade, 1e-4));
-      sc.plane.setFold(MathUtils.smoothstep(t, sc.release, sc.release + 0.014));
+      sc.plane.group.scale.setScalar(Math.max(SCALE * grown * (0.45 + 0.55 * open) * fade * (stray ? 1 - MathUtils.smoothstep(t, 0.13, 0.15) : 1), 1e-4));
+      sc.plane.setFold(fold);
       sc.plane.flex(time + sc.side * 3, t < sc.landT ? 1 : 0);
+
+      // the envelope: facing the screen as it pops out, turning flat as the letter slides out of it
+      if (sc.env.visible) {
+        sc.env.position.copy(sc.plane.group.position);
+        sc.env.quaternion.copy(this.qFace).slerp(this.qBase, MathUtils.smoothstep(tau, 0.002, STAGE.openTo));
+        sc.env.scale.setScalar(ENVELOPE_SCALE * (0.15 + 0.85 * MathUtils.smoothstep(tau, 0, STAGE.pop)) * (1 - open) + 1e-4);
+      }
     }
+    this.updateHero(t, calm);
     this.prevT = t;
+  }
+
+  /** The hero's envelope (the Engine owns its dart) and its puffs: it is on the main path itself. */
+  private updateHero(t: number, calm: boolean): void {
+    const tau = t - HERO_RELEASE;
+    const on = tau >= 0 && tau < STAGE.openTo;
+    this.heroEnv.visible = on;
+    const heroAt = (tt: number, out: Vector3): Vector3 => this.path.pointAt(heroParam(tt), out);
+    this.puff(this.heroPuff, tau, t, heroAt, HERO_RELEASE, calm);
+    if (!on) return;
+    heroAt(t, this.p0);
+    this.heroEnv.position.copy(this.p0);
+    this.path.tangentAt(heroParam(t), this.tan);
+    this.m4.lookAt(this.p1.copy(this.p0).add(this.tan), this.p0, UP);
+    this.qBase.setFromRotationMatrix(this.m4);
+    const open = MathUtils.smoothstep(tau, STAGE.openFrom, STAGE.openTo);
+    this.heroEnv.quaternion.copy(this.qFace).slerp(this.qBase, MathUtils.smoothstep(tau, 0.002, STAGE.openTo));
+    this.heroEnv.scale.setScalar(ENVELOPE_SCALE * (0.15 + 0.85 * MathUtils.smoothstep(tau, 0, STAGE.pop)) * (1 - open) + 1e-4);
+  }
+
+  /** Drives one plane's puff of flecks: nothing when calm (the folds still happen, quietly). */
+  private puff(
+    puff: LaunchPuff, tau: number, t: number, at: (t: number, out: Vector3) => Vector3, release: number, calm: boolean,
+  ): void {
+    if (calm || tau < STAGE.openFrom || tau > STAGE.puff + PUFF_LIFE + 0.002) {
+      puff.points.visible = false;
+      return;
+    }
+    const ta = release + STAGE.openFrom + 0.001;
+    const tb = release + STAGE.puff;
+    at(ta, this.pA);
+    at(tb, this.pB);
+    puff.update(t, this.pA, ta, this.pB, tb);
+  }
+
+  /** The room's light at the launch: the screen's halo swells with each release, and the motes turn in the lamp's beam. */
+  private updateRoom(t: number, time: number, calm: boolean): void {
+    const pulse = launchPulse(t);
+    this.glow.visible = pulse > 0.01;
+    if (this.glow.visible) (this.glow.material as SpriteMaterial).opacity = (calm ? 0.08 : 0.26) * pulse;
+    this.motes.points.visible = t < 0.14;
+    if (this.motes.points.visible) this.motes.update(time, !calm);
   }
 
   dispose(): void {
     for (const sc of this.scouts) {
       sc.plane.dispose();
+      sc.puff.dispose();
       sc.burst.dispose();
       sc.ring.geometry.dispose();
       sc.ringMaterial.dispose();
@@ -443,5 +714,13 @@ export class BatchSend {
     }
     this.beamGeometry.dispose();
     this.beamFade.dispose();
+    this.heroPuff.dispose();
+    this.motes.dispose();
+    (this.glow.material as SpriteMaterial).dispose();
+    this.flecks.dispose();
+    this.envGeometry.dispose();
+    this.envFaces.front.dispose();
+    this.envFaces.back.dispose();
+    for (const m of this.envMaterials) m.dispose();
   }
 }

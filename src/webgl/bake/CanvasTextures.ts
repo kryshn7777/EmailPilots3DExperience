@@ -1,5 +1,6 @@
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three';
 import { detectQuality } from '../quality';
+import { createLaptopScreen } from '../actors/LaptopScreen';
 
 /**
  * Runtime "texture baking": every map the world needs is drawn once into a
@@ -321,64 +322,12 @@ export function replyTexture(): CanvasTexture {
   return texture;
 }
 
-/** Laptop display: compose window mid-send — the shot the flight launches from. */
+/**
+ * Laptop display: the batch window the flight launches from. It is live (the three queued mails
+ * leave it one by one), so it is drawn by actors/LaptopScreen, which the Engine drives.
+ */
 export function laptopScreenTexture(): CanvasTexture {
-  const [canvas, ctx] = makeCanvas(512);
-  ctx.fillStyle = '#0b101d';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // title bar
-  ctx.fillStyle = '#141c30';
-  ctx.fillRect(0, 0, 512, 54);
-  ctx.fillStyle = '#9be8ff';
-  ctx.font = '700 24px monospace';
-  ctx.fillText('EMAIL PILOTS', 24, 36);
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = 'rgba(155, 232, 255, 0.4)';
-    ctx.beginPath();
-    ctx.arc(452 + i * 20, 27, 5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // clean face: just the brand centered above the firing strip — every other
-  // text hidden by request
-  ctx.fillStyle = '#9be8ff';
-  ctx.font = '900 52px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('EMAIL PILOTS', 256, 220);
-  ctx.strokeStyle = 'rgba(155, 232, 255, 0.35)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(96, 250);
-  ctx.lineTo(416, 250);
-  ctx.stroke();
-  // paper-dart emblem under the wordmark
-  ctx.fillStyle = 'rgba(155, 232, 255, 0.9)';
-  ctx.beginPath();
-  ctx.moveTo(216, 330);
-  ctx.lineTo(296, 296);
-  ctx.lineTo(232, 352);
-  ctx.lineTo(240, 322);
-  ctx.closePath();
-  ctx.fill();
-  ctx.textAlign = 'left';
-
-  // firing strip
-  ctx.fillStyle = '#101a2e';
-  ctx.fillRect(0, 408, 512, 104);
-  ctx.fillStyle = '#7fe8d8';
-  ctx.font = '700 34px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('FIRING EMAIL…', 256, 450);
-  ctx.textAlign = 'left';
-  ctx.strokeStyle = 'rgba(127, 232, 216, 0.35)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(56, 468, 400, 18);
-  ctx.fillRect(58, 470, 396 * 0.82, 14);
-
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
-  return texture;
+  return createLaptopScreen().texture;
 }
 
 /**
