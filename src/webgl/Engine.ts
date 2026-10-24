@@ -674,6 +674,16 @@ export class Engine {
         p.ambient.copy(this.fog.color).lerp(this.sky.zenith, 0.4).multiplyScalar(mix('ambient'));
       }
     }
+    // arriving over the city: a sea of mist stands on its streets, so the skyline rises out of it and the
+    // streets come up as the flight goes down into them (it thins and goes by 0.76)
+    const cityMist = MathUtils.smoothstep(t, 0.628, 0.66) * (1 - MathUtils.smoothstep(t, 0.7, 0.76));
+    if (cityMist > 0) {
+      const v = fogHeight.value;
+      v.set(
+        Math.max(v.x, cityMist), MathUtils.lerp(v.y, this.city.group.position.y, cityMist),
+        MathUtils.lerp(v.z, 10, cityMist), MathUtils.lerp(v.w, 4.2, cityMist),
+      );
+    }
     if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
     if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
@@ -682,7 +692,9 @@ export class Engine {
     // the rooms behind the close-up windows: daylight through the glass, and their lamps, which
     // are only worth seeing once the day has gone (by day a lit room is a faint warmth)
     windowLight.day.value = MathUtils.smoothstep(sunLevel, 0.4, 1.4);
-    windowLight.lamp.value = 0.3 + 0.7 * this.lampLevel;
+    // the city's glass comes on with the city (City.update)
+    const cityLit = t > 0.62 && t < 0.8 ? 0.25 + 0.75 * MathUtils.smoothstep(t, 0.64, 0.71) : 1;
+    windowLight.lamp.value = (0.3 + 0.7 * this.lampLevel) * cityLit;
   }
 
   /**
@@ -892,7 +904,8 @@ export class Engine {
     // is gone, and the overnight deck's lower band stops at x≈184, so between
     // 0.635 and 0.65 there was nothing under the flight at all. The city's own
     // ground sheet is what fills it — 30+ units out and deep in fog.
-    this.city.group.visible = t > 0.635 && t < 0.83;
+    // switched on inside the weather (the fog has closed in around the lens by then), not out in the open
+    this.city.group.visible = t > 0.622 && t < 0.83;
     this.copilot.group.visible = t > 0.75 && t < 0.9;
     this.landing.group.visible = t > 0.85;
     // The room is measurably off-screen from t=0.17 — an AABB-vs-frustum test
@@ -937,6 +950,13 @@ export class Engine {
     }
     // the district leaves the frame by thickening into the storm's weather, not by
     // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
+    // the sea-to-city handover happens inside weather: fog draws in around the lens while the sea is gone and the
+    // city is switched on, then opens as the city comes up, so nothing pops in at its far edge
+    const closing = MathUtils.smoothstep(t, 0.592, 0.615) * (1 - MathUtils.smoothstep(t, 0.632, 0.7));
+    if (closing > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 5, closing);
+      this.fog.far = MathUtils.lerp(this.fog.far, 42, closing);
+    }
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
     // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
     if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
@@ -976,8 +996,9 @@ export class Engine {
     // never under reduced motion or on the sub-page orbits
     const bolts =
       this.options.reducedMotion || this.idlePreset ? 0
-        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.55, 0.575));
-    const seaY = this.beacon.group.position.y + 0.15;
+        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.63, 0.665));
+    // the bolts land on the sea, then on the city's roofs as the flight crosses over to it
+    const seaY = MathUtils.lerp(this.beacon.group.position.y + 0.15, this.city.group.position.y, MathUtils.smoothstep(t, 0.6, 0.625));
     this.lightning.update(
       time, dt, bolts, this.camera, seaY, Math.max(this.camera.position.y + 55, seaY + 70),
       innerHeight * Math.min(devicePixelRatio, 2),

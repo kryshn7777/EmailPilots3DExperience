@@ -309,9 +309,12 @@ export class Clouds {
      * Faded up any earlier and the beam cone had cloud behind it, which turned
      * a soft volumetric shaft into a hard-edged teal slab.
      */
+    // it fills the gap between the sea (gone by 0.6) and the city (up by 0.64): thickest there, so the flight
+    // goes through a bank of cloud and out the other side into the lights, then it thins to the haze it was
+    const bank = MathUtils.smoothstep(t, 0.6, 0.62) * (1 - MathUtils.smoothstep(t, 0.642, 0.69));
     const night =
-      0.16 *
-      MathUtils.smoothstep(t, 0.604, 0.638) *
+      (0.16 + 0.2 * bank) *
+      MathUtils.smoothstep(t, 0.585, 0.622) *
       (1 - MathUtils.smoothstep(t, 0.8, 0.84));
     this.nightMaterial.uniforms.uOpacity!.value = night;
     this.night.visible = night > 0.002;
