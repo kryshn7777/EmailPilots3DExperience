@@ -20,6 +20,7 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import {
   BlendFunction,
   BloomEffect,
@@ -118,6 +119,8 @@ const ROUTE_PRESETS: Record<string, IdlePreset> = {
 /** half-width of the sun's shadow window around the plane (site units) and its map size */
 const SUN_SHADOW_HALF = 56;
 const SUN_SHADOW_MAP = 2048;
+/** the room (desk, panel, window frame) is left behind past this story time */
+const DESK_UNTIL = 0.2;
 
 export class Engine {
   private renderer: WebGLRenderer;
@@ -228,6 +231,9 @@ export class Engine {
     // keep it for dev, drop it in production builds
     if (import.meta.env.PROD) this.renderer.debug.checkShaderErrors = false;
     this.quality = detectQuality(gpuRendererString(this.renderer.getContext()));
+    if (this.quality.tier === 'low') this.resolution = 0.75;
+    // every model is meshopt-compressed: decode them on two workers instead of the render thread
+    MeshoptDecoder.useWorkers(2);
     // real-time shadows: the desk lamp in the study, the sun over the town (HIGH only)
     if (this.quality.tier === 'high') {
       this.renderer.shadowMap.enabled = true;
@@ -246,6 +252,9 @@ export class Engine {
       shadow.bias = -0.0006;
       shadow.normalBias = 0.05;
       shadow.radius = 2.5;
+      // refreshed every other frame from renderFrame (a whole-scene depth pass); the first frame draws it
+      shadow.autoUpdate = false;
+      shadow.needsUpdate = true;
     }
 
     if (this.quality.tier === 'high' && !UNLIT) this.envProbe = new ReflectionProbe(256);
@@ -370,22 +379,28 @@ export class Engine {
     // it costs a normal buffer plus a screen pass.
     const effects: Effect[] = [];
     if (this.quality.tier === 'high' && !UNLIT) {
-      const normalPass = new NormalPass(this.scene, this.camera);
-      this.composer.addPass(normalPass);
       // Light the frame can see bounces off what it lands on (SSGI, before the occlusion takes its
       // share back), and reflections are traced through the depth buffer (SSR, after it): the
       // screen-space versions of what Lumen and hardware ray tracing do, built on the same normal
       // buffer the ambient occlusion reads. ?nogi / ?nossr leave them out for an A/B.
       const params = new URLSearchParams(location.search);
-      // both read normals rebuilt from depth (post/viewSpace.ts), shared and made once a frame
+      // all three read normals rebuilt from depth (post/viewSpace.ts), shared and made once a frame:
+      // a separate normal pass would draw the whole scene a second time at full resolution
       this.depthNormals = new DepthNormals();
+      // (with the bounce left out nothing else asks for them, so the occlusion keeps its own pass)
+      let normalTexture = this.depthNormals.texture;
+      if (params.has('nogi') && params.has('nossr')) {
+        const normalPass = new NormalPass(this.scene, this.camera);
+        this.composer.addPass(normalPass);
+        normalTexture = normalPass.texture;
+      }
       if (!params.has('nogi')) {
         this.ssgi = new SSGIEffect(this.camera, this.depthNormals);
         effects.push(this.ssgi);
       }
       this.ssr = params.has('nossr') ? null : new SSREffect(this.camera, this.depthNormals);
       effects.push(
-        new SSAOEffect(this.camera, normalPass.texture, {
+        new SSAOEffect(this.camera, normalTexture, {
           blendFunction: BlendFunction.MULTIPLY,
           worldDistanceThreshold: 60,
           worldDistanceFalloff: 20,
@@ -435,10 +450,10 @@ export class Engine {
 
     if (UNLIT) this.flatten(this.scene);
 
-    // streamed-in content (city GLB, desk props) compiles off the scroll path
+    // streamed-in content (city GLB, desk props) is linked off the scroll path, with the rest of its chapter
     setCompiler((subtree) => {
       if (UNLIT) this.flatten(subtree);
-      void this.renderer.compileAsync(subtree, this.camera, this.scene).catch(() => {});
+      this.scheduleWarm();
     });
 
     if (new URLSearchParams(location.search).has('probe')) {
@@ -491,40 +506,160 @@ export class Engine {
       this.loop();
     }
 
-    // link every other chapter's programs in the background, in STORY ORDER,
-    // so a user scrolling the flight stays behind the compile wave. compile()
-    // gathers materials with a plain traverse (visibility ignored), and
-    // KHR_parallel_shader_compile keeps links off the render thread. Without
-    // this, the first frame entering each chapter stalls 0.6–2.2s.
-    const wave = [
-      this.rooftops.group,
-      this.clouds.sprites,
-      ...(this.clouds.volume ? [this.clouds.volume] : []),
-      this.envelopes.group,
-      this.storm.group,
-      this.lightning.group,
-      this.biplane.group,
-      this.birds.group,
-      this.beacon.group,
-      this.clouds.night,
-      this.city.group,
-      this.copilot.group,
-      this.landing.group,
-      this.burst.points,
-      this.confetti.points,
-    ];
-    void (async () => {
-      for (const subtree of wave) {
-        try {
-          await this.renderer.compileAsync(subtree, this.camera, this.scene);
-        } catch {
-          // a failed link must never break the wave
-        }
+    this.scheduleWarm();
+  }
+
+  private warmTimer = 0;
+  private warmRunning = false;
+  private warmAgain = false;
+
+  /** Coalesces the requests of a burst of late arrivals into one warm-up pass, run once they have settled. */
+  private scheduleWarm(): void {
+    clearTimeout(this.warmTimer);
+    this.warmTimer = window.setTimeout(async () => {
+      if (this.disposed) return;
+      if (this.warming) {
+        this.scheduleWarm(); // the first frame is still compiling the opening
+        return;
       }
-    })();
+      if (this.warmRunning) {
+        this.warmAgain = true;
+        return;
+      }
+      this.warmRunning = true;
+      do {
+        this.warmAgain = false;
+        await this.warmSeams();
+      } while (this.warmAgain);
+      this.warmRunning = false;
+    }, 400);
+  }
+
+  /**
+   * Link every chapter's shader programs before the scroll gets there.
+   *
+   * three keys each lit program on the number of lights that are visible, and that number changes at
+   * most chapter seams (the room's lamps, the town's streetlights, the storm, the city, the airfield),
+   * so entering a chapter used to link dozens of programs on the render thread: 59 at the town, 12 at
+   * the city. Warming them under the opening's lights (what this used to do) links variants nothing
+   * ever draws, and a compile against the screen is not the program the composer's buffer needs
+   * either (that one writes linear colour, with no tone map). So each distinct visibility state
+   * along the story is compiled once, in story order, with the composer's own target bound, and the
+   * scene shown to the compiler holding only what that state shows. KHR_parallel_shader_compile
+   * keeps the links off the render thread, and each state is one idle-sized step.
+   */
+  private async warmSeams(): Promise<void> {
+    const { scene, renderer, camera, plane, trail } = this;
+    const target = this.composer.inputBuffer;
+    // the probe's cube is prefiltered (PMREM) the first time a material asks for it, and the lit programs
+    // that read it are different programs from then on: so prefilter it now, before they are linked
+    if (this.envProbe) this.envProbe.texture.needsPMREMUpdate = true;
+    const seen = new Set<string>();
+    const shown = new Set<Object3D>();
+    const states: number[] = [];
+    for (let t = 0; t <= 1; t += 0.0025) {
+      this.applyVisibility(t);
+      for (const o of scene.children) if (o.visible) shown.add(o);
+      const key = scene.children.map((o) => (o.visible ? 1 : 0)).join('');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      states.push(t);
+    }
+    for (const t of states) {
+      if (this.disposed) return;
+      // the sub-step below is synchronous end to end, so no frame can interleave with the borrowed state
+      this.applyVisibility(t);
+      const planeShown = plane.group.visible;
+      const trailShown = trail.visible;
+      plane.group.visible = t > 0.01;
+      trail.visible = t > CONTRAIL_FROM;
+      const all = scene.children;
+      scene.children = all.filter((o) => o.visible);
+      renderer.setRenderTarget(target);
+      let linked: Promise<unknown>;
+      try {
+        linked = renderer.compileAsync(scene, camera);
+      } finally {
+        renderer.setRenderTarget(null);
+        scene.children = all;
+        plane.group.visible = planeShown;
+        trail.visible = trailShown;
+        this.applyVisibility(this.renderT);
+      }
+      try {
+        await linked;
+      } catch {
+        // a failed link must never break the wave
+      }
+    }
+    // what the chapters show only once an actor switches it on (bursts, confetti): unlit, so any state will do
+    for (const o of scene.children.filter((c) => !shown.has(c))) {
+      renderer.setRenderTarget(target);
+      const linked = renderer.compileAsync(o, camera, scene);
+      renderer.setRenderTarget(null);
+      await linked.catch(() => undefined);
+    }
+  }
+
+  /**
+   * Which chapter groups exist at story time `t`. One place, so the frame and the shader warm-up
+   * (warmSeams) agree on what is in view, and so on how many lights are.
+   */
+  private applyVisibility(t: number): void {
+    // Chapter actors only exist near their window. "Fully fogged" is NOT
+    // invisible — fog-colored silhouettes still read against the brighter
+    // sky gradient — so distant chapters are hidden outright.
+    // the raymarched slab hands weather over to the beacon's own sea/rain at
+    // CH6 — overlapping them stacked two fullscreen shaders on iGPUs
+    // weather starts ABOVE the city, not over it: the deck used to open at
+    // 0.14 while the flight was still crossing rooftops
+    // the deck opens DURING the climb now, so the first puffs arrive while the
+    // nose is still coming up out of the city and the camera flies into them
+    // (both cloud decks and the raymarched slab gate themselves — Clouds.update
+    // ramps their opacity/coverage on t so nothing pops on or off)
+    // storm rain is fully faded by 0.52 (stormness ends there) — the group
+    // lingering to 0.58 double-paid rain over the beacon's local shower
+    this.storm.group.visible = t > 0.3 && t < 0.52;
+    this.biplane.group.visible = t > 0.32 && t < 0.49;
+    this.birds.group.visible = t > 0.055 && t < 0.3;
+    // ends with the sea reveal (0.605) — the extra tail let the camera catch
+    // radar rings and ship lights hanging in the no-fly sky during the bend
+    // from 0.4: the sea comes up under the storm before the lighthouse forms out of the mist
+    this.beacon.group.visible = t > 0.4 && t < 0.605;
+    // (the overnight deck gates itself — Clouds.update fades it in on t)
+    // city arrives while the camera is still short of the first lots (it
+    // crosses x≈170 near t 0.66) so it builds at a distance instead of
+    // materializing around the lens.
+    // Earlier than it used to be: the no-fly map that used to floor this gap
+    // is gone, and the overnight deck's lower band stops at x≈184, so between
+    // 0.635 and 0.65 there was nothing under the flight at all. The city's own
+    // ground sheet is what fills it — 30+ units out and deep in fog.
+    // switched on inside the weather (the fog has closed in around the lens by then), not out in the open
+    this.city.group.visible = t > 0.622 && t < 0.83;
+    this.copilot.group.visible = t > 0.75 && t < 0.9;
+    // up through the weather as the flight comes down out of it (the fog and the deck cover the arrival)
+    this.landing.group.visible = t > 0.83;
+    // The room is measurably off-screen from t=0.17 — an AABB-vs-frustum test
+    // on the desk, the panel and the window frame returns false at 0.17, 0.19,
+    // 0.21, 0.24, 0.28 and 0.31 — but it was kept "visible" until 0.32.
+    //
+    // The saving is CPU, not GPU: three already frustum-culls the geometry, so
+    // draw calls barely move (21 to 23 across the old boundary). What stops is
+    // the per-frame work that visibility gates — the 250-mote dust loop below,
+    // and the matrix/traverse cost of the room's object tree — for the ~15% of
+    // the story between leaving the window and the old cut. 0.20 keeps a
+    // margin past the window exit.
+    const nearDesk = t < DESK_UNTIL;
+    this.desk.group.visible = nearDesk;
+    this.panel.group.visible = nearDesk;
+    this.windowFrame.group.visible = nearDesk;
+    // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
+    // the cloud floor as floating slabs
+    this.rooftops.group.visible = t > 0.06 && t < 0.335;
   }
 
   private warming = true;
+  private frameNo = 0;
 
   private hslA = { h: 0, s: 0, l: 0 };
   private hslB = { h: 0, s: 0, l: 0 };
@@ -674,6 +809,16 @@ export class Engine {
         p.ambient.copy(this.fog.color).lerp(this.sky.zenith, 0.4).multiplyScalar(mix('ambient'));
       }
     }
+    // arriving over the city: a sea of mist stands on its streets, so the skyline rises out of it and the
+    // streets come up as the flight goes down into them (it thins and goes by 0.76)
+    const cityMist = MathUtils.smoothstep(t, 0.628, 0.66) * (1 - MathUtils.smoothstep(t, 0.7, 0.76));
+    if (cityMist > 0) {
+      const v = fogHeight.value;
+      v.set(
+        Math.max(v.x, cityMist), MathUtils.lerp(v.y, this.city.group.position.y, cityMist),
+        MathUtils.lerp(v.z, 10, cityMist), MathUtils.lerp(v.w, 4.2, cityMist),
+      );
+    }
     if (this.ssr) this.ssr.wet = num((g) => g.wet ?? 0.25);
     if (this.ssgi) this.ssgi.intensity = num((g) => g.bounce ?? 0.8);
     this.scene.environmentIntensity = num((g) => g.envIntensity);
@@ -682,7 +827,9 @@ export class Engine {
     // the rooms behind the close-up windows: daylight through the glass, and their lamps, which
     // are only worth seeing once the day has gone (by day a lit room is a faint warmth)
     windowLight.day.value = MathUtils.smoothstep(sunLevel, 0.4, 1.4);
-    windowLight.lamp.value = 0.3 + 0.7 * this.lampLevel;
+    // the city's glass comes on with the city (City.update)
+    const cityLit = t > 0.62 && t < 0.8 ? 0.25 + 0.75 * MathUtils.smoothstep(t, 0.64, 0.71) : 1;
+    windowLight.lamp.value = (0.3 + 0.7 * this.lampLevel) * cityLit;
   }
 
   /**
@@ -864,51 +1011,8 @@ export class Engine {
       this.sunScreenDir.set(this.tmpV.x, this.tmpV.y).normalize();
     }
 
-    // Chapter actors only exist near their window. "Fully fogged" is NOT
-    // invisible — fog-colored silhouettes still read against the brighter
-    // sky gradient — so distant chapters are hidden outright.
-    // the raymarched slab hands weather over to the beacon's own sea/rain at
-    // CH6 — overlapping them stacked two fullscreen shaders on iGPUs
-    // weather starts ABOVE the city, not over it: the deck used to open at
-    // 0.14 while the flight was still crossing rooftops
-    // the deck opens DURING the climb now, so the first puffs arrive while the
-    // nose is still coming up out of the city and the camera flies into them
-    // (both cloud decks and the raymarched slab gate themselves — Clouds.update
-    // ramps their opacity/coverage on t so nothing pops on or off)
-    // storm rain is fully faded by 0.52 (stormness ends there) — the group
-    // lingering to 0.58 double-paid rain over the beacon's local shower
-    this.storm.group.visible = t > 0.3 && t < 0.52;
-    this.biplane.group.visible = t > 0.32 && t < 0.49;
-    this.birds.group.visible = t > 0.055 && t < 0.3;
-    // ends with the sea reveal (0.605) — the extra tail let the camera catch
-    // radar rings and ship lights hanging in the no-fly sky during the bend
-    // from 0.4: the sea comes up under the storm before the lighthouse forms out of the mist
-    this.beacon.group.visible = t > 0.4 && t < 0.605;
-    // (the overnight deck gates itself — Clouds.update fades it in on t)
-    // city arrives while the camera is still short of the first lots (it
-    // crosses x≈170 near t 0.66) so it builds at a distance instead of
-    // materializing around the lens.
-    // Earlier than it used to be: the no-fly map that used to floor this gap
-    // is gone, and the overnight deck's lower band stops at x≈184, so between
-    // 0.635 and 0.65 there was nothing under the flight at all. The city's own
-    // ground sheet is what fills it — 30+ units out and deep in fog.
-    this.city.group.visible = t > 0.635 && t < 0.83;
-    this.copilot.group.visible = t > 0.75 && t < 0.9;
-    this.landing.group.visible = t > 0.85;
-    // The room is measurably off-screen from t=0.17 — an AABB-vs-frustum test
-    // on the desk, the panel and the window frame returns false at 0.17, 0.19,
-    // 0.21, 0.24, 0.28 and 0.31 — but it was kept "visible" until 0.32.
-    //
-    // The saving is CPU, not GPU: three already frustum-culls the geometry, so
-    // draw calls barely move (21 to 23 across the old boundary). What stops is
-    // the per-frame work that visibility gates — the 250-mote dust loop below,
-    // and the matrix/traverse cost of the room's object tree — for the ~15% of
-    // the story between leaving the window and the old cut. 0.20 keeps a
-    // margin past the window exit.
-    const nearDesk = t < 0.2;
-    this.desk.group.visible = nearDesk;
-    this.panel.group.visible = nearDesk;
-    this.windowFrame.group.visible = nearDesk;
+    this.applyVisibility(t);
+    const nearDesk = t < DESK_UNTIL;
     /**
      * Climb-out: the deck closes underneath you.
      *
@@ -937,6 +1041,20 @@ export class Engine {
     }
     // the district leaves the frame by thickening into the storm's weather, not by
     // vanishing: fog closes over it between 0.30 and 0.335, then it is cut
+    // the sea-to-city handover happens inside weather: fog draws in around the lens while the sea is gone and the
+    // city is switched on, then opens as the city comes up, so nothing pops in at its far edge
+    const closing = MathUtils.smoothstep(t, 0.592, 0.615) * (1 - MathUtils.smoothstep(t, 0.632, 0.7));
+    if (closing > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 5, closing);
+      this.fog.far = MathUtils.lerp(this.fog.far, 42, closing);
+    }
+    // the descent to the airfield goes through cloud too: fog closes while the starfield is left behind,
+    // the airfield is switched on inside it, and it opens as the runway lights come up
+    const descent = MathUtils.smoothstep(t, 0.815, 0.838) * (1 - MathUtils.smoothstep(t, 0.852, 0.896));
+    if (descent > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 4, descent);
+      this.fog.far = MathUtils.lerp(this.fog.far, 62, descent);
+    }
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
     // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
     if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
@@ -944,9 +1062,6 @@ export class Engine {
       this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
       this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
     }
-    // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
-    // the cloud floor as floating slabs
-    this.rooftops.group.visible = t > 0.06 && t < 0.335;
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
@@ -976,8 +1091,11 @@ export class Engine {
     // never under reduced motion or on the sub-page orbits
     const bolts =
       this.options.reducedMotion || this.idlePreset ? 0
-        : MathUtils.smoothstep(t, 0.4, 0.43) * (1 - MathUtils.smoothstep(t, 0.55, 0.575));
-    const seaY = this.beacon.group.position.y + 0.15;
+        : MathUtils.smoothstep(t, 0.345, 0.375) * (1 - MathUtils.smoothstep(t, 0.63, 0.665));
+    // the bolts land on the sea, then on the city's roofs as the flight crosses over to it
+    // (and the storm's first strikes, where the town fades into the weather, land on the town's ground)
+    const stormGround = MathUtils.lerp(ROOFTOP_BASE_Y, this.beacon.group.position.y + 0.15, MathUtils.smoothstep(t, 0.39, 0.42));
+    const seaY = MathUtils.lerp(stormGround, this.city.group.position.y, MathUtils.smoothstep(t, 0.6, 0.625));
     this.lightning.update(
       time, dt, bolts, this.camera, seaY, Math.max(this.camera.position.y + 55, seaY + 70),
       innerHeight * Math.min(devicePixelRatio, 2),
@@ -1031,6 +1149,10 @@ export class Engine {
     }
     this.airTrail.update(t, time, this.path, this.plane.group.position);
 
+    // The sun's shadow map and the reflection probe are whole-scene passes, and neither shows a change
+    // from one frame to the next: shadows trail the plane by one frame, reflections refresh at half rate.
+    const refresh = this.options.reducedMotion || (this.frameNo++ & 1) === 0;
+    if (this.sun.castShadow) this.sun.shadow.needsUpdate = refresh;
     this.beacon.renderReflection(this.renderer, this.scene, this.camera);
     this.depthNormals?.invalidate();
     this.composer.render();
@@ -1040,7 +1162,7 @@ export class Engine {
     // probe's own renders do not redraw them).
     const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
       : t > 0.46 && t < 0.6 ? this.beacon.group.position.y + 1.5 : null;
-    this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
+    if (refresh) this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
 
     if (this.warming) return; // silent warm-up frames: no chrome events
     if (!this.firstFrameDone) {
@@ -1116,30 +1238,38 @@ export class Engine {
    * governor moves between 0.5 and 1. A phone that holds ~60 fps climbs to full density; one that
    * cannot backs off a step at a time instead of stuttering at native resolution.
    */
-  private resolution = 0.75;
+  private resolution = 1;
+  private stepDownAt = 0;
   private frameEma = 16;
   private govAt = 0;
 
   private govern(dtMs: number, now: number): void {
-    if (this.quality.tier !== 'low' || this.probe || this.options.reducedMotion || dtMs > 250) return;
-    this.frameEma += (dtMs - this.frameEma) * 0.06;
+    if (this.probe || this.options.reducedMotion || dtMs > 250) return;
+    const high = this.quality.tier === 'high';
+    // a compile or upload hitch is not a slow scene: count it as at most a 50 ms frame
+    this.frameEma += (Math.min(dtMs, 50) - this.frameEma) * 0.06;
     if (now - this.govAt < 1400 || now - this.startTime < 2500) return;
     this.govAt = now;
     let next = this.resolution;
-    if (this.frameEma > 27 && next > 0.5) next = Math.max(0.5, next * 0.85);
-    else if (this.frameEma < 17.5 && next < 1) next = Math.min(1, next * 1.1);
+    // a step changes the pixel count by its square: 0.9 takes a 22 ms frame to about 18, and steps
+    // up are held off for a while after a step down so a heavy chapter does not make it flutter
+    const floor = high ? 0.6 : 0.5;
+    if (this.frameEma > (high ? 21 : 27) && next > floor) {
+      next = Math.max(floor, next * (high ? 0.9 : 0.85));
+      this.stepDownAt = now;
+    } else if (this.frameEma < 17.5 && next < 1 && (!high || now - this.stepDownAt > 8000)) {
+      next = Math.min(1, next * 1.1);
+    }
     if (Math.abs(next - this.resolution) > 0.01) {
       this.resolution = next;
       this.resize();
     }
   }
-
   private probe = new URLSearchParams(location.search).has('probe');
 
   private resize = (): void => {
     const dpr =
-      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale *
-      (this.quality.tier === 'low' ? this.resolution : 1);
+      Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale * this.resolution;
     const { clientWidth, clientHeight } = this.canvas;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
@@ -1158,6 +1288,7 @@ export class Engine {
 
   dispose(): void {
     this.disposed = true;
+    clearTimeout(this.warmTimer);
     cancelAnimationFrame(this.rafId);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost);

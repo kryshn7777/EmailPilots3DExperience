@@ -155,8 +155,10 @@ export class SSGIEffect extends Effect {
 
   override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget): void {
     this.uniforms.get('uIntensity')!.value = this.intensity;
-    if (!this.depth || this.intensity < 0.01) return;
+    if (!this.depth) return;
+    // built even while the bounce is off: the ambient occlusion, which runs next, reads the same normals
     this.normals.update(renderer, this.depth, this.camera);
+    if (this.intensity < 0.01) return;
     for (const p of [this.gather, this.blur]) {
       p.material.uniforms.uDepth!.value = this.depth;
       bindCamera(p.material, this.camera);

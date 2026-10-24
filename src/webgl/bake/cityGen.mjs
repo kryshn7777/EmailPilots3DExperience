@@ -114,7 +114,12 @@ export function lodScale(mod) {
  * height the downtown read as a row of slim boxes from the canyon, worst on a portrait phone.
  * Towers rise instead: KitCity scales them by `rise` in y alone (taller floors, same plot).
  */
-export const TOWER_RISE = 1.45;
+export const TOWER_RISE = 2.2;
+/**
+ * And the lower blocks, which stood a person's height too small: at their modelled height a pedestrian was
+ * two storeys tall beside them (a storey is 0.4 units on the kit, a person 0.76 in this district's scale).
+ */
+export const BLOCK_RISE = 1.8;
 /** nearest a building face may stand to the canyon's centre line: the road's half width plus a pavement */
 const CANYON_CLEAR = 2.75;
 /** and from a cross street's centre line: half its width plus a pavement */
@@ -178,7 +183,7 @@ export function cityRecipes(modules, canyonZ = 0) {
       const gx = Math.abs(x - sx) - reachX;
       if (gx < CROSS_CLEAR) x += Math.sign(x - sx || 1) * (CROSS_CLEAR - gx);
     }
-    const rise = /sky/i.test(mod.id) ? TOWER_RISE : 1;
+    const rise = /sky/i.test(mod.id) ? TOWER_RISE : BLOCK_RISE;
     lots.push({
       x, z, w, d, h: mod.height * s * ls * rise, yaw, tint, moduleId: mod.id,
       ...(rise !== 1 ? { rise } : {}),

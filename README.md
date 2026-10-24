@@ -72,6 +72,29 @@ sun-visibility alpha.
 `__engine.ssr.debug = 1` shows the reflections alone (2 the reflectivity, 3 how far each ray went),
 `__engine.ssgi.debug = 1` the bounce light and `__engine.volume.debug = 1` the light scattered by the air.
 
+## Transitions
+
+Chapters hand over inside weather, not by cutting: whatever leaves is veiled before it goes and whatever
+arrives forms out of the veil (all keyed to story-t, so a scrub replays them exactly).
+
+| seam (t) | what happens |
+| :-- | :-- |
+| formation to storm (0.335 to 0.38) | the town is swallowed by the closing fog, and the storm's first bolts strike as it goes |
+| storm to lighthouse (0.40 to 0.5) | the sea rises under the storm first, then the lamp glows out of the murk, then the tower and islet form out of the mist; the sweep lights the ship |
+| lighthouse to city (0.59 to 0.71) | fog draws in as the sea goes and the night cloud deck thickens into a bank across the gap; the city is switched on inside it and powers up in a wave (street lamps first, then windows, glass and neon) while a mist stands on its streets and thins as the flight dives in; the lightning carries across and lands on the roofs |
+| copilot to the airfield (0.82 to 0.9) | the descent goes through cloud: fog closes while the starfield is left behind, the airfield is switched on inside it, and the edge lights, the threshold bars and PAPI, then the approach rabbit come up as the runway appears |
+
+## Loading and frame cost
+
+| What | How |
+|---|---|
+| Chapter seams | `Engine.warmSeams` links each distinct visibility state's lit programs (three keys them on the visible light count) against the composer's own buffer, in story order, off the render thread. Town seam: 59 programs linked on the spot before, about 10 now (the rest are shadow-depth variants) |
+| Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
+| Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
+| Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
+| Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
+| Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
+
 ## Camera direction and the lens
 
 The camera is directed per chapter and per beat, all keyed to story-t so a scrub always lands on the same frame.
