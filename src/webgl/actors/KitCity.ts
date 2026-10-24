@@ -45,6 +45,11 @@ export interface KitRingSet {
    * towers on the lots the canyon actually brushes past.
    */
   hero?: number[];
+  /**
+   * trees the camera passes within a few metres of: they swap to their `ultra` module (~50k triangles, HIGH
+   * only), whichever ring they are in. A subset of `near` in practice.
+   */
+  ultra?: number[];
   /** lots inside `mid` that swap to their `detail` module (trees; HIGH and LOW) */
   detail?: number[];
   /** lots inside `mid`, beyond `detail`, that swap to their `lite` module (trees; HIGH and LOW) */
@@ -56,8 +61,11 @@ export interface KitModule {
   sheet?: string;
   /** set on a hero/detail module: the lean module it replaces */
   lean?: string;
-  /** 'hero' replaces `lean` in the near ring (HIGH), 'detail' in the detail ring, 'lite' in the lite ring */
-  lod?: 'hero' | 'detail' | 'lite';
+  /**
+   * 'ultra' replaces `lean` in the ultra ring (HIGH), 'hero' in the near ring (HIGH), 'detail' in the
+   * detail ring, 'lite' in the lite ring
+   */
+  lod?: 'ultra' | 'hero' | 'detail' | 'lite';
   /** a house's main roofing colour (sRGB hex), what the baked roof pattern is read against */
   roof?: string;
 }
@@ -253,8 +261,10 @@ export class KitCity {
       metalness: 1,
       ...(maps.emissive ? { emissive: '#ffffff', emissiveMap: maps.emissive, emissiveIntensity: glow } : {}),
       ...(maps.normal ? { normalMap: maps.normal } : {}),
-      // leaf cards are cut-outs: no blending, so no sorting and no wrong draw order
-      ...(maps.alpha ? { alphaTest: 0.42 } : {}),
+      // leaf cards are cut-outs: no blending, so no sorting and no wrong draw order. The trees also
+      // carry the light that reaches each vertex as a vertex colour (blender/bld/hero_trees.py):
+      // the heart of a crown dark, its sunlit skin bright, each cluster of leaves its own tone
+      ...(maps.alpha ? { alphaTest: 0.42, vertexColors: true } : {}),
     });
     if (cloudEnv) {
       if (KitCity.environment) {
@@ -280,7 +290,7 @@ export class KitCity {
    * higher up, in world space so a street of trees sways together, a gust travelling across the
    * town), the cards flutter on top of that, and sunlight coming from behind a leaf glows through
    * it the way a canopy lights up against a low sun. Bark is the bottom half of the sheet
-   * (atlas.py HERO_TREES), cards the top half, so the UV says which is which.
+   * (atlas.py HERO_TREES), cards, leaves and needles the top half, so the UV says which is which.
    */
   private static foliage(material: MeshStandardMaterial): void {
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -369,15 +379,22 @@ export class KitCity {
     // can afford it; everything else, and every phone, gets the lean module.
     // the hero tier is for HIGH; detail and lite trees serve both tiers (phones read the half-size
     // atlases), so a phone's trees are real branches and leaves, not 40-triangle blobs
-    const swaps = { hero: new Map<string, string>(), detail: new Map<string, string>(), lite: new Map<string, string>() };
-    for (const m of modules) if (m.lean && (tier === 'high' || m.lod !== 'hero')) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
+    const swaps = {
+      ultra: new Map<string, string>(), hero: new Map<string, string>(),
+      detail: new Map<string, string>(), lite: new Map<string, string>(),
+    };
+    for (const m of modules) {
+      if (m.lean && (tier === 'high' || (m.lod !== 'hero' && m.lod !== 'ultra'))) swaps[m.lod ?? 'hero'].set(m.lean, m.id);
+    }
+    const ultraSet = new Set(rings.ultra ?? []);
     const nearSet = new Set(rings.hero ?? rings.near);
     const detailSet = new Set(rings.detail ?? []);
     const liteSet = new Set(rings.lite ?? []);
     const byModule = new Map<string, number[]>();
     for (const i of modelled) {
       const lean = lots[i]!.moduleId;
-      const id = nearSet.has(i) ? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
+      const id = ultraSet.has(i) ? swaps.ultra.get(lean) ?? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
+        : nearSet.has(i) ? swaps.hero.get(lean) ?? swaps.detail.get(lean) ?? lean
         : detailSet.has(i) ? swaps.detail.get(lean) ?? lean
         : liteSet.has(i) ? swaps.lite.get(lean) ?? lean : lean;
       const arr = byModule.get(id) ?? [];

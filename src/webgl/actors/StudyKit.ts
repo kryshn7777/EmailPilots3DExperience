@@ -91,7 +91,10 @@ export class Kit {
   /** one mesh per material, added to `parent`; the merged geometry goes to `owned` for disposal */
   flush(parent: Group, owned: { dispose(): void }[]): Mesh[] {
     const meshes: Mesh[] = [];
+    const stats: Record<string, number> = {};
     for (const [material, parts] of this.buckets) {
+      const tris = parts.reduce((n, g) => n + g.attributes.position!.count / 3, 0);
+      stats[(material as { name?: string }).name || `${material.type}#${material.uuid.slice(0, 6)}`] = tris;
       const merged = parts.length === 1 ? parts[0]! : mergeGeometries(parts, false);
       if (parts.length > 1) parts.forEach((g) => g.dispose());
       if (!merged) continue;
@@ -101,6 +104,7 @@ export class Kit {
       meshes.push(mesh);
     }
     this.buckets.clear();
+    if (typeof location !== 'undefined' && location.search.includes('probe')) (window as unknown as { __studyStats?: unknown }).__studyStats = stats;
     return meshes;
   }
 }
@@ -185,7 +189,7 @@ class HelixCurve extends Curve<Vector3> {
   private axis: Vector3;
   private u = new Vector3();
   private v = new Vector3();
-  constructor(private a: Vector3, private b: Vector3, private r: number, private turns: number) {
+  constructor(private a: Vector3, b: Vector3, private r: number, private turns: number) {
     super();
     this.axis = b.clone().sub(a);
     const ref = Math.abs(this.axis.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
@@ -211,6 +215,8 @@ export function helix(a: Vector3, b: Vector3, r: number, turns: number, wire: nu
  */
 export function skipInNormalPass(o: Object3D): void {
   o.onBeforeRender = (_r, scene, _c, geometry) => {
+    const w = window as unknown as { __skips?: number; __draws?: number };
+    if (scene.overrideMaterial) w.__skips = (w.__skips ?? 0) + 1; else w.__draws = (w.__draws ?? 0) + 1;
     geometry.setDrawRange(0, scene.overrideMaterial ? 0 : Infinity);
   };
 }

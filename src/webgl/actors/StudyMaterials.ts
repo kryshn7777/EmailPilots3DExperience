@@ -109,6 +109,8 @@ export function studyMaterials(tier: StudyTier, own: Dispose[]) {
   const bulb = keep(new MeshStandardMaterial({ color: '#fff1d6', emissive: '#ffd49a', emissiveIntensity: 1.6 }));
   const paper = keep(new MeshStandardMaterial({ color: '#ece5d2', roughness: 0.9 }));
 
+  const named = { walnut, walnutLacquer, shelfWood, leather, chairLeather, brass, brassAged, steel, darkMetal, black, rubber, ink, paint, gloss, plaster, ceiling, floor, rug, curtain, books, printed, glass, enamel, enamelInner, bulb, paper };
+  for (const [k, v] of Object.entries(named)) v.name = k;
   return {
     high, walnut, walnutLacquer, shelfWood, leather, chairLeather, brass, brassAged, steel, darkMetal, black, rubber, ink,
     paint, gloss, plaster, ceiling, floor, rug, curtain, books, printed, glass, enamel, enamelInner, bulb, paper,

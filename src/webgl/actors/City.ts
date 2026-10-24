@@ -44,6 +44,9 @@ import type { Quality } from '../quality';
 
 const WINDOW_AMBER = new Color('#ffc96b');
 const DELIVERIES = 5;
+/** how close (world units) a street tree stands to the dive for the ~50k-triangle model, and for the ~15k one (HIGH) */
+const CITY_TREE_ULTRA = 4.5;
+const CITY_TREE_NEAR = 8;
 
 interface Delivery {
   tStart: number;
@@ -620,8 +623,9 @@ export class City {
 
   /**
    * The street trees are the homes set's own trees (branching trunks, bark, leaf cards that sway
-   * in the wind), not stand-ins: the ones the dive brushes past get the close-up model on HIGH,
-   * the rest the mid-detail one, which phones can afford as well. No pines on a city street.
+   * in the wind), not stand-ins: the ones the dive brushes past get the ~50k-triangle close-up
+   * model on HIGH, the next ring the ~15k hero one, the rest the mid-detail one, which phones can
+   * afford as well. No pines on a city street.
    */
   private async buildTrees(spots: CityStreet['trees'], path: FlightPath, quality: Quality): Promise<void> {
     if (!spots.length) return;
@@ -643,14 +647,18 @@ export class City {
     const line: Vector3[] = [];
     for (let t = 0.64; t <= 0.8; t += 0.002) line.push(path.storyPoint(t).clone());
     const at = new Vector3();
+    const ultra: number[] = [];
     const near: number[] = [];
     const rest: number[] = [];
+    const high = quality.tier === 'high';
     lots.forEach((lot, i) => {
       at.set(lot.x + this.group.position.x, lot.h * 0.6, lot.z + this.group.position.z);
-      const close = quality.tier === 'high' && line.some((c) => c.distanceToSquared(at) < 7 * 7);
-      (close ? near : rest).push(i);
+      let d2 = Infinity;
+      for (const c of line) d2 = Math.min(d2, c.distanceToSquared(at));
+      if (high && d2 < CITY_TREE_ULTRA * CITY_TREE_ULTRA) ultra.push(i);
+      (high && d2 < CITY_TREE_NEAR * CITY_TREE_NEAR ? near : rest).push(i);
     });
-    const rings: KitRingSet = { near, mid: rest, far: [], detail: rest };
+    const rings: KitRingSet = { near, mid: rest, far: [], detail: rest, ultra };
     this.trees = new KitCity(lots, rings, manifest, { tier: quality.tier, glow: 0, cloudEnv: false });
     this.group.add(this.trees.group);
   }

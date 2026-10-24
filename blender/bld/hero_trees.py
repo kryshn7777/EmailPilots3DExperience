@@ -99,7 +99,7 @@ ULTRA = {
     'pine': dict(
         whorl=(1.7, 0.36), branches=7, reach=2.7, trunk_n=18, trunk_sides=22,
         roots=6, root_amp=0.9, root_h=1.1, knots=14, stubs=7, lean=1.5,
-        cards_per_branch=5, size=(0.7, 1.1), skirt=7, sub=5, tufts=2, needles=7),
+        cards_per_branch=8, size=(0.85, 1.3), skirt=14, sub=5, tufts=2, needles=6),
 }
 
 # 'detail' is the tier for trees the camera sees clearly but not up close: the same
@@ -245,15 +245,17 @@ class TreeBuilder:
             t = (b - a).normalized()
             N = (N - t * N.dot(t)).normalized()
             B = t.cross(N)
-            rings.append((pts[i], N.copy(), B.copy(), radii[i], s, self.bark_light(pts[i])))
+            # the u span of a ring: the whole texture once round at constant density, narrower on a twig;
+            # taken per ring, so the two quads that meet at it agree and the bark runs on unbroken
+            rings.append((pts[i], N.copy(), B.copy(), radii[i], s, self.bark_light(pts[i]),
+                          min(1.0, max(0.18, 2 * math.pi * radii[i] * texel / rect[2]))))
             if i + 1 < n:
                 s += (pts[i + 1] - pts[i]).length
         # keep V off the strip's very edge: it is a different tile beyond it
         vv = lambda v: 0.004 + 0.992 * v
         for i in range(n - 1):
-            ca, na, ba, ra, sa, la = rings[i]
-            cb, nb, bb, rb, sb, lb = rings[i + 1]
-            umax = min(1.0, max(0.18, 2 * math.pi * (ra + rb) / 2 * texel / rect[2]))
+            ca, na, ba, ra, sa, la, ua = rings[i]
+            cb, nb, bb, rb, sb, lb, ub = rings[i + 1]
             va = v0 + sa * texel / rect[3]
             vb = v0 + sb * texel / rect[3]
             ma = [mod(i, 2 * math.pi * j / sides) if mod else 1.0 for j in range(sides + 1)]
@@ -267,9 +269,8 @@ class TreeBuilder:
                 quad = [ca + d0 * ra * ma[j], ca + d1 * ra * ma[j + 1],
                         cb + e1 * rb * mb[j + 1], cb + e0 * rb * mb[j]]
                 nrm = [d0, d1, e1, e0]
-                u0, u1 = j / sides * umax, (j + 1) / sides * umax
-                uvs = [self._atlas_uv(rect, u0, vv(va)), self._atlas_uv(rect, u1, vv(va)),
-                       self._atlas_uv(rect, u1, vv(vb)), self._atlas_uv(rect, u0, vv(vb))]
+                uvs = [self._atlas_uv(rect, j / sides * ua, vv(va)), self._atlas_uv(rect, (j + 1) / sides * ua, vv(va)),
+                       self._atlas_uv(rect, (j + 1) / sides * ub, vv(vb)), self._atlas_uv(rect, j / sides * ub, vv(vb))]
                 cols = [(la,) * 3, (la,) * 3, (lb,) * 3, (lb,) * 3]
                 geo = (quad[1] - quad[0]).cross(quad[3] - quad[0])
                 if geo.dot(d0 + d1) < 0:
@@ -277,7 +278,7 @@ class TreeBuilder:
                 self._face(quad, uvs, nrm, cols, cat)
         if closed:
             # the cut end of a thick bough: a fan of triangles in the dark of the heartwood
-            c, nn, bb, r, _, lt = rings[-1]
+            c, nn, bb, r, _, lt, _u = rings[-1]
             t = (pts[-1] - pts[-2]).normalized()
             uv = self._atlas_uv(rect, 0.5, 0.5)
             ring = [c + (math.cos(2 * math.pi * j / sides) * nn + math.sin(2 * math.pi * j / sides) * bb) * r
@@ -426,7 +427,7 @@ class TreeBuilder:
                 d = (d + j + Z * P['up'] * ks).normalized()
                 d = (d * 0.92 + self.lean * 0.08).normalized()
             else:
-                d = (d + j + Z * P['up'] * ks + bend_ax * (bend * ks * 1.2) - Z * (droop * ks)).normalized()
+                d = (d + j + Z * P['up'] * ks + bend_ax * (bend / (n - 1)) - Z * (droop / (n - 1))).normalized()
             pts.append(pts[-1] + d * step)
             dirs.append(d)
         if depth >= 2 and self.crown is not None:
@@ -781,7 +782,7 @@ class TreeBuilder:
                 n_geo = (out * 0.5 + Vector((0, 0, 0.85))).normalized()
                 light_n = (out * 0.55 + Vector((0, 0, 0.75))).normalized()
                 tone = self.pick_tone()
-                self.card_along(pos, out, n_geo, light_n, rng.uniform(1.5, 2.2) * (0.6 + 0.6 * (1 - frac)) * (0.7 if ultra else 1.0),
+                self.card_along(pos, out, n_geo, light_n, rng.uniform(1.5, 2.2) * (0.6 + 0.6 * (1 - frac)) * (0.85 if ultra else 1.0),
                                 rng.randrange(2), rng.random() < 0.5, self.occ(pos) * tone[0], tone[1])
             z += P['whorl'][1]
             k += 1
