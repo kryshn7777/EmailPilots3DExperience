@@ -18,6 +18,8 @@ python blender/make_ocean.py                     # tileable wave normal and foam
 python blender/make_airliner.py                  # the landing chapter's A320neo-class jet, both tiers, and its livery maps
                                                  # (--render DIR: Cycles previews); then npm run compress:models
 python blender/make_biplane.py && npm run compress:models   # the storm chapter's banner-tow biplane and its fabric normal map
+python blender/make_ship.py && npm run compress:models      # the lighthouse chapter's 181 m container ship, in metres (ship.glb, and ship-lo.glb for phones)
+                                                 # (--render DIR: Cycles previews, VIEWS=side,bridge,... picks them)
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`

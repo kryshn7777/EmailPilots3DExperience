@@ -71,9 +71,10 @@ const TOWER_SCALE = 1.55;
  * The freighter's scale. The tower's lantern is 12.2 model units up and the island is scaled by
  * TOWER_SCALE, so it sits 18.9 units above the sea; a stone light of this style carries its lamp about
  * 38 m up, which makes the world 0.5 unit to the metre. The ship (blender/make_ship.py) is modelled in
- * metres, a 181 m, 27 m-beam, 1,800-TEU feeder with its bridge deck 27 m up and its mast 44 m up, so
- * scaling it by exactly this puts it in true proportion to the tower: 91 units long, 4.8 times the
- * lighthouse's height, its bridge level with the lantern gallery.
+ * metres: a 182 m, 27 m-beam, 1,800-TEU feeder, its main deck 6.5 m above the water, its bridge deck
+ * 27 m up, its funnel top 38 m and its mast head 43 m. Scaled by exactly this it is in true proportion
+ * to the tower: 91 units long, 4.8 times the lantern's height, its funnel level with the lamp and its
+ * mast a little above it.
  */
 const SHIP_SCALE = 0.5;
 /** the keel-level transom to the stem, and the raked tops, in metres: for the wake and the track */
@@ -85,22 +86,25 @@ const SHIP_HALF_LENGTH = 90;
  */
 const SHIP_Y = 0.7;
 /**
- * Where the ship steams, in the island's frame: out to sea, an arc about the islet at about 140 units
- * (280 m), passing from the east of it round to the north-west as the story turns. A feeder this big
+ * Where the ship steams, in the island's frame: out to sea, an arc about the islet at about 120 units
+ * (240 m), passing from the east of it round to the north-west as the story turns. A feeder this big
  * needs room (the flight camera is within 40 units of the tower, and a hull 91 units long would fill
  * the lens anywhere nearer) and this keeps it behind the light from both cameras: the approach looks
- * east along the shore, then the delivery shot swings to look north across the sea. The keys are
- * [story t, bearing in degrees from +x toward +z, radius in units]; the ship's bearing is a monotone
- * cubic through them, its heading the tangent.
+ * east along the shore, then the delivery shot swings to look north across the sea, so the ship swings
+ * round with it and then eases to a crawl to the right of the tower, where that shot has the horizon
+ * clear. The keys are [story t, bearing in degrees from +x toward +z, radius in units]; the ship's
+ * bearing is a monotone cubic through them, its heading the tangent.
  */
 const SHIP_TRACK: readonly (readonly [number, number, number])[] = [
-  [0.43, -4, 150],
-  [0.46, -18, 146],
-  [0.5, -40, 140],
-  [0.52, -66, 138],
-  [0.54, -96, 140],
-  [0.58, -124, 146],
-  [0.61, -134, 150],
+  [0.43, -6, 132],
+  [0.46, -20, 126],
+  [0.5, -42, 121],
+  [0.52, -74, 119],
+  [0.53, -97, 119],
+  [0.545, -105, 120],
+  [0.56, -110, 123],
+  [0.58, -120, 128],
+  [0.61, -132, 136],
 ];
 
 /** how far the lamp's sweep points down when it rakes the ship: the hull is 5 degrees below the lantern at its range */
@@ -189,6 +193,8 @@ export class Beacon {
   private beamLight = {
     uLamp: { value: new Vector3() }, uBeamDir: { value: new Vector3(1, 0, 0) },
     uBeamColor: { value: new Color('#c8fff4') }, uBeamPower: { value: 0 },
+    // the night sky's fill on the ship (see beamLit), lifted by the lightning
+    uFill: { value: 1 },
   };
   private disposables: { dispose(): void }[] = [];
 
@@ -519,10 +525,17 @@ export class Beacon {
 uniform vec3 uBeamDir;
 uniform vec3 uBeamColor;
 uniform float uBeamPower;
+uniform float uFill;
 varying vec3 vBeamWorld;
 ` + shader.fragmentShader.replace(
         '#include <opaque_fragment>',
-        `if (uBeamPower > 0.0) {
+        `// the sky's fill: at this range the only other light on the hull is the storm's dim, teal
+        // overcast, which a hemisphere gives the lit side of each surface (and lightning lifts)
+        {
+          float skyF = 0.5 + 0.5 * inverseTransformDirection(normal, viewMatrix).y;
+          outgoingLight += diffuseColor.rgb * mix(vec3(0.1, 0.17, 0.19), vec3(0.34, 0.5, 0.56), skyF) * uFill;
+        }
+        if (uBeamPower > 0.0) {
           vec3 toP = vBeamWorld - uLamp;
           float d = length(toP);
           vec3 Ld = toP / max(d, 1e-3);
@@ -578,10 +591,10 @@ varying vec3 vBeamWorld;
     normal.anisotropy = 4;
     this.disposables.push(normal);
     const materials: Record<string, Material> = {
-      hull: mat({ roughness: 0.55, metalness: 0.3 }),
+      hull: mat({ roughness: 0.6, metalness: 0.08 }),
       deck: mat({ roughness: 0.85, metalness: 0.1 }),
-      containers: mat({ roughness: 0.62, metalness: 0.2, normalMap: normal, normalScale: new Vector2(1, 1) }),
-      upper: mat({ roughness: 0.55, metalness: 0.15 }),
+      containers: mat({ roughness: 0.62, metalness: 0.1, normalMap: normal, normalScale: new Vector2(1, 1) }),
+      upper: mat({ roughness: 0.55, metalness: 0.1 }),
       lit: (() => {
         const m = new MeshBasicMaterial({ vertexColors: true, toneMapped: false });
         this.disposables.push(m);
@@ -735,6 +748,7 @@ varying vec3 vBeamWorld;
     // (the tilted beam the camera sees would pass over the bridge and into the sea short of the hull)
     this.beamLight.uBeamDir.value.set(Math.cos(this.beamYaw) * Math.cos(SHIP_BEAM_TILT), Math.sin(SHIP_BEAM_TILT), -Math.sin(this.beamYaw) * Math.cos(SHIP_BEAM_TILT));
     this.beamLight.uBeamPower.value = this.rainLight.beamPower;
+    this.beamLight.uFill.value = 1 + flash * 3;
     this.rainLight.lamp.copy(this.towerTop);
     this.rainSky.set(fogColor ?? '#0a1a21').multiplyScalar(2.2).addScalar(0.02);
     this.rain.update(time, camera, beaconness, this.rainLight, this.rainSky,
@@ -809,13 +823,13 @@ varying vec3 vBeamWorld;
       const back = SHIP_SCALE * SHIP_HALF_LENGTH * 1.2 + SHIP_SCALE * 300 * 0.5 - SHIP_SCALE * 30;
       this.wake.position.set(
         this.shipPos.x - Math.cos(heading) * back,
-        0.55,
+        1.0, // the swell crests about 2.5 over the plane, so the foam rides above the mean to show between crests
         this.shipPos.z + Math.sin(heading) * back,
       );
       // a plane pitched flat by rotation.x maps its long axis to
       // (cos z, 0, −sin z), so this matches the hull's heading exactly
       this.wake.rotation.z = heading;
-      (this.wake.material as MeshStandardMaterial).opacity = reveal * 0.3;
+      (this.wake.material as MeshStandardMaterial).opacity = reveal * 0.4;
     }
 
     // splash bursts: parabolic arcs synced to the surge beat

@@ -108,6 +108,7 @@ export class Lightning {
   /** inspection aid: pin the strike's age (seconds) instead of letting it run on the clock */
   debugAge: number | null = null;
   private debugStruck = false;
+  private debugFrames = 0;
   private mesh: Mesh;
   private geometry = new BufferGeometry();
   private material: ShaderMaterial;
@@ -258,7 +259,8 @@ export class Lightning {
       this.nextAt = 0;
       return;
     }
-    if (this.debugAge !== null && !this.debugStruck) {
+    // (the harness jumps the story: the camera's look target takes a few frames to settle before a strike aims true)
+    if (this.debugAge !== null && !this.debugStruck && ++this.debugFrames >= 5) {
       this.debugStruck = true;
       this.strike(camera, seaY, cloudY);
     }

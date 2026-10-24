@@ -34,7 +34,7 @@ COLP = 2.6                   # container column pitch
 BAY0, BAYP, NBAY = -54.0, 12.9, 9
 LEV = 3.4                    # accommodation deck height
 
-NAVY = '#1c3150'
+NAVY = '#3a6494'
 TOPSIDE = NAVY
 HULL_RED = '#7b231c'
 BOOT = '#16181c'
@@ -277,9 +277,9 @@ def hull_y(x, z):
 
 def stations():
     xs = []
-    xs += [lerp(X0, BODY0, i / 14) for i in range(14)]
-    xs += [lerp(BODY0, BODY1, i / 12) for i in range(12)]
-    xs += [lerp(BODY1, XS, i / 30) for i in range(31)]
+    xs += [lerp(X0, BODY0, i / 22) for i in range(22)]
+    xs += [lerp(BODY0, BODY1, i / 18) for i in range(18)]
+    xs += [lerp(BODY1, XS, i / 40) for i in range(41)]
     return xs
 
 
@@ -324,8 +324,9 @@ def hull(detail):
             return shade(mixc(red, rgba('#9b3a2a'), vnoise(p[0] * 0.3, zc * 0.4)), 0.8 + wob)
         if zc < 1.25:
             return shade(boot, 0.9 + wob * 0.8)
-        # topsides: slightly sun-faded higher up
-        return shade(mixc(top, rgba('#2d4a70'), smooth(1.2, 6.0, zc) * 0.4), 0.82 + wob)
+        # topsides: plated in strakes and frames, each a shade of its own, slightly sun-faded higher up
+        plate = 0.9 + 0.2 * hash2(int((p[0] + 100) // 6), int((zc + 10) // 2.4))
+        return shade(mixc(top, rgba('#2f527f'), smooth(1.2, 6.0, zc) * 0.4), (0.82 + wob) * plate)
 
     for side in (1, -1):
         for i in range(len(rings) - 1):
@@ -361,10 +362,35 @@ def hull(detail):
             prev = p
     plimsoll(part)
     if detail == 'high':
+        hull_fittings(part)
         draught_marks(part)
         lettering(part)
         streaks(part)
     return part
+
+
+def hull_fittings(part):
+    """Hawse pipes, a pilot door, a freeing port row and a bow thruster grille: dark shapes laid on the plating."""
+    dark = rgba('#0b0d10')
+    for side in (1, -1):
+        for x, z, rx, rz in ((81.0, 3.7, 0.75, 0.75), (8.0, 3.6, 1.0, 1.1)):
+            n = 14
+            for k in range(n):
+                a0, a1 = 2 * math.pi * k / n, 2 * math.pi * (k + 1) / n
+                pts = [(x, side * (hull_y(x, z) + 0.14), z)]
+                for a in (a0, a1):
+                    xx, zz = x + rx * math.cos(a), z + rz * math.sin(a)
+                    pts.append((xx, side * (hull_y(xx, zz) + 0.14), zz))
+                part.facing(pts, dark, (0, side, 0))
+        # a pilot door
+        for x0, x1, z0, z1, c in ((44.0, 46.4, 2.6, 5.0, rgba('#d8d8d2')),):
+            pts = [(xx, side * (hull_y(xx, zz) + 0.13), zz) for xx, zz in ((x0, z0), (x1, z0), (x1, z1), (x0, z1))]
+            part.facing(pts, c, (0, side, 0))
+        # the freeing ports in the bulwarks
+        for x in [lerp(66.0, 84.0, i / 5) for i in range(6)]:
+            zd = deck_z(x)
+            pts = [(xx, side * (hull_y(xx, zd + 0.2) + 0.1), zz) for xx, zz in ((x - 0.7, zd + 0.15), (x + 0.7, zd + 0.15), (x + 0.7, zd + 0.65), (x - 0.7, zd + 0.65))]
+            part.facing(pts, dark, (0, side, 0))
 
 
 def prop(part, x, z):
@@ -631,7 +657,7 @@ def containers(detail):
     rnd = random.Random(7)
     skip = crane_bays()
     z0 = hatch_z()
-    base = [5, 5, 5, 4, 4, 4, 4, 3, 2]
+    base = [5, 5, 5, 5, 4, 4, 4, 3, 3]
     for k in range(NBAY):
         cx = BAY0 + BAYP * (k + 0.5)
         n = column_count(k)
@@ -641,9 +667,9 @@ def containers(detail):
             side = 1 if ys > 0 else -1
             if outer and (k, side) in skip:
                 continue
-            tiers = base[k] + (1 if rnd.random() < 0.18 and base[k] < 5 else 0) - (1 if rnd.random() < 0.28 else 0) - (1 if outer and rnd.random() < 0.3 else 0)
+            tiers = base[k] + (1 if rnd.random() < 0.15 and base[k] < 5 else 0) - (1 if rnd.random() < 0.2 else 0) - (1 if outer and rnd.random() < 0.25 else 0)
             tiers = max(0, tiers)
-            if rnd.random() < 0.03:
+            if rnd.random() < 0.02:
                 tiers = 0
             twenty = rnd.random() < 0.2
             colour = pick_line(rnd)
@@ -653,7 +679,7 @@ def containers(detail):
                     colour = pick_line(rnd)
                 hc = rnd.random() < 0.14
                 ht = 2.896 if hc else 2.591
-                tone = 0.72 + rnd.random() * 0.42
+                tone = 0.86 + rnd.random() * 0.34
                 col = rgba(colour, tone)
                 if rnd.random() < 0.16:
                     col = mixc(col, rgba('#7c6a58'), 0.45)       # sun-faded, dusty
@@ -673,10 +699,10 @@ def containers(detail):
 # ---- the accommodation, funnel, mast ------------------------------------------------------------
 
 DECKS = [  # level: (x aft, x fwd, half width)
-    (-83.0, -60.0, 11.0), (-83.0, -61.0, 10.8), (-82.6, -62.0, 10.4), (-82.2, -63.0, 10.0),
-    (-81.8, -64.0, 9.6), (-81.4, -65.0, 9.2),
+    (-83.0, -60.0, 11.0), (-83.0, -60.6, 10.9), (-82.6, -61.2, 10.8), (-82.3, -61.6, 10.7),
+    (-82.0, -62.0, 10.6), (-81.6, -62.4, 10.5),
 ]
-BRIDGE = (-73.5, -63.2, 9.6)
+BRIDGE = (-73.2, -61.4, 10.0)
 COMPASS = (-71.4, -65.6, 6.4)
 WHITE = '#e3e6ea'
 GREY = '#9aa2ad'
@@ -691,7 +717,6 @@ def upper(detail):
     part = Part('upper')
     white, grey = rgba(WHITE), rgba(GREY)
     dark, orange = rgba('#262c35'), rgba('#e2641b')
-    navy = rgba(NAVY)
     # the eight levels
     for k, (xa, xf, hw) in enumerate(DECKS):
         z = level_z(k)
@@ -792,6 +817,27 @@ def upper(detail):
     part.poly([(-89.2, -0.05, zm + 8.8), (-89.2 - 2.6, -0.05, zm + 8.6), (-89.2 - 2.6, -0.05, zm + 7.8), (-89.2, -0.05, zm + 7.6)], rgba('#c9302c'))
     # the forecastle: bulwark, windlass, winches, bollards, fairleads, foremast, jackstaff, hawse pipes
     forecastle(part)
+    if detail == 'high':
+        # rails round the bridge deck's roof, the compass deck's and the open roof round the funnel
+        xa, xf, hw = BRIDGE
+        rail([(xf + 0.1, hw, level_z(7)), (xf + 0.1, -hw, level_z(7)), (xa, -hw, level_z(7)), (xa, hw, level_z(7)), (xf + 0.1, hw, level_z(7))], 1.05, 2.0, white, part)
+        xa, xf, hw = COMPASS
+        rail([(xf + 0.1, hw, level_z(7) + 2.5), (xf + 0.1, -hw, level_z(7) + 2.5), (xa, -hw, level_z(7) + 2.5), (xa, hw, level_z(7) + 2.5), (xf + 0.1, hw, level_z(7) + 2.5)], 1.05, 2.0, white, part)
+        xa, xf, hw = DECKS[5]
+        rail([(-73.4, hw - 0.3, level_z(6)), (xa + 0.2, hw - 0.3, level_z(6)), (xa + 0.2, -hw + 0.3, level_z(6)), (-73.4, -hw + 0.3, level_z(6))], 1.05, 2.0, white, part)
+        # the accommodation ladder: an inclined stair down the starboard side, with its landing and rails
+        gx0, gx1 = -52.0, -30.0
+        z_top, z_bot = DECK + 0.1, 1.6
+        yg = -(half_beam(-40.0) + 1.4)
+        n = 44
+        for side in (-0.55, 0.55):
+            part.beam((gx0, yg + side, z_top), (gx1, yg + side, z_bot), 0.12, 0.12, shade(grey, 0.9))
+            part.beam((gx0, yg + side, z_top + 1.0), (gx1, yg + side, z_bot + 1.0), 0.05, 0.05, white)
+        for i in range(1, n):
+            f = i / n
+            part.box((lerp(gx0, gx1, f), yg, lerp(z_top, z_bot, f) + 0.05), (0.22, 1.0, 0.05), shade(grey, 0.75), faces='xXyYZ')
+        part.box((gx1 - 0.5, yg, z_bot - 0.1), (1.4, 1.4, 0.12), shade(grey, 0.8), faces='xXyYZz')
+        part.box((gx0 - 0.5, yg + 0.3, z_top + 0.0), (1.6, 2.2, 0.12), shade(grey, 0.8), faces='xXyYZz')
     # the cranes
     for cx, side in CRANES:
         crane(part, cx, side, detail)
@@ -913,7 +959,7 @@ def forecastle(part):
 
 
 def crane_small(part, x, y):
-    white, grey, orange = rgba(WHITE), rgba(GREY), rgba('#d9a52a')
+    grey, orange = rgba(GREY), rgba('#d9a52a')
     z = deck_z(x)
     part.cyl((x, y, z), (x, y, z + 3.0), 0.4, 0.4, grey, 8)
     part.box((x, y, z + 3.4), (1.2, 0.9, 0.9), orange, faces='xXyYZ')
@@ -1008,8 +1054,16 @@ def lit(detail):
     return part
 
 
-def window(part, c, face, w, h, colour):
+def window(part, c, face, w, h, colour, frame=True):
     x, y, z = c
+    if frame:
+        # a dark surround just behind the pane
+        fx, fy = x, y
+        if face in ('X', 'x'):
+            fx = x - 0.006 if face == 'X' else x + 0.006
+        else:
+            fy = y - 0.006 if face == 'Y' else y + 0.006
+        window(part, (fx, fy, z), face, w + 0.35, h + 0.3, rgba('#161c24'), False)
     hw, hh = w / 2, h / 2
     if face in ('X', 'x'):
         pts = [(x, y - hw, z - hh), (x, y + hw, z - hh), (x, y + hw, z + hh), (x, y - hw, z + hh)]
