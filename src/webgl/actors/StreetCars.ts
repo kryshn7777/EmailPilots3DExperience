@@ -78,11 +78,19 @@ interface Lane {
   x0: number;
   x1: number;
   drivers: Driver[];
+  /** stop lines along the lane (s, ascending) and the light that governs them; none: the lane never stops */
+  stops: number[];
+  phase: ((time: number) => 0 | 1 | 2) | null;
 }
 
 /** Where traffic runs, when it is not the neighbourhood's own streets. */
 export interface CarOptions {
-  lanes: { z: number; dir: 1 | -1; x0: number; x1: number; count: number }[];
+  lanes: {
+    z: number; dir: 1 | -1; x0: number; x1: number; count: number;
+    /** stop lines (distance along the lane, from where it starts) and the light for them: 0 green, 1 amber, 2 red */
+    stops?: number[];
+    phase?: (time: number) => 0 | 1 | 2;
+  }[];
   /** uniform scale of every car, speed and spacing (the night city draws its cars larger) */
   scale?: number;
 }
@@ -309,8 +317,11 @@ export class StreetCars {
       idx: this.cars.length, type, tint: paintFor(type), x, z, yaw, scale: 1, odo: rand() * 40, brake: 0, near: false,
     });
     const k0 = this.k;
-    const addLane = (z: number, dir: 1 | -1, x0: number, x1: number, count: number): void => {
-      const lane: Lane = { z, dir, x0, x1, drivers: [] };
+    const addLane = (
+      z: number, dir: 1 | -1, x0: number, x1: number, count: number,
+      stops: number[] = [], phase: Lane['phase'] = null,
+    ): void => {
+      const lane: Lane = { z, dir, x0, x1, drivers: [], stops: [...stops].sort((a, b) => a - b), phase };
       const length = x1 - x0;
       for (let k = 0; k < count; k++) {
         const s = ((k + rand() * 0.6) / count) * length;
@@ -325,7 +336,7 @@ export class StreetCars {
       this.lanes.push(lane);
     };
     if (this.options) {
-      for (const l of this.options.lanes) addLane(l.z, l.dir, l.x0, l.x1, l.count);
+      for (const l of this.options.lanes) addLane(l.z, l.dir, l.x0, l.x1, l.count, l.stops, l.phase ?? null);
     } else {
       for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
         const zc = iz * d + lotD + street / 2;
@@ -476,7 +487,22 @@ export class StreetCars {
         let gap = ahead.s - car.s - (this.types[ahead.type]!.length * k + len) / 2;
         if (ds.length > 1 && i === ds.length - 1) gap += length;
         // roll to a stop short of the car in front, ease back to cruising speed
-        const want = car.vMax * MathUtils.clamp((gap - 0.35 * k) / (1.4 * k), 0, 1);
+        let want = car.vMax * MathUtils.clamp((gap - 0.35 * k) / (1.4 * k), 0, 1);
+        // the signal: a red (or an amber it can still stop for) holds the car short of the next stop line it
+        // has not yet passed; past the line it clears the junction whatever the light does
+        if (lane.phase && lane.stops.length) {
+          const light = lane.phase(time);
+          if (light !== 0) {
+            const front = car.s + len / 2;
+            for (const stop of lane.stops) {
+              if (stop < front - 0.2 * k) continue;
+              const room = stop - front - 0.25 * k;
+              if (light === 1 && room < (car.v * car.v) / 5) break;
+              want = Math.min(want, car.vMax * MathUtils.clamp(room / (1.4 * k), 0, 1));
+              break;
+            }
+          }
+        }
         // the brake lamps light while the car is shedding speed, and while it waits
         const braking = want < car.v - 0.12 || car.v < 0.2;
         car.brake += ((braking ? 1 : 0) - car.brake) * Math.min(1, dt * (braking ? 14 : 6));

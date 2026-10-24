@@ -18,7 +18,6 @@ import {
   PointsMaterial,
   Quaternion,
   RepeatWrapping,
-  ShaderMaterial,
   Vector3,
 } from 'three';
 import {
@@ -33,7 +32,7 @@ import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCi
 import { Streetlights, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { ReflectionProbe } from '../materials/ReflectionProbe';
-import { CityStreet, type Footprint } from './CityStreet';
+import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footprint } from './CityStreet';
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
 import { pavingMaps } from '../bake/RoomTextures';
@@ -42,8 +41,6 @@ import { asset } from '../asset';
 import { mulberry32 } from '../util';
 import type { FlightPath } from '../rig/FlightPath';
 import type { Quality } from '../quality';
-import carVert from '../shaders/carLights.vert.glsl';
-import carFrag from '../shaders/carLights.frag.glsl';
 
 const WINDOW_AMBER = new Color('#ffc96b');
 const DELIVERIES = 5;
@@ -307,21 +304,27 @@ export class City {
     this.disposables.push(boardGeometry, boardMaterial, sign, boards);
   }
 
-  private trafficMaterial: ShaderMaterial | null = null;
+  /** where the cross streets end, in z (the cross-street traffic runs between them) */
+  private crossEnds: [number, number] = [-33, 33];
+  private crossCars: StreetCars | null = null;
   private streetCars: StreetCars | null = null;
   private people: Pedestrians | null = null;
   private street: CityStreet | null = null;
   private streetlights: Streetlights | null = null;
 
-  private static readonly CANYON_LEN = 66;
-  private static readonly CANYON_X0 = -32;
 
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
   private buildTraffic(): void {
     const road = roadTexture();
     // wet asphalt: the lamps and the neon streak in it
     const roadMat = new MeshStandardMaterial({ map: road, roughness: 0.42, metalness: 0.1 });
-    this.disposables.push(roadMat, road);
+    // the junction boxes: plain asphalt with no lane markings, laid over the canyon's strip (and a hair
+    // nearer the camera in depth, so the two never z-fight)
+    const junctionMat = roadMat.clone();
+    junctionMat.polygonOffset = true;
+    junctionMat.polygonOffsetFactor = -2;
+    junctionMat.polygonOffsetUnits = -2;
+    this.disposables.push(roadMat, road, junctionMat);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
     // along it with buildings either side of open ground
@@ -331,73 +334,41 @@ export class City {
     const runZ = z1 - z0 + 10;
     const canyonRoad = new Mesh(new PlaneGeometry(runX, 4.6), roadMat);
     canyonRoad.rotation.x = -Math.PI / 2;
-    canyonRoad.position.set((x0 + x1) / 2, 0.005, 0);
-    // one dash tile per ~7 units, so the markings keep their spacing as the
-    // road grows instead of stretching
-    if (canyonRoad.material.map) canyonRoad.material.map.repeat.set(Math.round(runX / 7.3), 1);
+    canyonRoad.position.set((x0 + x1) / 2, 0.006, 0);
+    // one dash tile per ~7.3 units, so the markings keep their spacing as the road grows instead of stretching
+    const dashTiles = Math.round(runX / 7.3);
+    if (canyonRoad.material.map) canyonRoad.material.map.repeat.set(dashTiles, 1);
     this.group.add(canyonRoad);
     this.disposables.push(canyonRoad.geometry);
+    // each cross street starts at the canyon's kerb and runs out to its end (it used to run clean through
+    // the canyon, under its surface), its dashes spaced like the canyon's
+    const zMid = (z0 + z1) / 2;
+    const crossEnds = [zMid - runZ / 2, zMid + runZ / 2] as const;
+    const halves: [number, number][] = [[ROAD_HALF, crossEnds[1]], [crossEnds[0], -ROAD_HALF]];
     for (const sx of CROSS_STREET_X) {
-      // the long axis carries the dashes (texture U), then swings onto world z
-      const cross = new Mesh(new PlaneGeometry(runZ, 2.6), roadMat);
-      cross.rotation.x = -Math.PI / 2;
-      cross.rotation.z = Math.PI / 2;
-      cross.position.set(sx, 0.004, (z0 + z1) / 2);
-      this.group.add(cross);
-      this.disposables.push(cross.geometry);
-    }
-
-    // cross-street ambience stays a cheap shader-driven dot stream
-    interface Lane { origin: Vector3; dir: Vector3; len: number; hue: number; count: number }
-    const lanes: Lane[] = [];
-    for (const sx of CROSS_STREET_X) {
-      // lanes run the full cross street, so traffic no longer stops short of
-      // the pavement at both ends
-      const z0Lane = (z0 + z1) / 2 - runZ / 2;
-      lanes.push(
-        { origin: new Vector3(sx - 0.6, 0.12, z0Lane), dir: new Vector3(0, 0, 1), len: runZ, hue: 0, count: 8 },
-        { origin: new Vector3(sx + 0.6, 0.12, z0Lane), dir: new Vector3(0, 0, 1), len: runZ, hue: 1, count: 8 },
-      );
-    }
-
-    const rand = mulberry32(5150);
-    const pos: number[] = [];
-    const dir: number[] = [];
-    const lens: number[] = [];
-    const phases: number[] = [];
-    const hues: number[] = [];
-    for (const lane of lanes) {
-      for (let i = 0; i < lane.count; i++) {
-        pos.push(lane.origin.x, lane.origin.y, lane.origin.z);
-        dir.push(lane.dir.x, lane.dir.y, lane.dir.z);
-        lens.push(lane.len);
-        phases.push(rand());
-        hues.push(lane.hue);
+      for (const [za, zb] of halves) {
+        const len = zb - za;
+        const half = new PlaneGeometry(len, 2 * CROSS_HALF);
+        const uv = half.attributes.uv!;
+        for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (len / runX));
+        const cross = new Mesh(half, roadMat);
+        cross.rotation.x = -Math.PI / 2;
+        cross.rotation.z = Math.PI / 2;
+        cross.position.set(sx, 0.003, (za + zb) / 2);
+        this.group.add(cross);
+        this.disposables.push(half);
       }
+      const boxGeometry = new PlaneGeometry(2 * CROSS_HALF, 2 * ROAD_HALF);
+      // the same asphalt, sampled from a stretch of the texture with no dashes or edge lines in it
+      const boxUv = boxGeometry.attributes.uv!;
+      for (let i = 0; i < boxUv.count; i++) boxUv.setXY(i, (0.3 + boxUv.getX(i) * 0.3) / dashTiles, 0.1 + boxUv.getY(i) * 0.3);
+      const box = new Mesh(boxGeometry, junctionMat);
+      box.rotation.x = -Math.PI / 2;
+      box.position.set(sx, 0.0075, 0);
+      this.group.add(box);
+      this.disposables.push(boxGeometry);
     }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-    g.setAttribute('aLaneDir', new Float32BufferAttribute(dir, 3));
-    g.setAttribute('aLaneLen', new Float32BufferAttribute(lens, 1));
-    g.setAttribute('aPhase', new Float32BufferAttribute(phases, 1));
-    g.setAttribute('aHue', new Float32BufferAttribute(hues, 1));
-    this.trafficMaterial = new ShaderMaterial({
-      vertexShader: carVert,
-      fragmentShader: carFrag,
-      uniforms: {
-        uTime: { value: 0 },
-        uSpeed: { value: 3.2 },
-        uIntensity: { value: 2.2 },
-      },
-      transparent: true,
-      depthWrite: false,
-      blending: AdditiveBlending,
-    });
-    const traffic = new Points(g, this.trafficMaterial);
-    traffic.frustumCulled = false;
-    this.group.add(traffic);
-    this.disposables.push(g, this.trafficMaterial);
-
+    this.crossEnds = [crossEnds[0], crossEnds[1]];
   }
 
   /**
@@ -406,9 +377,12 @@ export class City {
    * read against the block faces, one lane each way down the canyon road.
    */
   private buildCars(quality: Quality): void {
-    const x0 = City.CANYON_X0;
-    const x1 = City.CANYON_X0 + City.CANYON_LEN;
-    const n = quality.tier === 'high' ? 9 : 5;
+    // the whole length of the road, so the camera is never over an empty street
+    const [ex0, ex1] = CITY_EXTENT.x;
+    const x0 = ex0 - 6;
+    const x1 = ex1 + 6;
+    const high = quality.tier === 'high';
+    const n = Math.round((x1 - x0) * (high ? 0.11 : 0.06));
     // parked along both curbs, clear of the cross streets (nose with the lane's own traffic)
     const parked: { x: number; z: number; yaw: number }[] = [];
     const rand = mulberry32(9031);
@@ -418,18 +392,44 @@ export class City {
       const side = rand() < 0.5 ? -1 : 1;
       parked.push({ x, z: side * 1.97, yaw: side < 0 ? Math.PI : 0 });
     }
+    // stop lines before every cross street (CityStreet paints them 2.35 out from its centre; a car's nose stops 2.4 out)
+    const STOP = CROSS_HALF + 1.1;
+    const stopsPlus = CROSS_STREET_X.map((sx) => sx - STOP - x0);
+    const stopsMinus = CROSS_STREET_X.map((sx) => x1 - (sx + STOP));
     this.streetCars = new StreetCars(quality, parked, {
       scale: 1.35,
       lanes: [
         // z -1.1 drives -x (oncoming, headlights at the camera); z +1.1 drives +x with the flight
-        { z: -1.1, dir: -1, x0, x1, count: n },
-        { z: 1.1, dir: 1, x0, x1, count: n },
+        { z: -1.1, dir: -1, x0, x1, count: n, stops: stopsMinus, phase: canyonPhase },
+        { z: 1.1, dir: 1, x0, x1, count: n, stops: stopsPlus, phase: canyonPhase },
       ],
     });
     // paint, chrome and windscreens mirror the canyon itself (the live probe, HIGH)
     if (ReflectionProbe.current) this.streetCars.setEnvMap(ReflectionProbe.current.texture);
     this.group.add(this.streetCars.group);
     this.disposables.push(this.streetCars);
+
+    // the cross streets: one more set of cars, its frame turned a quarter so its lanes (which run along x)
+    // run along the cross streets instead (local x = world -z, local z = world x). Every cross street has
+    // a lane each way, and a car on one waits at the line before the canyon, on the cross street's own light.
+    const [za, zb] = this.crossEnds;
+    const lx0 = -zb;
+    const lx1 = -za;
+    const stopLine = ROAD_HALF + 0.55;
+    const crossLanes: NonNullable<ConstructorParameters<typeof StreetCars>[2]>['lanes'] = [];
+    for (const sx of CROSS_STREET_X) {
+      crossLanes.push(
+        // x = sx + 0.6 heads -z (local +x), from the +z side: its line is at z = +stopLine
+        { z: sx + 0.6, dir: 1, x0: lx0, x1: lx1, count: high ? 4 : 2, stops: [zb - stopLine], phase: crossPhase },
+        // x = sx - 0.6 heads +z (local -x), from the -z side: its line is at z = -stopLine
+        { z: sx - 0.6, dir: -1, x0: lx0, x1: lx1, count: high ? 4 : 2, stops: [-za - stopLine], phase: crossPhase },
+      );
+    }
+    this.crossCars = new StreetCars(quality, [], { scale: 1.35, lanes: crossLanes });
+    this.crossCars.group.rotation.y = Math.PI / 2;
+    if (ReflectionProbe.current) this.crossCars.setEnvMap(ReflectionProbe.current.texture);
+    this.group.add(this.crossCars.group);
+    this.disposables.push(this.crossCars);
   }
 
   private buildWindows(rows: [Building, { hx: number; hz: number }][]): void {
@@ -661,8 +661,8 @@ export class City {
     if (focus) this.streetlights?.follow(focus);
     // traffic loops on absolute time only — the scene lives on its own, with
     // or without scroll (scroll-coupled surge removed by request)
-    if (this.trafficMaterial) this.trafficMaterial.uniforms.uTime!.value = time;
     this.streetCars?.update(time);
+    this.crossCars?.update(time);
     this.people?.update(time);
     KitCity.tick(time);
     this.street?.update(time);

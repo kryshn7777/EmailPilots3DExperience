@@ -36,9 +36,23 @@ export interface Footprint {
 }
 
 /** the canyon road is 4.6 wide; a building face stands no nearer than 2.75 to its centre line */
-const ROAD_HALF = 2.3;
+export const ROAD_HALF = 2.3;
 const FACE = 2.75;
-const CROSS_HALF = 1.3;
+export const CROSS_HALF = 1.3;
+
+/**
+ * The junctions' light cycle (14 s), shared by the signal heads and by the cars (StreetCars stops them at
+ * the lines): the canyon has green 0-7, amber 7-8.2, red 8.2-14; the cross street runs opposite, with a
+ * clearance gap each way. 0 green, 1 amber, 2 red.
+ */
+export const canyonPhase = (time: number): 0 | 1 | 2 => {
+  const t = time % 14;
+  return t < 7 ? 0 : t < 8.2 ? 1 : 2;
+};
+export const crossPhase = (time: number): 0 | 1 | 2 => {
+  const t = time % 14;
+  return t < 8.6 ? 2 : t < 12.6 ? 0 : t < 13.8 ? 1 : 2;
+};
 
 type Part = [BufferGeometry, string];
 
@@ -299,11 +313,13 @@ export class CityStreet {
         }
         // and the stop line before it
         bars.push({ x: sx + e * (CROSS_HALF + 1.05), z: e * -0.55, sx: 0.07, sz: 1.05 });
+        // and the cross street's own stop line, across the lane that approaches from this side
+        bars.push({ x: sx + e * 0.6, z: e * (ROAD_HALF + 0.55), sx: 1.0, sz: 0.07 });
       }
     }
     const barMesh = new InstancedMesh(unit, paintMaterial, bars.length);
     bars.forEach((b, i) => {
-      barMesh.setMatrixAt(i, m4.compose(p.set(b.x, 0.012, b.z), q.identity(), sc.set(b.sx, 0.004, b.sz)));
+      barMesh.setMatrixAt(i, m4.compose(p.set(b.x, 0.016, b.z), q.identity(), sc.set(b.sx, 0.004, b.sz)));
     });
     barMesh.frustumCulled = false;
     this.group.add(barMesh);
@@ -415,9 +431,7 @@ export class CityStreet {
   /** Signals cycle and steam rises; `time` in seconds. */
   update(time: number): void {
     if (this.steam) this.steam.uniforms.uTime!.value = time;
-    // a 14 s cycle: the canyon has green 0-7, amber 7-8.2, red 8.2-14 (the cross street runs opposite)
-    const t = time % 14;
-    const phase = t < 7 ? 0 : t < 8.2 ? 1 : 2;
+    const phase = canyonPhase(time);
     const pos = this.signalGeometry.attributes.position as Float32BufferAttribute;
     const col = this.signalGeometry.attributes.color as Float32BufferAttribute;
     this.signalHeads.forEach((h, i) => {
