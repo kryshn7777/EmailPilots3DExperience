@@ -31,7 +31,7 @@ export const HOME_CHAPTERS: ChapterCopy[] = [
     kicker: 'CH 02 · Preflight',
     title: 'Ready for takeoff.',
     body: 'Connect any mailbox: sign in with Microsoft through Microsoft’s own page — no password ever touches the app — or use Gmail and custom SMTP with a guided app password. Every account is test-authenticated before it’s saved, and a pre-flight check audits your whole setup with a verdict and jump-to-fix buttons.',
-    chips: ['Your mailbox + up to 5 more, in parallel', 'Provider settings auto-detected', 'One-click test email to yourself'],
+    chips: ['Up to 5 mailboxes, in parallel', 'Provider settings auto-detected', 'One-click test email to yourself'],
   },
   {
     id: 'takeoff',
@@ -175,7 +175,7 @@ export const LOCAL_AI = {
 
 export const MAILBOXES = {
   kicker: 'One dashboard',
-  title: 'Your mailbox plus up to 5 more.',
+  title: 'Up to 5 mailboxes, one dashboard.',
   body: 'Run all your outreach from one local command center. Extra accounts send in parallel, each with its own daily allowance and health indicator, so the load is spread and no single mailbox is pushed.',
   accounts: [
     { address: 'you@gmail.com', kind: 'Gmail' },
@@ -206,7 +206,7 @@ export const WHY: BlockCopy = {
   items: [
     { title: 'Measured by replies, not pixels', body: 'No open tracking, no hidden pixels, no rewritten links. Reply-rate analytics are built in.' },
     { title: 'Rehearse before it is real', body: 'Practice Mode reroutes every send to your own inbox, with the same rendering, pacing and limits, so the first real send is not a leap of faith.' },
-    { title: 'One plan, no meter', body: '$2.9 a week covers your mailbox plus up to 5 more. No per-seat or per-contact fees.' },
+    { title: 'One plan, no meter', body: '$2.9 a week covers up to 5 mailboxes. No per-seat or per-contact fees.' },
   ],
 };
 
@@ -233,7 +233,7 @@ export const MANUAL: ManualSection[] = [
       { title: 'Gmail and custom SMTP via app password', body: 'A two-slide animated guide walks you through creating an app password on Google’s or Microsoft’s real settings pages — and pasting it with spaces still works.' },
       { title: 'The app knows your provider', body: 'Type an address and the right server settings fill in automatically, checking the domain’s mail records when it isn’t obvious.' },
       { title: 'Verified before saved', body: 'Every account is test-authenticated before it’s added, and a one-click "send test email to myself" proves the whole pipeline end to end.' },
-      { title: 'Your mailbox plus up to 5 more', body: 'Extra accounts send in parallel, each with its own daily allowance and health indicator, with bulk enable / disable / test / remove and a fleet overview strip.' },
+      { title: 'Up to 5 mailboxes', body: 'Extra accounts send in parallel, each with its own daily allowance and health indicator, with bulk enable / disable / test / remove and a fleet overview strip.' },
     ],
   },
   {
@@ -388,7 +388,7 @@ export const PRICING = {
     'Cancel anytime',
     'One subscription, your own mailbox',
     'No per-seat or per-contact fees',
-    'Your mailbox + up to 5 more',
+    'Up to 5 mailboxes',
   ],
   note: 'Runs entirely on your PC. Your mailbox, your data.',
   cta: { label: 'Start the free trial', href: '/download' },
