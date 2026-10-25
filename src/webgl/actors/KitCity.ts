@@ -167,6 +167,8 @@ export class KitCity {
 
   /** atlas textures are shared by every city and never disposed with one */
   private static maps = new Map<string, KitMaps>();
+  /** the materials with lit windows, and the glow each was made with (see `setPower`) */
+  private glowing: { m: MeshStandardMaterial; base: number }[] = [];
   /** only the materials that opted into the cloud environment */
   private static materials = new Set<MeshStandardMaterial>();
   private static environment: Texture | null = null;
@@ -209,6 +211,14 @@ export class KitCity {
    * the engine's per-chapter grade has to be pushed in by hand or the district
    * would stay at one brightness from dusk to the storm.
    */
+  /**
+   * How much of its lit windows' glow the city shows, 0 (dark) to 1 (as made): the night city comes on
+   * in a wave as the flight arrives (City.update), instead of being there all at once.
+   */
+  setPower(power: number): void {
+    for (const g of this.glowing) g.m.emissiveIntensity = g.base * (0.08 + 0.92 * power);
+  }
+
   static setEnvIntensity(value: number): void {
     KitCity.envIntensity = value;
     for (const m of KitCity.materials) m.envMapIntensity = value * (KitCity.envScale.get(m) ?? 1);
@@ -411,6 +421,7 @@ export class KitCity {
       let m = materials.get(key);
       if (!m) {
         m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
+        if (m.emissiveMap) this.glowing.push({ m, base: m.emissiveIntensity });
         if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high');
         materials.set(key, m);
       }

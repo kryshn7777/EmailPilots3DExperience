@@ -6,7 +6,22 @@
  * behind it. Every word is the site's own copy (story/copy.ts); only the section headings and
  * the replay button are new.
  */
-import { DOWNLOAD, FAQ, HOME_CHAPTERS, PRICING } from '../story/copy';
+import {
+  AUDIENCES,
+  DOWNLOAD,
+  FAQ,
+  HOME_CHAPTERS,
+  INTRO,
+  LAST_MILE,
+  LOCAL_AI,
+  MAILBOXES,
+  PRICING,
+  PROBLEM,
+  SAFEGUARDS,
+  STEPS,
+  WHY,
+} from '../story/copy';
+import LandingBlock from './LandingBlock.astro';
 import { href } from '../lib/href';
 
 const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
@@ -15,9 +30,9 @@ const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
 <section class="landing" id="landing-page" aria-label="Email Pilots">
   <div class="landing__inner">
     <header class="landing__hero" data-reveal>
-      <p class="page__kicker">{DOWNLOAD.kicker}</p>
-      <h2>{DOWNLOAD.title}</h2>
-      <p class="page__lede">{DOWNLOAD.body}</p>
+      <p class="page__kicker">{INTRO.kicker}</p>
+      <h2>{INTRO.title}</h2>
+      <p class="page__lede">{INTRO.body}</p>
       <div class="btn-row">
         <a
           class="btn btn--primary"
@@ -31,11 +46,83 @@ const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
         <a class="btn btn--ghost" href={href('/features')}>Read the flight manual</a>
         <button class="btn btn--ghost" type="button" data-replay>Replay the flight</button>
       </div>
+      <ul class="landing__proof">
+        {INTRO.proof.map((p) => <li>{p}</li>)}
+      </ul>
       <p class="pricing-card__note">{DOWNLOAD.requirements}</p>
     </header>
 
+    <section class="landing__section" aria-labelledby="landing-problem">
+      <p class="page__kicker">{PROBLEM.kicker}</p>
+      <h2 id="landing-problem">{PROBLEM.title}</h2>
+      <p class="page__lede">{PROBLEM.body}</p>
+      <div class="landing__versus">
+        {
+          [
+            { side: PROBLEM.before, mod: 'is-before', mark: '×' },
+            { side: PROBLEM.after, mod: 'is-after', mark: '✓' },
+          ].map(({ side, mod, mark }) => (
+            <article class={`landing__panel ${mod}`} data-reveal>
+              <p class="landing__card-kicker">{side.label}</p>
+              <ul data-mark={mark}>
+                {side.points.map((pt) => <li>{pt}</li>)}
+              </ul>
+            </article>
+          ))
+        }
+      </div>
+      <ul class="landing__proof">
+        {PROBLEM.wins.map((w) => <li>{w}</li>)}
+      </ul>
+    </section>
+
+    <LandingBlock id="landing-how" block={STEPS} />
+    <LandingBlock id="landing-safeguards" block={SAFEGUARDS} />
+    <LandingBlock id="landing-last-mile" block={LAST_MILE} />
+
+    <section class="landing__section" aria-labelledby="landing-ai">
+      <p class="page__kicker">{LOCAL_AI.kicker}</p>
+      <h2 id="landing-ai">{LOCAL_AI.title}</h2>
+      <p class="page__lede">{LOCAL_AI.body}</p>
+      <div class="landing__versus">
+        {
+          [
+            { side: LOCAL_AI.cloud, mod: 'is-before', mark: '×' },
+            { side: LOCAL_AI.local, mod: 'is-after', mark: '✓' },
+          ].map(({ side, mod, mark }) => (
+            <article class={`landing__panel ${mod}`} data-reveal>
+              <p class="landing__card-kicker">{side.label}</p>
+              <ul data-mark={mark}>
+                {side.points.map((pt) => <li>{pt}</li>)}
+              </ul>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="landing__section" aria-labelledby="landing-mailboxes">
+      <p class="page__kicker">{MAILBOXES.kicker}</p>
+      <h2 id="landing-mailboxes">{MAILBOXES.title}</h2>
+      <p class="page__lede">{MAILBOXES.body}</p>
+      <ul class="landing__proof landing__mailboxes">
+        {
+          MAILBOXES.accounts.map((a) => (
+            <li>
+              <i aria-hidden="true"></i>
+              {a.address} · {a.kind}
+            </li>
+          ))
+        }
+        <li>+ up to 2 more</li>
+      </ul>
+    </section>
+
+    <LandingBlock id="landing-who" block={AUDIENCES} />
+    <LandingBlock id="landing-why" block={WHY} />
+
     <section class="landing__section" aria-labelledby="landing-flight">
-      <p class="page__kicker">The flight, in brief</p>
+      <p class="page__kicker">The full flight, in brief</p>
       <h2 id="landing-flight">Ten stops, one send.</h2>
       <div class="landing__grid">
         {

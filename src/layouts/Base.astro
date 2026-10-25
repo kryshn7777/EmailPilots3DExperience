@@ -1,6 +1,8 @@
 ---
 import '@fontsource-variable/bricolage-grotesque';
 import '@fontsource-variable/inter';
+import '@fontsource/oswald/400.css';
+import '@fontsource/oswald/700.css';
 import '../styles/global.css';
 import Nav from '../components/islands/Nav.tsx';
 import { href } from '../lib/href';
@@ -20,6 +22,8 @@ const { title, description } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={href("/favicon.svg")} />
+    <!-- the sky the scene is lit by: fetched alongside the engine chunk instead of after it -->
+    <link rel="preload" href={href("/hdri/sky_1k.hdr")} as="fetch" crossorigin="anonymous" />
     <title>{title}</title>
   </head>
   <body>
@@ -45,7 +49,7 @@ const { title, description } = Astro.props;
         </svg>
         <span>Email&nbsp;Pilots</span>
       </a>
-      <Nav client:load />
+      <Nav client:idle />
     </header>
 
     <!-- flight-data HUD, home only (page.ts hides it elsewhere) -->

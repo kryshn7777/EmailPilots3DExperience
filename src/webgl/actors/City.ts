@@ -665,7 +665,12 @@ export class City {
 
   update(t: number, time = 0, focus?: Vector3): void {
     if (!this.group.visible) return;
-    this.streetlights?.setLevel(1);
+    // the city comes on as the flight arrives: the street lamps first, then the windows, then the glass and neon
+    const lamps = MathUtils.smoothstep(t, 0.625, 0.665);
+    const lit = MathUtils.smoothstep(t, 0.64, 0.71);
+    this.streetlights?.setLevel(0.06 + 0.94 * lamps);
+    this.kitCity?.setPower(lit);
+    if (this.windows) (this.windows.material as MeshBasicMaterial).opacity = 0.1 + 0.9 * lit;
     if (focus) this.streetlights?.follow(focus);
     // traffic loops on absolute time only — the scene lives on its own, with
     // or without scroll (scroll-coupled surge removed by request)

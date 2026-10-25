@@ -32,6 +32,8 @@ Any static assets, like images, can be placed in the `public/` directory.
 - `src/components/Experience.astro`: the scroll-driven flight. It is the scroll *stage* (`#experience`) the fixed WebGL canvas plays along to. The canvas itself lives in `src/layouts/Base.astro`, outside the Swup container, so it survives navigation. The master ScrollTrigger (`src/webgl/scroll/ScrollDirector.ts`) measures from the top of the page to the bottom of `#experience`, so content placed after it never stretches the flight. Its copy is hidden by default (canvas only); `?copy=1` shows it.
 - `src/components/Landing.astro`: the website. It is ordinary page content that scrolls up over the canvas once the experience has finished: the nav comes back (`body.is-landing`, set by `src/page.ts`), the engine pauses behind it, and a "Replay the flight" button returns to the start. All of its words come from `src/story/copy.ts`.
 
+The landing reads top to bottom as a pitch: what it is (`INTRO`), the problem it solves (`PROBLEM`), how it works (`STEPS`), the deliverability safeguards (`SAFEGUARDS`), the last mile (`LAST_MILE`), the local AI (`LOCAL_AI`), the mailboxes (`MAILBOXES`), who it is for (`AUDIENCES`), why it is different (`WHY`), the ten stops in brief, the plan, FAQ, and a closing call to action. Every line is checked against `FEATURES.md` Appendix B; no placement guarantees, no tiers, no tracking claims.
+
 To add landing content, edit `Landing.astro`; to change the flight, edit `src/webgl/` and `src/story/`.
 
 ## Sky, clouds, sun and sea
@@ -71,6 +73,35 @@ sun-visibility alpha.
 `?nogi`, `?nossr` and `?novol` leave the screen-space passes out for an A/B; with `?probe`,
 `__engine.ssr.debug = 1` shows the reflections alone (2 the reflectivity, 3 how far each ray went),
 `__engine.ssgi.debug = 1` the bounce light and `__engine.volume.debug = 1` the light scattered by the air.
+
+## Transitions
+
+Chapters hand over inside weather, not by cutting: whatever leaves is veiled before it goes and whatever
+arrives forms out of the veil (all keyed to story-t, so a scrub replays them exactly).
+
+| seam (t) | what happens |
+| :-- | :-- |
+| formation to storm (0.335 to 0.38) | the town is swallowed by the closing fog, and the storm's first bolts strike as it goes |
+| storm to lighthouse (0.40 to 0.5) | the sea rises under the storm first, then the lamp glows out of the murk, then the tower and islet form out of the mist; the sweep lights the ship |
+| lighthouse to city (0.59 to 0.71) | fog draws in as the sea goes and the night cloud deck thickens into a bank across the gap; the city is switched on inside it and powers up in a wave (street lamps first, then windows, glass and neon) while a mist stands on its streets and thins as the flight dives in; the lightning carries across and lands on the roofs |
+| copilot to the airfield (0.82 to 0.9) | the descent goes through cloud: fog closes while the starfield is left behind, the airfield is switched on inside it, and the edge lights, the threshold bars and PAPI, then the approach rabbit come up as the runway appears |
+
+## Loading and frame cost
+
+| What | How |
+|---|---|
+| Chapter seams | `Engine.warmSeams` links each distinct visibility state's lit programs (three keys them on the visible light count) against the composer's own buffer, in story order, off the render thread. Town seam: 59 programs linked on the spot before, about 10 now (the rest are shadow-depth variants) |
+| Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
+| Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
+| Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
+| Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
+| Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
+
+## Pinned titles
+
+Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a canvas-drawn lockup (heavy / thin / heavy condensed capitals, Oswald) on a plane with the depth test on, so towers, trees and the lighthouse pass in front of it and the haze dims it, the way a camera-tracked title is made in a film. The words come from `PINNED_TITLES` in `src/story/copy.ts`.
+
+The rig directs a different camera in every chapter, so each title's spot (`SPOTS`) was fitted to the camera across its window: the position that stays nearest the middle of the lens while the chapter plays. Where the camera looks steeply down, the title lies flat over the scene. If a chapter's camera changes, sample the camera across its window and refit that spot.
 
 ## Camera direction and the lens
 

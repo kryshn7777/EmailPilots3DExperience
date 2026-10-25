@@ -1456,6 +1456,19 @@ body.is-clean[data-route='/'].is-landing .site-header {
   gap: 1rem;
 }
 
+/* four cards sit as 4 across or 2 by 2, never 3 and an orphan */
+@media (min-width: 40rem) {
+  .landing__grid--four {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 70rem) {
+  .landing__grid--four {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .landing__card {
   padding: 1.5rem 1.5rem 1.25rem;
   border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
@@ -1498,6 +1511,103 @@ body.is-clean[data-route='/'].is-landing .site-header {
   position: absolute;
   left: 0;
   color: var(--beacon-beam);
+}
+
+.landing__card p:not(.landing__card-kicker) {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.landing__proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.6rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing__proof li {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
+.landing__section > .page__lede {
+  margin: -0.75rem 0 1.75rem;
+  max-width: 46rem;
+}
+
+.landing__versus {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.landing__panel {
+  padding: 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--predawn) 38%, var(--void));
+}
+
+.landing__panel.is-before {
+  border-style: dashed;
+}
+
+.landing__panel.is-after {
+  border-color: color-mix(in srgb, var(--beacon-beam) 55%, transparent);
+}
+
+.landing__panel ul {
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.landing__panel li {
+  position: relative;
+  padding: 0.35rem 0 0.35rem 1.6rem;
+}
+
+.landing__panel.is-before li {
+  color: var(--ink-dim);
+}
+
+.landing__panel li::before {
+  position: absolute;
+  left: 0;
+}
+
+.landing__panel ul[data-mark='×'] li::before {
+  content: '×';
+  color: var(--ink-dim);
+}
+
+.landing__panel ul[data-mark='✓'] li::before {
+  content: '✓';
+  color: var(--beacon-beam);
+}
+
+.landing__section > .landing__proof {
+  margin-top: 1.25rem;
+}
+
+.landing__mailboxes i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: var(--beacon-beam);
 }
 
 .landing__pricing .pricing-card {

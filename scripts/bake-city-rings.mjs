@@ -48,7 +48,7 @@ const OFFSETS = {
 // (blender `--sheet hero-towers`, 18-170k triangles each), which only the lots the canyon flies
 // past can justify; `near` itself still decides the neon and billboard dressing in City.ts.
 const RINGS = {
-  city: { high: { near: 18, mid: 1e6, hero: 12 }, low: { near: 8, mid: 45 } },
+  city: { high: { near: 18, mid: 1e6, hero: 10 }, low: { near: 8, mid: 45 } },
   rooftops: {
     high: {
       near: 11, mid: 110, treeUltra: 6.5, streetUltra: 4.5, treeNear: 12, streetNear: 8,

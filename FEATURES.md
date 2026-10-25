@@ -26,7 +26,7 @@ entirely on your PC. No cloud account, no servers, no per-contact fees.
   server settings automatically, checking the domain's mail records when it isn't obvious.
 - **Verified before saved.** Every account is test-authenticated before it's added, and a
   one-click "Send test email to myself" proves the whole pipeline end to end.
-- **Your mailbox plus up to 5 more.** Extra accounts send in parallel, each with its own
+- **Up to 5 mailboxes** (confirmed 2026-10-25). Extra accounts send in parallel, each with its own
   daily allowance and health indicator, with bulk enable / disable / test / remove and a
   fleet overview strip.
 
@@ -252,7 +252,7 @@ Real code that exists in the build but must **not** appear in marketing until fi
   goes live: landing sells **"Solo" at $2.9/week**, the app's Settings card says **"Free" /
   "First Class"**, and the payment-store runbook defines **Weekly $2.90 + Monthly $10.00**.
   Pick one vocabulary end to end.
-- **Numbers safe to quote:** your mailbox + up to 5 more; ~50 emails/day default cap per
+- **Numbers safe to quote:** up to 5 mailboxes; ~50 emails/day default cap per
   mailbox; warm-up ramp ~5 → ~50; replies checked every 15 minutes; 8 reply labels; 5
   writing tones; curated on-device AI model at 2.3 GB (a 219 MB free-tier model exists but
   isn't offered yet — see Appendix A); 7-day trial.
