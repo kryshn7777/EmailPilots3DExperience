@@ -210,6 +210,23 @@ export const WHY: BlockCopy = {
   ],
 };
 
+/**
+ * The titles pinned into the flight itself (webgl/actors/PinnedTitles): three stacked lines each,
+ * heavy / thin / heavy, in the chapter's own words.
+ */
+export const PINNED_TITLES: { id: string; lines: [string, string, string] }[] = [
+  { id: 'desk', lines: ['Some emails', 'deserve', 'a pilot'] },
+  { id: 'preflight', lines: ['Ready', 'for', 'takeoff'] },
+  { id: 'takeoff', lines: ['Write once', 'it flies the', 'follow-ups'] },
+  { id: 'formation', lines: ['Your sequences', 'in', 'formation'] },
+  { id: 'storm', lines: ['Filters', 'ground the', 'fakes'] },
+  { id: 'beacon', lines: ['Cleared', 'for', 'delivery'] },
+  { id: 'no-fly', lines: ['Never the', 'wrong person', 'twice'] },
+  { id: 'city', lines: ['Delivered', 'where it', 'matters'] },
+  { id: 'copilot', lines: ['An AI that', 'never', 'phones home'] },
+  { id: 'landing', lines: ['The reply', 'is the', 'landing'] },
+];
+
 export interface ManualItem {
   title: string;
   body: string;

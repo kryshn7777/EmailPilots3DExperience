@@ -51,6 +51,7 @@ import {
 } from '../story/chapters';
 import { Beacon } from './actors/Beacon';
 import { Biplane } from './actors/Biplane';
+import { PinnedTitles } from './actors/PinnedTitles';
 import { Birds } from './actors/Birds';
 import { City } from './actors/City';
 import { Clouds } from './actors/Clouds';
@@ -153,6 +154,7 @@ export class Engine {
   private storm: Storm;
   private biplane: Biplane;
   private birds: Birds;
+  private pinned: PinnedTitles;
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
   private batch: BatchSend;
@@ -317,6 +319,7 @@ export class Engine {
     this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
+    this.pinned = new PinnedTitles();
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
     // what the sea mirrors: the sky, and the lights that light the lighthouse and the ship in it
@@ -355,6 +358,7 @@ export class Engine {
       this.lightning.group,
       this.biplane.group,
       this.birds.group,
+      this.pinned.group,
       this.beacon.group,
       this.wingPlanes.group,
       this.batch.group,
@@ -1153,6 +1157,7 @@ export class Engine {
     // from one frame to the next: shadows trail the plane by one frame, reflections refresh at half rate.
     const refresh = this.options.reducedMotion || (this.frameNo++ & 1) === 0;
     if (this.sun.castShadow) this.sun.shadow.needsUpdate = refresh;
+    this.pinned.update(t, this.camera.position, this.idlePreset === null);
     this.beacon.renderReflection(this.renderer, this.scene, this.camera);
     this.depthNormals?.invalidate();
     this.composer.render();
@@ -1318,6 +1323,7 @@ export class Engine {
     this.storm.dispose();
     this.biplane.dispose();
     this.birds.dispose();
+    this.pinned.dispose();
     this.beacon.dispose();
     this.wingPlanes.dispose();
     this.batch.dispose();
