@@ -18,14 +18,15 @@ import { HOME_CHAPTERS, PINNED_TITLES } from '../../story/copy';
  * condensed capitals, justified to one width) that holds still in the world while the camera goes by.
  *
  * The camera is directed per chapter (it looks down at the formation, back at the towers, up at the
- * sky), so each title is placed from the frame the rig gives at `ts`: a distance along the lens axis,
- * a little above the middle. Upright titles face the camera; where the camera looks steeply down the
+ * sky), so each title is placed from the frames the rig gives across its window (`from`..`to`): the spot that
+ * stays nearest the middle of the lens through it, a little above centre. Upright titles face the camera; where the camera looks steeply down the
  * title lies flat over the scene instead, its top toward the heading. If a chapter's rig changes,
- * re-sample the camera at `ts` and move its spot with it.
+ * re-sample the camera across its window and refit its spot.
  */
 interface Spot {
-  /** the story time the spot was framed at */
-  ts: number;
+  /** the story times it stands between (the camera was sampled across them) */
+  from: number;
+  to: number;
   pos: [number, number, number];
   /** world units across */
   width: number;
@@ -33,19 +34,21 @@ interface Spot {
   face?: [number, number, number];
   /** flat: the heading its top points along, as a yaw in radians */
   flat?: number;
+  /** false: stays crisp in thick weather (default: the haze dims it with distance) */
+  fog?: boolean;
 }
 
 const SPOTS: Record<string, Spot> = {
-  desk: { ts: 0.03, pos: [-0.3, 2.26, -1.14], width: 2.26, face: [2.05, 2.26, 2.71] },
-  preflight: { ts: 0.115, pos: [28.38, 2.42, 11.18], width: 8.77, face: [6.5, 2.42, 0.9] },
-  takeoff: { ts: 0.2, pos: [64.89, 21.08, 0.66], width: 31.62, face: [33.23, 21.08, 13.54] },
-  formation: { ts: 0.295, pos: [64.14, 10.64, 3.56], width: 12.48, flat: -0.707 },
-  storm: { ts: 0.405, pos: [115.93, 12.41, 0.61], width: 21.11, face: [95.72, 12.41, 0.11] },
-  beacon: { ts: 0.515, pos: [144.47, 31.44, -38.01], width: 19.12, face: [126.76, 31.44, 0.69] },
-  'no-fly': { ts: 0.605, pos: [160.29, 5.21, 6.81], width: 18.49, flat: -2.303 },
-  city: { ts: 0.705, pos: [207.56, -1.07, 4.94], width: 21.56, face: [182.77, -1.07, 0.6] },
-  copilot: { ts: 0.815, pos: [188.43, 10.3, 3.55], width: 17.48, face: [211.96, 10.3, -0.69] },
-  landing: { ts: 0.925, pos: [214.8, 10.82, 1.98], width: 23.3, face: [254.63, 10.82, -0.33] },
+  desk: { from: -0.007, to: 0.047, pos: [0.72, 2.0, 0.89], width: 1.21, face: [2.04, 2.0, 2.62] },
+  preflight: { from: 0.098, to: 0.152, pos: [20.38, 0.9, 8.52], width: 7.21, face: [8.92, 0.9, 2.25] },
+  takeoff: { from: 0.163, to: 0.217, pos: [44.47, 0.55, 14.21], width: 12.17, face: [28.47, 0.55, 12.93] },
+  formation: { from: 0.288, to: 0.342, pos: [81.49, 24.34, 0.76], width: 9.94, face: [67.6, 24.34, 4.87] },
+  storm: { from: 0.388, to: 0.442, pos: [128.18, -3.34, -14.97], width: 34.76, face: [98.48, -3.34, 0.05], fog: false },
+  beacon: { from: 0.518, to: 0.572, pos: [109.91, 35.32, -33.71], width: 20.87, face: [147.6, 35.32, 0.9] },
+  'no-fly': { from: 0.568, to: 0.622, pos: [152.88, -3.72, 11.0], width: 22.84, flat: -2.693 },
+  city: { from: 0.688, to: 0.742, pos: [199.14, 1.78, 0.55], width: 10.5, face: [185.86, 1.78, 1.18] },
+  copilot: { from: 0.788, to: 0.842, pos: [222.79, 22.6, 0.95], width: 6.25, face: [211.95, 22.6, -0.5] },
+  landing: { from: 0.93, to: 0.968, pos: [273.4, 2.6, 8.6], width: 5.4, face: [263.5, 2.6, -4.0] },
 };
 
 const UP = new Vector3(0, 1, 0);
@@ -53,8 +56,8 @@ const TEXT_W = 1800;
 const PAD = 124;
 const CANVAS_W = TEXT_W + PAD * 2;
 
-const FADE_IN = 0.02;
-const FADE_OUT = 0.025;
+const FADE_IN = 0.014;
+const FADE_OUT = 0.014;
 
 interface Title {
   mesh: Mesh;
@@ -78,6 +81,7 @@ export class PinnedTitles {
         transparent: true,
         depthWrite: false,
         toneMapped: false,
+        fog: spot.fog !== false,
         opacity: 0,
       });
       const mesh = new Mesh(new PlaneGeometry(1, 1), material);
@@ -94,7 +98,7 @@ export class PinnedTitles {
       mesh.renderOrder = 6;
       mesh.frustumCulled = false;
       this.group.add(mesh);
-      this.titles.push({ mesh, material, from: spot.ts - 0.035, to: spot.ts + 0.05 });
+      this.titles.push({ mesh, material, from: spot.from, to: spot.to });
     });
     void this.draw();
   }
@@ -104,7 +108,7 @@ export class PinnedTitles {
     try {
       await Promise.all([
         document.fonts.load('700 100px Oswald'),
-        document.fonts.load('300 100px Oswald'),
+        document.fonts.load('400 100px Oswald'),
         document.fonts.load('500 40px "Inter Variable"'),
       ]);
     } catch {
@@ -153,7 +157,7 @@ export class PinnedTitles {
 function lockup(kicker: string, lines: string[]): { canvas: HTMLCanvasElement; aspect: number } {
   const scratch = document.createElement('canvas').getContext('2d')!;
   const heavy = (px: number): string => `700 ${px}px Oswald`;
-  const thin = (px: number): string => `300 ${px}px Oswald`;
+  const thin = (px: number): string => `400 ${px}px Oswald`;
 
   // heavy lines are fitted to the full width, the thin one is tracked out to it
   const rows = lines.map((raw, i) => {
@@ -165,7 +169,7 @@ function lockup(kicker: string, lines: string[]): { canvas: HTMLCanvasElement; a
       const cap = scratch.measureText('H').actualBoundingBoxAscent;
       return { text, kind: 'heavy' as const, size, cap, width: scratch.measureText(text).width };
     }
-    const size = 118;
+    const size = 132;
     scratch.font = thin(size);
     const cap = scratch.measureText('H').actualBoundingBoxAscent;
     const glyphs = [...text].map((ch) => scratch.measureText(ch).width);
