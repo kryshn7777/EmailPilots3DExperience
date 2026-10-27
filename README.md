@@ -94,6 +94,7 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
 | Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
 | Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
+| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 16 units, hero 28, detail 48, lite 70, lean beyond; phones 16/36), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
 | Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
 | Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
 

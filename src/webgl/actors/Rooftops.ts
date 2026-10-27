@@ -254,6 +254,7 @@ export class Rooftops {
   update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
     KitCity.tick(time);
+    if (eye) this.kitCity?.updateTrees(eye);
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
     // the pools of lamplight painted on the streets fade with the lamps

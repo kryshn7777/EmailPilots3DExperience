@@ -5,6 +5,7 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
+  DynamicDrawUsage,
   Float32BufferAttribute,
   Group,
   IcosahedronGeometry,
@@ -161,12 +162,39 @@ export interface KitOptions {
  * save for the HIGH tier: the district is real buildings out to the horizon
  * and the FAR impostor box only exists for the phone tier's outer ring.
  */
+/** One model tier of one tree species: an instanced mesh and how to pose a lot into one of its slots. */
+interface TreeTier {
+  mesh: InstancedMesh;
+  /** slots in use this frame; the first `fixed` hold the trees that always draw this model */
+  fill: number;
+  fixed: number;
+  place: (lot: number, slot: number) => void;
+}
+
+/** model tiers of a tree, densest first: ultra, hero, detail, lite; rank 4 is the lean blob of every other tree */
+const TREE_RANK: Record<string, number> = { ultra: 0, hero: 1, detail: 2, lite: 3 };
+const LEAN_RANK = 4;
+
 export class KitCity {
   readonly group = new Group();
   private disposables: { dispose(): void }[] = [];
 
   /** atlas textures are shared by every city and never disposed with one */
   private static maps = new Map<string, KitMaps>();
+  /**
+   * Trees in the dense tiers (ultra, hero, detail) by the ring of the flight line they stand in: each
+   * draws that model only near the camera (see `updateTrees`). `base` is the rank of its ring.
+   */
+  private treeSlots: { lot: number; base: number; species: string }[] = [];
+  /** per species, the loaded model tiers by rank: 0 ultra, 1 hero, 2 detail, 3 lite, 4 lean */
+  private treeTiers = new Map<string, (TreeTier | undefined)[]>();
+  /** per species, how many dynamic trees have each ring rank: the room every tier mesh needs */
+  private treeCounts = new Map<string, number[]>();
+  private treeLots: KitLot[] = [];
+  /** the camera distances inside which a tree draws its ultra, hero, detail and lite model (the lean one beyond) */
+  private treeRadii: number[] = [16, 28, 48, 70];
+  private treeEye = new Vector3(1e9, 0, 0);
+  private treeAt = new Vector3();
   /** the materials with lit windows, and the glow each was made with (see `setPower`) */
   private glowing: { m: MeshStandardMaterial; base: number }[] = [];
   /** only the materials that opted into the cloud environment */
@@ -358,6 +386,8 @@ export class KitCity {
     private color = new Color(),
   ) {
     const modules = manifest.modules;
+    this.treeLots = lots;
+    if (tier === 'low') this.treeRadii = [0, 0, 16, 36];
     // guard against a rings file from a different bake than the lot list
     const valid = (indices: number[]): number[] => indices.filter((i) => lots[i] !== undefined);
 
@@ -410,6 +440,27 @@ export class KitCity {
       const arr = byModule.get(id) ?? [];
       arr.push(i);
       byModule.set(id, arr);
+    }
+    // Trees are placed by their ring of the flight line, but an InstancedMesh draws every instance it has:
+    // the whole town's ultra trees (~50k triangles each) drew for the whole flight, and so did every lite
+    // one (~700). They are registered here instead and drawn by `updateTrees`: each in the densest model
+    // its ring allows within a radius of the camera, and in a lighter one beyond it. Every tier mesh of a
+    // species is given room for the trees that may stand in it.
+    const dynamicIds = new Set<string>();
+    for (const [moduleId, indices] of byModule) {
+      const mod = modules.find((m) => m.id === moduleId);
+      const rank = mod?.lod ? TREE_RANK[mod.lod]! : LEAN_RANK;
+      if (!mod || mod.kind !== 'tree' || rank === LEAN_RANK) continue;
+      const species = mod.lean ?? mod.id;
+      dynamicIds.add(moduleId);
+      for (const lot of indices) this.treeSlots.push({ lot, base: rank, species });
+      const counts = this.treeCounts.get(species) ?? [0, 0, 0, 0];
+      counts[rank]! += indices.length;
+      this.treeCounts.set(species, counts);
+    }
+    // the tiers a dynamic tree may fall back through must be loaded even if no lot stands in them
+    for (const species of this.treeCounts.keys()) {
+      for (const id of [species, swaps.lite.get(species)]) if (id && !byModule.has(id)) byModule.set(id, []);
     }
     const materials = new Map<string, MeshStandardMaterial>();
     // houses whose roofs the town dresses: one table of the modules' roofing colours, indexed per vertex
@@ -466,13 +517,20 @@ export class KitCity {
         const geomHeight = shell ? mod.height : bounds.max.y - bounds.min.y;
         const geomW = shell ? mod.footprint[0] : bounds.max.x - bounds.min.x;
         const geomD = shell ? mod.footprint[1] : bounds.max.z - bounds.min.z;
-        const inst = new InstancedMesh(geometry, material, indices.length);
+        // a tree mesh keeps room for every tree that may stand in it (updateTrees)
+        const dynamic = dynamicIds.has(moduleId);
+        const species = mod.lean ?? mod.id;
+        const rank = mod.kind === 'tree' ? (mod.lod ? TREE_RANK[mod.lod]! : LEAN_RANK) : -1;
+        const counts = this.treeCounts.get(species);
+        const room = !counts || rank < 0 ? 0 : counts.slice(0, rank + 1).reduce((a, b) => a + b, 0);
+        const inst = new InstancedMesh(geometry, material, Math.max(indices.length, room + (dynamic ? 0 : indices.length)));
+        inst.name = mod.id;
         const m4 = new Matrix4();
         const q = new Quaternion();
         const p = new Vector3();
         const s = new Vector3();
         const Y = new Vector3(0, 1, 0);
-        indices.forEach((lotIndex, k) => {
+        const place = (lotIndex: number, k: number): void => {
           const lot = lots[lotIndex]!;
           q.setFromAxisAngle(Y, lot.yaw);
           // Fit the module INSIDE the lot box on all three axes, uniformly.
@@ -487,7 +545,21 @@ export class KitCity {
           p.set(lot.x, -baseY * fit, lot.z);
           inst.setMatrixAt(k, m4.compose(p, q, s));
           inst.setColorAt(k, this.color.set(lot.tint));
-        });
+        };
+        if (rank >= 0 && counts) {
+          const tiers = this.treeTiers.get(species) ?? [];
+          const fixed = dynamic ? 0 : indices.length;
+          tiers[rank] = { mesh: inst, fill: fixed, fixed, place };
+          this.treeTiers.set(species, tiers);
+          if (dynamic || room) {
+            // repacked as the camera moves: its bounds, taken once from the first pose, would go stale
+            inst.frustumCulled = false;
+            inst.instanceMatrix.setUsage(DynamicDrawUsage);
+            this.treeEye.set(1e9, 0, 0);
+          }
+        }
+        if (!dynamic) indices.forEach((lotIndex, k) => place(lotIndex, k));
+        inst.count = dynamic ? 0 : indices.length;
         if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
         inst.castShadow = inst.receiveShadow = shadows;
         this.group.add(inst);
@@ -505,6 +577,43 @@ export class KitCity {
           requestCompile(glass);
         }
       });
+    }
+  }
+
+  /**
+   * Trees in the dense tiers (ultra ~50k triangles, hero ~15k, detail ~2.4k) were placed by the ring of
+   * the flight line they stand in, so every one of them drew its full model for the whole town, even
+   * with the camera a hundred units away. Now each draws the densest model its ring allows only within
+   * a radius of the camera, and a lighter one beyond it (lite, then the lean blob): the tree meshes are
+   * repacked with just the trees that belong in each. About a thousand lots, and only once the camera has
+   * moved a little.
+   */
+  updateTrees(eye: Vector3): void {
+    if (!this.treeSlots.length || eye.distanceToSquared(this.treeEye) < 4) return;
+    this.treeEye.copy(eye);
+    this.group.updateWorldMatrix(true, false);
+    const at = this.group.worldToLocal(this.treeAt.copy(eye));
+    for (const tiers of this.treeTiers.values()) for (const t of tiers) if (t) t.fill = t.fixed;
+    const [r0, r1, r2, r3] = this.treeRadii as [number, number, number, number];
+    for (const slot of this.treeSlots) {
+      const tiers = this.treeTiers.get(slot.species);
+      if (!tiers) continue;
+      const lot = this.treeLots[slot.lot]!;
+      const d = Math.hypot(lot.x - at.x, lot.h * 0.5 - at.y, lot.z - at.z);
+      const want = d < r0 ? 0 : d < r1 ? 1 : d < r2 ? 2 : d < r3 ? 3 : LEAN_RANK;
+      // the densest tier it may use that is near enough and has loaded
+      let tier: TreeTier | undefined;
+      for (let rank = Math.max(slot.base, want); rank <= LEAN_RANK && !tier; rank++) tier = tiers[rank];
+      if (tier) tier.place(slot.lot, tier.fill++);
+    }
+    for (const tiers of this.treeTiers.values()) {
+      for (const t of tiers) {
+        if (!t) continue;
+        t.mesh.count = t.fill;
+        t.mesh.visible = t.fill > 0;
+        t.mesh.instanceMatrix.needsUpdate = true;
+        if (t.mesh.instanceColor) t.mesh.instanceColor.needsUpdate = true;
+      }
     }
   }
 
