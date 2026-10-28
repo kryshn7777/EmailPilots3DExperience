@@ -4,6 +4,7 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  DynamicDrawUsage,
   ConeGeometry,
   CylinderGeometry,
   Float32BufferAttribute,
@@ -1201,7 +1202,15 @@ export class Yards {
     }
   }
 
-  private modelGroups: { model: string; kind: PropKind; inst: InstancedMesh; list: PropPlacement[] }[] = [];
+  private modelGroups: {
+    model: string; kind: PropKind; inst: InstancedMesh; list: PropPlacement[];
+    /** once the model is in: every placement's matrix and colour, to repack by distance (updatePlants) */
+    mats?: Float32Array; cols?: Float32Array;
+  }[] = [];
+  private plantEye = new Vector3(1e9, 0, 0);
+  private plantAt = new Vector3();
+  /** beyond this from the camera a shrub or evergreen is a few pixels, and is not drawn */
+  private static readonly PLANT_REACH = 70;
   private disposed = false;
 
   private buildProps(props: PropPlacement[], detail: 'high' | 'low'): void {
@@ -1299,12 +1308,16 @@ export class Yards {
         g.inst.setColorAt(i, tint.set(p.color).lerp(white, g.kind === 'shrub' && BLOOM_SHRUBS.includes(p.color) ? 0.55 : 0.7));
       });
       if (g.inst.instanceColor) g.inst.instanceColor.needsUpdate = true;
+      g.mats = Float32Array.from(g.inst.instanceMatrix.array as Float32Array);
+      g.cols = g.inst.instanceColor ? Float32Array.from(g.inst.instanceColor.array as Float32Array) : undefined;
+      g.inst.instanceMatrix.setUsage(DynamicDrawUsage);
       g.inst.geometry.dispose();
       g.inst.geometry = model;
       g.inst.material = material;
       this.disposables.push(model);
       requestCompile(g.inst);
     }
+    this.plantEye.set(1e9, 0, 0);
     // the ornamental tree's own trunk goes: the model has one
     for (const g of this.modelGroups) if (g.model === TRUNK_MARK && geometries.size) g.inst.visible = false;
   }
@@ -1337,6 +1350,35 @@ export class Yards {
     make('path', '#ffe2a8', 0.22, 0.8);
     make('pool', '#5ad2ff', 1.5, 0.55);
     make('fire', '#ff8a3a', 0.6, 0.9);
+  }
+
+  /**
+   * The leaf-card plants are drawn only within reach of the camera: repacked each time it has moved a few
+   * units, a few hundred matrices copied. (An InstancedMesh draws everything it holds, so a thousand
+   * shrubs along the whole town would otherwise all be drawn at every point of the flight.)
+   */
+  updatePlants(eye: Vector3): void {
+    if (eye.distanceToSquared(this.plantEye) < 9) return;
+    this.plantEye.copy(eye);
+    this.group.updateWorldMatrix(true, false);
+    const at = this.group.worldToLocal(this.plantAt.copy(eye));
+    const reach2 = Yards.PLANT_REACH ** 2;
+    for (const g of this.modelGroups) {
+      if (!g.mats) continue;
+      const m = g.inst.instanceMatrix.array as Float32Array;
+      const c = g.inst.instanceColor?.array as Float32Array | undefined;
+      let k = 0;
+      for (let i = 0; i < g.list.length; i++) {
+        const p = g.list[i]!;
+        if ((p.x - at.x) ** 2 + (p.z - at.z) ** 2 > reach2) continue;
+        m.set(g.mats.subarray(i * 16, i * 16 + 16), k * 16);
+        if (c && g.cols) c.set(g.cols.subarray(i * 3, i * 3 + 3), k * 3);
+        k++;
+      }
+      g.inst.count = k;
+      g.inst.instanceMatrix.needsUpdate = true;
+      if (g.inst.instanceColor) g.inst.instanceColor.needsUpdate = true;
+    }
   }
 
   /** the firepits breathe a little */

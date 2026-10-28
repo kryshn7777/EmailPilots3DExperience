@@ -1,4 +1,4 @@
-import { Uniform } from 'three';
+import { Uniform, Vector3 } from 'three';
 import { Effect, EffectAttribute } from 'postprocessing';
 
 /**
@@ -27,6 +27,7 @@ uniform float uCurve;
 uniform float uFilmic;
 uniform float uExposure;
 uniform float uSat;
+uniform vec3 uBalance;
 #ifdef OPTICS
 uniform float uAberration;
 uniform float uFocus;
@@ -109,7 +110,7 @@ MAIN_IMAGE {
   vec3 over = max(c - K, 0.0);
   vec3 shoulder = K + (1.0 - K) * (1.0 - exp(-over / (1.0 - K)));
   vec3 plain = mix(c, mix(c, shoulder, step(K, c)), uCurve);
-  c = mix(plain, neutralTone(c * uExposure), uFilmic);
+  c = mix(plain, neutralTone(c * uExposure * uBalance), uFilmic);
   vec3 d = sqrt(min(c, vec3(1.0)));
   d = mix(d, d * d * (3.0 - 2.0 * d), 0.14 * uCurve);
   float l = dot(d, vec3(0.299, 0.587, 0.114));
@@ -166,6 +167,7 @@ export class CinemaEffect extends Effect {
         ['uFilmic', new Uniform(0)],
         ['uExposure', new Uniform(1)],
         ['uSat', new Uniform(1)],
+        ['uBalance', new Uniform(new Vector3(1, 1, 1))],
         ['uAberration', new Uniform(0)],
         ['uFocus', new Uniform(4)],
         ['uBokeh', new Uniform(0)],
@@ -189,9 +191,10 @@ export class CinemaEffect extends Effect {
     u.get('uAberration')!.value = aberration;
   }
 
-  /** Per frame, from the chapter's grade: the neutral tone curve's weight, its exposure, and the frame's saturation. */
-  look(filmic: number, exposure: number, saturation: number): void {
+  /** Per frame, from the chapter's grade: the neutral tone curve's weight, its exposure, the frame's saturation and its white balance. */
+  look(filmic: number, exposure: number, saturation: number, balance: [number, number, number]): void {
     const u = this.uniforms;
+    (u.get('uBalance')!.value as Vector3).set(...balance);
     u.get('uFilmic')!.value = filmic;
     u.get('uExposure')!.value = exposure;
     u.get('uSat')!.value = saturation;
