@@ -91,6 +91,7 @@ export interface TownSites { houses: TownSite[]; trees: TownSite[] }
 export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
+  private manifest: KitManifest | null = null;
   private fences: Fences | null = null;
   private hedges: Hedges | null = null;
   private cars: StreetCars | null = null;
@@ -276,6 +277,7 @@ export class Rooftops {
       fetch(asset('/models/city-rings.json'), { cache: 'no-cache' }).then((r) => r.json()),
     ]);
     const rings = allRings.rooftops[quality.tier] as KitRingSet;
+    this.manifest = manifest;
     const { lots } = homeLots(manifest.modules);
     showcase(lots as KitLot[], manifest.modules);
     // glow: the baked lit windows. This district sits 20–100 units out in a
@@ -371,6 +373,8 @@ export class Rooftops {
     );
     this.yards.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.yards.group);
+    // the shrubs, evergreens and ornamental trees beside the flight are leaf-card models
+    if (this.manifest) void this.yards.loadModels(this.manifest, quality.tier);
     // the swimming pools, as real pools (HIGH tier; phones keep the painted decal)
     if (quality.tier === 'high' && this.yards.poolSites.length) {
       this.pools = new Pools(this.yards.poolSites);

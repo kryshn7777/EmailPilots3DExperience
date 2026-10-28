@@ -64,6 +64,33 @@ PARAMS = {
         angle=(12, 30), wobble=0.12, up=0.22, taper=0.5, sides=(14, 7, 5, 4, 4),
         centre=(0, 0, 7.9), radii=(2.0, 2.0, 6.6), cards=2300, size=(0.4, 0.7), lobes=10,
         bark=dict(tint='#c9c3b2', moss=0.0, lenticels=0.6, furrow=0.6, fissure=(14, 4, 0.05))),
+    # garden plants (made through YARD_PLANTS in make_buildings.py): the same generator at hedge scale,
+    # borrowing the oak/maple/poplar/pine leaf cards and bark, with no trunk to speak of
+    'shrub': dict(
+        cards_of='poplar', bark_of='maple', variants=(0, 1),
+        trunk_r=(0.035, 0.02), lens=[0.18, 0.75], kids=[6], kid_t=(0.15, 1.0),
+        angle=(20, 55), wobble=0.3, up=0.25, taper=0.8, sides=(4, 3),
+        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=95, size=(0.32, 0.5), lobes=5),
+    'shrub-red': dict(
+        cards_of='maple', bark_of='maple', variants=(1, 2),
+        trunk_r=(0.035, 0.02), lens=[0.18, 0.75], kids=[6], kid_t=(0.15, 1.0),
+        angle=(20, 55), wobble=0.3, up=0.25, taper=0.8, sides=(4, 3),
+        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=95, size=(0.32, 0.5), lobes=5),
+    'arborvitae': dict(
+        cards_of='pine', bark_of='pine', variants=(0, 1),
+        trunk_r=(0.06, 0.03), lens=[1.9, 0.5], kids=[5], kid_t=(0.1, 0.9),
+        angle=(12, 28), wobble=0.12, up=0.3, taper=0.6, sides=(5, 3),
+        centre=(0, 0, 1.15), radii=(0.42, 0.42, 1.05), cards=100, size=(0.35, 0.55), lobes=5),
+    'ornamental': dict(
+        cards_of='maple', bark_of='maple', variants=(0, 1, 2),
+        trunk_r=(0.12, 0.06), lens=[1.1, 1.3, 0.8], kids=[4, 3], kid_t=(0.55, 1.0),
+        angle=(35, 65), wobble=0.2, up=0.15, taper=0.6, sides=(6, 4, 3),
+        centre=(0, 0, 2.5), radii=(1.8, 1.8, 1.3), cards=260, size=(0.5, 0.85), lobes=8),
+    'ornamental-green': dict(
+        cards_of='oak', bark_of='oak', variants=(0, 1),
+        trunk_r=(0.12, 0.06), lens=[1.1, 1.3, 0.8], kids=[4, 3], kid_t=(0.55, 1.0),
+        angle=(35, 65), wobble=0.2, up=0.15, taper=0.6, sides=(6, 4, 3),
+        centre=(0, 0, 2.5), radii=(1.8, 1.8, 1.3), cards=260, size=(0.5, 0.85), lobes=8),
     'pine': dict(
         trunk_r=(0.40, 0.04), height=11.2, whorl=(1.9, 0.5), branches=9, reach=2.7,
         cards_per_branch=11, size=(0.85, 1.3), skirt=20,
@@ -120,6 +147,11 @@ LITE = {
     'poplar': dict(lens=[10.0, 1.9], kids=[9], sides=(5, 4), cards=110, size=(1.5, 2.3), lobes=6),
     'pine': dict(whorl=(2.2, 1.75), branches=4, cards_per_branch=2, size=(1.9, 2.8), skirt=2),
 }
+LITE.update({
+    'shrub': dict(cards=35, kids=[3], sides=(3, 3)),
+    'shrub-red': dict(cards=35, kids=[3], sides=(3, 3)),
+    'arborvitae': dict(cards=35, kids=[3], sides=(3, 3)),
+})
 TIERS = {'ultra': ULTRA, 'detail': DETAIL, 'lite': LITE}
 
 # individual 3D leaves: a blade as a few stations along its length, each (t, half-width as a
@@ -160,7 +192,9 @@ class TreeBuilder:
         self.anchors = []          # branch tips the canopy's small cards gather at
         self.twigs = []            # (points, directions) of every last-level twig, for 3D leaves
         self.tris = Counter()      # triangles by kind, for tuning
-        self.bark_rect = layout.bark[species]
+        # a garden plant borrows another species' bark strip and leaf cards (the atlas has no room for more)
+        self.cards_sp = self.P.get('cards_of', species)
+        self.bark_rect = layout.bark[self.P.get('bark_of', species)]
         sx, sy, sw, sh = layout.swatch
         A = layout.size
         self.swatch_uv = ((sx + sw / 2) / A, 1 - (sy + sh / 2) / A)
@@ -174,9 +208,9 @@ class TreeBuilder:
             c = Vector(P['centre'])
             self.crown = (c + Vector((self.lean.x / self.lean.z * c.z, self.lean.y / self.lean.z * c.z, 0)),
                           Vector(P['radii']))
-        base, tip = foliage.SPECIES[species]['base'], foliage.SPECIES[species]['tip']
+        base, tip = foliage.SPECIES[self.cards_sp]['base'], foliage.SPECIES[self.cards_sp]['tip']
         self.leaf_cols = (lin(base), lin(tip))
-        self.autumn_cols = tuple(lin(c) for c in AUTUMN[species])
+        self.autumn_cols = tuple(lin(c) for c in AUTUMN[self.cards_sp])
 
     # -- face plumbing ---------------------------------------------------------------
 
@@ -485,7 +519,7 @@ class TreeBuilder:
         """A pair of back-to-back cards. `n_geo` is the card's facing, `light_n` the
         shading normal both faces use. `shade` and `tint` are the vertex colour."""
         rng = self.rng
-        rect = self.layout.cards[(self.species, variant)]
+        rect = self.layout.cards[(self.cards_sp, variant)]
         ref = Vector((0, 0, 1))
         right = ref.cross(n_geo)
         if right.length < 1e-3:
@@ -560,7 +594,8 @@ class TreeBuilder:
             light_n = (radial * 0.85 + Vector((0, 0, 0.35)) + n_geo * 0.15).normalized()
             if tone is None:
                 tone = self.pick_tone()
-            variant = rng.randrange(2)
+            vs = self.P.get('variants')
+            variant = vs[rng.randrange(len(vs))] if vs else rng.randrange(2)
             if fill is not None and src != 0:
                 # the crevices where lobes meet are in the shade of both: a point inside two or more
                 # lobes is darker, so each lobe reads as a mass of its own with light on its skin
@@ -830,7 +865,7 @@ class TreeBuilder:
 
     def card_along(self, centre, along, n_geo, light_n, size, variant, flip, shade=1.0, tint=(1, 1, 1)):
         """A needle-spray card whose long axis follows the branch direction."""
-        rect = self.layout.cards[(self.species, variant)]
+        rect = self.layout.cards[(self.cards_sp, variant)]
         right = along - n_geo * along.dot(n_geo)
         right = right.normalized() if right.length > 1e-4 else Vector((1, 0, 0))
         up = n_geo.cross(right)

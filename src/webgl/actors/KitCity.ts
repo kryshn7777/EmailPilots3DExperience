@@ -92,7 +92,7 @@ export interface KitManifest {
  * positions are normalized 16-bit integers scaled back up by their node's transform, and baking that
  * transform into the vertices (as the loader callback below does) needs room the integers do not have.
  */
-function dequantized(source: BufferGeometry): BufferGeometry {
+export function dequantized(source: BufferGeometry): BufferGeometry {
   const geometry = source.clone();
   for (const [name, attr] of Object.entries(geometry.attributes)) {
     if (attr.array instanceof Float32Array && !attr.normalized && !(attr as InterleavedBufferAttribute).isInterleavedBufferAttribute) continue;
@@ -314,6 +314,32 @@ export class KitCity {
     if (maps.alpha) KitCity.foliage(material);
     this.disposables.push({ dispose: () => { KitCity.materials.delete(material); material.dispose(); } });
     return material;
+  }
+
+  /**
+   * The leaf-card material of the hero-tree sheet, for garden plants made outside any KitCity (the
+   * yards): the same atlas upload, alpha cut-outs, vertex-lit canopy and 'kit-foliage' wind and
+   * back-light as the trees. Hand it back to `release` when done.
+   */
+  static foliageMaterial(manifest: KitManifest, tier: 'high' | 'low'): MeshStandardMaterial {
+    const maps = KitCity.loadMaps(manifest, 'hero-trees', tier);
+    const material = new MeshStandardMaterial({
+      map: maps.color, aoMap: maps.orm, roughnessMap: maps.orm, metalnessMap: maps.orm,
+      roughness: 1, metalness: 1,
+      ...(maps.normal ? { normalMap: maps.normal } : {}),
+      alphaTest: 0.42, vertexColors: true,
+    });
+    if (KitCity.environment) {
+      material.envMap = KitCity.environment;
+      material.envMapIntensity = KitCity.envIntensity;
+    }
+    KitCity.materials.add(material);
+    KitCity.foliage(material);
+    return material;
+  }
+
+  static release(material: MeshStandardMaterial): void {
+    KitCity.materials.delete(material);
   }
 
   /** seconds, for the wind in the trees; every city's foliage reads the one clock */
