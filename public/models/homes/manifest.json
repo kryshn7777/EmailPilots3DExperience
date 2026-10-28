@@ -647,6 +647,90 @@
       ],
       "height": 4.389,
       "tris0": 718
+    },
+    {
+      "id": "yard-shrub",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-shrub.lod0.glb",
+      "footprint": [
+        0.49,
+        0.51
+      ],
+      "height": 0.467,
+      "tris0": 528
+    },
+    {
+      "id": "yard-shrub-lite",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-shrub-lite.lod0.glb",
+      "footprint": [
+        0.501,
+        0.555
+      ],
+      "height": 0.425,
+      "tris0": 224
+    },
+    {
+      "id": "yard-shrub-red",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-shrub-red.lod0.glb",
+      "footprint": [
+        0.463,
+        0.535
+      ],
+      "height": 0.435,
+      "tris0": 528
+    },
+    {
+      "id": "yard-arborvitae",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-arborvitae.lod0.glb",
+      "footprint": [
+        0.437,
+        0.412
+      ],
+      "height": 0.765,
+      "tris0": 540
+    },
+    {
+      "id": "yard-arborvitae-lite",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-arborvitae-lite.lod0.glb",
+      "footprint": [
+        0.414,
+        0.348
+      ],
+      "height": 0.641,
+      "tris0": 224
+    },
+    {
+      "id": "yard-ornamental",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-ornamental.lod0.glb",
+      "footprint": [
+        1.33,
+        1.419
+      ],
+      "height": 1.36,
+      "tris0": 1412
+    },
+    {
+      "id": "yard-ornamental-green",
+      "kind": "yard",
+      "sheet": "hero-trees",
+      "lod0": "yard-ornamental-green.lod0.glb",
+      "footprint": [
+        1.329,
+        1.307
+      ],
+      "height": 1.391,
+      "tris0": 1376
     }
   ],
   "sheets": {

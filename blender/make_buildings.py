@@ -76,6 +76,20 @@ HERO_TREES = {
 }
 
 
+# Garden plants for Yards.ts: the same generator at hedge scale (species in hero_trees.PARAMS, borrowing
+# the oak/maple/poplar/pine cards and bark so the atlas does not change). Not trees to the town's lot
+# layout: kind 'yard' and no `lean`, so cityGen never makes lots of them and KitCity never swaps them in.
+YARD_PLANTS = {
+    'yard-shrub': ('shrub', 'hero'),
+    'yard-shrub-lite': ('shrub', 'lite'),
+    'yard-shrub-red': ('shrub-red', 'hero'),
+    'yard-arborvitae': ('arborvitae', 'hero'),
+    'yard-arborvitae-lite': ('arborvitae', 'lite'),
+    'yard-ornamental': ('ornamental', 'hero'),
+    'yard-ornamental-green': ('ornamental-green', 'hero'),
+}
+
+
 def parse():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
     p = argparse.ArgumentParser()
@@ -245,6 +259,20 @@ def build_trees(setname, sheet, cfg, args, out):
         ))
         kinds = ' '.join(f'{k} {v}' for k, v in tree.builder.tris.items())
         print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.1f}x{dy:5.1f}x{dz:5.1f} m  {time.time() - t:5.1f}s  ({kinds})')
+    for mid, (species, lod) in YARD_PLANTS.items():
+        if args.only and mid not in args.only:
+            continue
+        t = time.time()
+        tree = hero_trees.HeroTree(mid, species, None, scale=homes.SCALE, lod=lod).build(layout)
+        dx, dy, dz = tree.dims()
+        obj = tree.final_object()
+        export_glb(obj, os.path.join(out, f'{mid}.lod0.glb'))
+        entries.append(dict(
+            id=mid, kind='yard', sheet=sheet, lod0=f'{mid}.lod0.glb',
+            footprint=[round(dx * homes.SCALE, 3), round(dy * homes.SCALE, 3)],
+            height=round(dz * homes.SCALE, 3), tris0=tree.tris(),
+        ))
+        print(f'{mid:24s} {tree.tris():5d} tris  {dx:5.2f}x{dy:5.2f}x{dz:5.2f} m  {time.time() - t:5.1f}s')
     return entries, sizes, dict(normal=True, emissive=False, alpha=True)
 
 

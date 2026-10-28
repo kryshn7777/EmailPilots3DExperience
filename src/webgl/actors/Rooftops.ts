@@ -91,6 +91,7 @@ export interface TownSites { houses: TownSite[]; trees: TownSite[] }
 export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
+  private manifest: KitManifest | null = null;
   private fences: Fences | null = null;
   private hedges: Hedges | null = null;
   private cars: StreetCars | null = null;
@@ -228,7 +229,7 @@ export class Rooftops {
     const map = softShadowTexture();
     const material = new MeshBasicMaterial({
       // with real sun shadows on HIGH these are only ambient contact darkening
-      map, color: '#000000', transparent: true, opacity: high ? 0.36 : 0.55, depthWrite: false, fog: true,
+      map, color: '#000000', transparent: true, opacity: high ? 0.2 : 0.4, depthWrite: false, fog: true,
     });
     const geometry = new PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
@@ -241,7 +242,7 @@ export class Rooftops {
     const Y = new Vector3(0, 1, 0);
     lots.forEach((lot, k) => {
       const tree = kinds.get(lot.moduleId) === 'tree';
-      const grow = tree ? 1.25 : 1.5;
+      const grow = tree ? 1.15 : 1.25;
       q.setFromAxisAngle(Y, lot.yaw);
       inst.setMatrixAt(k, m4.compose(p.set(lot.x, 0.04, lot.z), q, s.set(lot.w * grow, 1, lot.d * grow)));
     });
@@ -254,6 +255,7 @@ export class Rooftops {
   update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
     KitCity.tick(time);
+    if (eye) this.kitCity?.updateTrees(eye);
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
     // the pools of lamplight painted on the streets fade with the lamps
@@ -275,6 +277,7 @@ export class Rooftops {
       fetch(asset('/models/city-rings.json'), { cache: 'no-cache' }).then((r) => r.json()),
     ]);
     const rings = allRings.rooftops[quality.tier] as KitRingSet;
+    this.manifest = manifest;
     const { lots } = homeLots(manifest.modules);
     showcase(lots as KitLot[], manifest.modules);
     // glow: the baked lit windows. This district sits 20–100 units out in a
@@ -348,7 +351,7 @@ export class Rooftops {
     // Yard details for every house the flight passes over: beds, patios, pools,
     // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
     const yardReach = quality.tier === 'high' ? 90 : 50;
-    const richReach = quality.tier === 'high' ? 30 : 18;
+    const richReach = quality.tier === 'high' ? 18 : 12;
     const at2 = new Vector3();
     this.yards = new Yards(
       lots,
@@ -370,6 +373,8 @@ export class Rooftops {
     );
     this.yards.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.yards.group);
+    // the shrubs, evergreens and ornamental trees beside the flight are leaf-card models
+    if (this.manifest) void this.yards.loadModels(this.manifest, quality.tier);
     // the swimming pools, as real pools (HIGH tier; phones keep the painted decal)
     if (quality.tier === 'high' && this.yards.poolSites.length) {
       this.pools = new Pools(this.yards.poolSites);

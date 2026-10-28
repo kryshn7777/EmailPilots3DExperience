@@ -16,6 +16,7 @@ import {
 import { HOME_CELL } from '../bake/cityGen.mjs';
 import { mulberry32 } from '../util';
 import { KitCity } from './KitCity';
+import { ReflectionProbe } from '../materials/ReflectionProbe';
 import type { TownSite } from './Rooftops';
 
 const UP = new Vector3(0, 1, 0);
@@ -218,11 +219,13 @@ export class TownLight {
     }
     const mask = puddleMask();
     this.puddleMaterial = new MeshStandardMaterial({
-      color: '#697a8d', metalness: 1, roughness: 0.05, alphaMap: mask, transparent: true, opacity: 0.78, depthWrite: false,
+      // a wet patch on asphalt: dark, glassy water over it, not a blue metal blob
+      color: '#1b1f25', metalness: 0, roughness: 0.03, alphaMap: mask, transparent: true, opacity: 0.6, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
     // the puddles mirror the same baked sky and cloud sea as the houses' glass
-    KitCity.adopt(this.puddleMaterial, 0.8);
+    if (ReflectionProbe.current) ReflectionProbe.adopt(this.puddleMaterial, 1);
+    else KitCity.adopt(this.puddleMaterial, 0.8);
     const disc = new PlaneGeometry(1, 1);
     disc.rotateX(-Math.PI / 2);
     this.puddles = new InstancedMesh(disc, this.puddleMaterial, spots.length);

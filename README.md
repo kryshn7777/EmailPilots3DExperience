@@ -94,6 +94,7 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
 | Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
 | Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
+| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 16 units, hero 28, detail 48, lite 70, lean beyond; phones 16/36), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
 | Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
 | Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
 
@@ -102,6 +103,23 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a canvas-drawn lockup (heavy / thin / heavy condensed capitals, Oswald) on a plane with the depth test on, so towers, trees and the lighthouse pass in front of it and the haze dims it, the way a camera-tracked title is made in a film. The words come from `PINNED_TITLES` in `src/story/copy.ts`.
 
 The rig directs a different camera in every chapter, so each title's spot (`SPOTS`) was fitted to the camera across its window: the position that stays nearest the middle of the lens while the chapter plays. Where the camera looks steeply down, the title lies flat over the scene. If a chapter's camera changes, sample the camera across its window and refit that spot.
+
+## Town realism
+
+The town read as a game for a handful of reasons, each one fixed where it lives:
+
+| Cause | Fix |
+|---|---|
+| Light clipped to flat colour (no tone curve, hot sun, bloom from 0.85) | A neutral, hue-keeping tone curve (`filmic`, `exposure` in a chapter's grade, `post/Cinema.ts`), a lower sun key, bloom from 1.0 at 0.45 strength |
+| Primary-coloured lawns, shirts, umbrellas, play sets, flowers | `sat` in the grade (0.85 for the town), `Lawns.ts` pulled toward luminance, `muted()` on the prop and clothing palettes |
+| No anti-aliasing (the composer has no MSAA) | An SMAA pass last in the chain on HIGH |
+| Blocky roof moss and lichen, lawn patches | Wider, rotated noise octaves and softer thresholds in `Roofs.ts` and `Lawns.ts` |
+| Ground cell drawn at the wrong scale (4.5 m slabs, 4.5 m by 42 cm dashes, 2.7 m front walks) | `blender/make_ground.py`: 1.5 m slabs, 3 m by 12 cm dashes at a 12 m period, 1.2 m walks; re-baked (numpy only) |
+| Lamps half-lit and fog dark navy under a low sun | `lampLevel` goes out as the sun rises, the town's fog starts at 20 and is warm grey |
+| Blue metal puddle blobs | Dark dielectric water, mirroring the live probe |
+| Toy props and crowding | Faceted icosphere canopies are welded lumpy foliage masses; about a third of the people; lighter contact shadows; SSAO 1.6; duller car paint |
+| Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
+| Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
 
 ## Camera direction and the lens
 

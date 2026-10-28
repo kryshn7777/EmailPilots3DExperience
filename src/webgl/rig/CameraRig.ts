@@ -313,7 +313,7 @@ export class CameraRig {
 
     // the lens: what is in focus, how soft the rest is, how matted the frame
     this.cine.bars = bars;
-    this.cine.bokeh = 0.9 + bokeh;
+    this.cine.bokeh = 0.4 + bokeh;
     this.tB.copy(this.planePos).lerp(this.shot.look, this.shot.weight);
     this.cine.focus = this.camPos.distanceTo(this.tB);
   }

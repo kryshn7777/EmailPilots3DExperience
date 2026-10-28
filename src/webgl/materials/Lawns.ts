@@ -33,7 +33,8 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           f = f * f * (3.0 - 2.0 * f);
           return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + 1.0), f.x), f.y);
         }
-        float gFbm(vec2 p) { return gNoise(p) * 0.55 + gNoise(p * 2.07 + 5.3) * 0.3 + gNoise(p * 4.3 + 1.7) * 0.15; }
+        const mat2 gRot = mat2(1.6, 1.2, -1.2, 1.6);
+        float gFbm(vec2 p) { return gNoise(p) * 0.55 + gNoise(gRot * p + 5.3) * 0.3 + gNoise(gRot * gRot * p * 1.075 + 1.7) * 0.15; }
         float lawnBump = 0.0;
         float lawnMask = 0.0;`)
       .replace('#include <map_fragment>', /* glsl */ `#include <map_fragment>
@@ -52,16 +53,18 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
                     : h0 < 0.4 ? vec3(1.06, 1.08, 0.86)     // bright spring green
                     : h0 < 0.56 ? vec3(0.8, 0.96, 0.98)     // blue-green fescue
                     : h0 < 0.72 ? vec3(1.18, 1.06, 0.72)    // yellowing
-                    : h0 < 0.8 ? vec3(1.42, 1.06, 0.55)     // gone to straw
+                    : h0 < 0.8 ? vec3(1.2, 1.04, 0.75)      // gone to straw
                     : vec3(0.95, 1.0, 0.9);
           float lum = dot(g, vec3(0.2126, 0.7152, 0.0722));
           vec3 c = g * tint;
+          // real lawns are far less green than a painted one: pull the colour toward its luminance, a touch warm
+          c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.75) * vec3(1.04, 1.0, 0.9);
           // weather at two scales: a field of a few lots, and patches a couple of metres across
           float macro = gFbm(vTown * 0.035 + 3.0);
           float mid = gFbm(vTown * 0.31 + id * 0.7);
           c *= 0.84 + 0.32 * macro;
           float dry = smoothstep(0.6, 0.82, mid + (h2 - 0.5) * 0.36);
-          c = mix(c, vec3(lum) * vec3(1.55, 1.3, 0.58), dry * (0.35 + 0.35 * h3));
+          c = mix(c, vec3(lum) * vec3(1.35, 1.22, 0.78), dry * (0.15 + 0.2 * h3));
           float lush = smoothstep(0.66, 0.85, 1.0 - mid);
           c = mix(c, c * vec3(0.8, 0.95, 0.75), lush * 0.6);
           // mowing stripes inside the lot, lighter one way, darker the other
@@ -87,7 +90,7 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           float clump = gNoise(vTown * 3.1 + id) * 0.6 + gNoise(vTown * 7.3) * 0.4;
           c *= mix(1.0, 0.72 + 0.56 * clump, near1);
           // thatch: small straw-coloured patches where the grass has thinned
-          c = mix(c, vec3(lum) * vec3(1.5, 1.3, 0.7), smoothstep(0.78, 0.9, gNoise(vTown * 5.7 + id * 2.0)) * 0.45 * near1);
+          c = mix(c, vec3(lum) * vec3(1.3, 1.2, 0.8), smoothstep(0.78, 0.9, gNoise(vTown * 5.7 + id * 2.0)) * 0.3 * near1);
           float clover = smoothstep(0.66, 0.8, gNoise(vTown * 0.9 + id * 1.3 + 4.0)) * step(h3, 0.7);
           c = mix(c, c * vec3(0.86, 1.04, 1.02), clover * 0.7 * near1);
           float heads = step(0.94, gHash(floor(vTown * 24.0))) * clover;
@@ -99,6 +102,8 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           lawnMask = lawn * max(near1, near2);
           // hard surfaces: patched asphalt, stained and newer slabs
           vec3 hard = g * (0.9 + 0.2 * gFbm(vTown * 0.45 + 7.0)) * (0.94 + 0.12 * macro);
+          // up close the paving and asphalt are speckled too, not one flat tone
+          hard *= mix(1.0, 0.86 + 0.28 * gNoise(vTown * 55.0), near1);
           diffuseColor.rgb = mix(hard, c, lawn);
         }`)
       // the clumps and grain as relief, so the low sun rakes the lawn

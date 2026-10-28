@@ -113,10 +113,10 @@ def main():
             d.rectangle(rect(x0, 0, x1, D), fill=255)
     walk_m = mask_of(walk, 0.5)
     conc = np.array([0.50, 0.50, 0.48], np.float32) * (0.9 + 0.2 * fbm(40, 3, 31)[..., None])
-    # slab joints every 1.5 units
+    # slab joints every 0.5 units: a unit is about 3 m here, so 1.5 m slabs (they were every 1.5 units, 4.5 m)
     joints = np.zeros((PX, PX), np.float32)
-    jx = (np.arange(PX) / SX) % 1.5 < 0.04
-    jz = (np.arange(PX) / SZ) % 1.5 < 0.04
+    jx = (np.arange(PX) / SX) % 0.5 < 0.02
+    jz = (np.arange(PX) / SZ) % 0.5 < 0.02
     joints = np.maximum(jx[None, :], jz[:, None]).astype(np.float32)
     conc = conc * (1 - 0.35 * joints[..., None])
     h = h * (1 - walk_m[..., None]) + conc * walk_m[..., None]
@@ -133,13 +133,13 @@ def main():
     def dashes(d):
         x = 0.4
         while x < cross_x0 + 0.5:
-            d.rectangle(rect(x, zc - 0.07, x + 1.5, zc + 0.07), fill=255)
-            x += 3.0
+            d.rectangle(rect(x, zc - 0.03, x + 1.0, zc + 0.03), fill=255)
+            x += 4.0
         z = 0.5
         while z < D:
             if not (street_z0 - 0.5 < z < street_z1 + 0.5):
-                d.rectangle(rect(W - CROSS / 2 - 0.07, z, W - CROSS / 2 + 0.07, z + 1.5), fill=255)
-            z += 3.0
+                d.rectangle(rect(W - CROSS / 2 - 0.03, z, W - CROSS / 2 + 0.03, z + 1.0), fill=255)
+            z += 4.0
     paint = mask_of(dashes, 0.6)
     h = h * (1 - 0.8 * paint[..., None]) + np.array([0.78, 0.72, 0.38], np.float32) * 0.8 * paint[..., None]
 
@@ -160,7 +160,7 @@ def main():
                 # walkway from the sidewalk to the front door
                 z0, z1 = (z_front - 2.6, street_z0 + VERGE) if row == 0 else \
                          (street_z1 - VERGE, z_front + 2.6)
-                d.rectangle(rect(cx - 0.45, z0, cx + 0.45, z1), fill=255)
+                d.rectangle(rect(cx - 0.2, z0, cx + 0.2, z1), fill=255)
     walk2 = mask_of(lots, 0.5)
     h = h * (1 - 0.8 * walk2[..., None]) + conc * 0.95 * walk2[..., None]
 

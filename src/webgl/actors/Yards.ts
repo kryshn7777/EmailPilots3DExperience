@@ -21,11 +21,15 @@ import {
   SRGBColorSpace,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HOME_CELL } from '../bake/cityGen.mjs';
 import { glowTexture } from '../bake/CanvasTextures';
-import { mulberry32 } from '../util';
-import type { KitLot } from './KitCity';
+import { muted, mulberry32 } from '../util';
+import { asset } from '../asset';
+import { KitCity, dequantized, type KitLot, type KitManifest } from './KitCity';
+import { requestCompile } from '../warm';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { PoolSite } from './Pools';
 
 /**
@@ -443,10 +447,34 @@ function blobs(n: number, spread: number, r: number, y: number, seed: number): B
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2 + rnd();
     const d = k === 0 ? 0 : spread * (0.6 + rnd() * 0.4);
-    parts.push(tinted(new IcosahedronGeometry(r * (0.75 + rnd() * 0.4), 1)
-      .translate(Math.cos(ang) * d, y + (rnd() - 0.4) * r * 0.6, Math.sin(ang) * d).toNonIndexed(), '#ffffff'));
+    parts.push(lump(r * (0.75 + rnd() * 0.4), seed + k * 17)
+      .translate(Math.cos(ang) * d, y + (rnd() - 0.4) * r * 0.6, Math.sin(ang) * d));
   }
   return merge(parts);
+}
+
+/**
+ * One lump of foliage: a welded sphere with its surface pushed in and out by a few overlapping waves
+ * and smooth normals, and a darker underside (the crown shades itself). A faceted 80-triangle ball read
+ * as a toy; this reads as leaf mass at the distance the flight sees it.
+ */
+function lump(r: number, seed: number): BufferGeometry {
+  const g = mergeVertices(new IcosahedronGeometry(r, 2).deleteAttribute('normal').deleteAttribute('uv'));
+  const pos = g.attributes.position!;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) / r, y = pos.getY(i) / r, z = pos.getZ(i) / r;
+    const bump = Math.sin(x * 5.3 + seed) * Math.sin(y * 4.7 + seed * 1.3) * Math.sin(z * 6.1 + seed * 0.7) * 0.14
+      + Math.sin(x * 11.0 + y * 9.0 + seed) * Math.sin(z * 10.0 - seed) * 0.05;
+    const k = 1 + bump;
+    pos.setXYZ(i, x * r * k, y * r * k * 0.92, z * r * k);
+    const shade = 0.6 + 0.4 * Math.min(Math.max((y + 1) / 2, 0), 1);
+    colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = shade;
+  }
+  g.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  // merged with the trunks and stems beside it, which are not indexed
+  return g.toNonIndexed();
 }
 
 /** Prop geometry, modelled at site scale (a person would be ~0.55 tall), in neutral colours the instance tint shifts. */
@@ -607,19 +635,21 @@ interface Decal {
 }
 interface PropPlacement {
   kind: PropKind; x: number; z: number; yaw: number; sx: number; sy: number; sz: number; color: string;
+  /** on a lot the camera passes close by: shrubs, evergreens and ornamental trees here are leaf-card models */
+  near?: boolean;
 }
 interface Light { x: number; y: number; z: number; kind: 'path' | 'porch' | 'pool' | 'fire'; }
 
 /** tufts carry their own green; the tint only shifts it toward straw or lush */
 const TUFT_TINTS = ['#ffffff', '#f4f8e4', '#e2efc0', '#f6efc4', '#d4e8a8', '#ffffff'];
-const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'];
-const BLOOM_SHRUBS = ['#c04a7a', '#d9a02e', '#b5392e', '#8a5ac0', '#e8e2d4', '#d8703a'];
-const FLOWERS = ['#e8d44a', '#d94a6a', '#f2f2ec', '#9a6ad8', '#f08a3a', '#d83a3a', '#6aa6e8'];
+const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'].map((c) => muted(c, 0.82));
+const BLOOM_SHRUBS = ['#c04a7a', '#d9a02e', '#b5392e', '#8a5ac0', '#e8e2d4', '#d8703a'].map((c) => muted(c, 0.7));
+const FLOWERS = ['#e8d44a', '#d94a6a', '#f2f2ec', '#9a6ad8', '#f08a3a', '#d83a3a', '#6aa6e8'].map((c) => muted(c, 0.75));
 const MULCH = ['#d6b79a', '#b89a80', '#9a8472', '#6f6a66', '#c9a27a'];
-const LAWN_TONES = ['#4c8a34', '#6f9a3a', '#3a6a2c', '#8a9a3a', '#2f5a30', '#a0a040', '#5a9a50'];
+const LAWN_TONES = ['#4c8a34', '#6f9a3a', '#3a6a2c', '#8a9a3a', '#2f5a30', '#a0a040', '#5a9a50'].map((c) => muted(c, 0.78));
 const SHED_TINTS = ['#ffffff', '#cfe0c8', '#d8a89a', '#a9bfd6', '#d8d0a0', '#a8a8ae', '#9ab0a0'];
-const UMBRELLAS = ['#e84a3a', '#2f7ad8', '#f2c230', '#2fa86a', '#e8e4d8', '#d86aa8'];
-const PLAY = ['#d8402f', '#2f6ad8', '#e8a82a', '#2faa5a', '#9a4ad8'];
+const UMBRELLAS = ['#e84a3a', '#2f7ad8', '#f2c230', '#2fa86a', '#e8e4d8', '#d86aa8'].map((c) => muted(c, 0.6));
+const PLAY = ['#d8402f', '#2f6ad8', '#e8a82a', '#2faa5a', '#9a4ad8'].map((c) => muted(c, 0.6));
 const BODY_TINTS = ['#ffffff', '#f0ece4', '#e4ecf4', '#f4e8e8'];
 /** foundation evergreens: arborvitae, juniper blue, yew */
 const CONIFERS = ['#2c5230', '#3b5e46', '#46684a', '#2a4a2c', '#557a52'];
@@ -630,6 +660,8 @@ const ORNAMENTAL = ['#a3322a', '#c45a3a', '#d98aa0', '#e2ddcf', '#8c4a7c', '#d4a
 const CHAIRS = ['#f2efe6', '#2f6a8a', '#c44a3a', '#3f7a4a', '#e8c25a'];
 
 /** what phones keep of the props: the planting, which carries the colour */
+/** marks the procedural trunk of an ornamental tree that gets a model (see `modelOf`) */
+const TRUNK_MARK = '#trunk';
 const LOW_PROPS = new Set<PropKind>(['shrub', 'hedge', 'conifer', 'mound', 'bloom', 'trunk', 'canopy']);
 
 export class Yards {
@@ -708,7 +740,7 @@ export class Yards {
       const prop = (kind: PropKind, u: number, v: number, yaw: number, s: number | [number, number, number], color = '#ffffff'): void => {
         const [x, z] = world(u, v);
         const [sx, sy, sz] = typeof s === 'number' ? [s, s, s] : s;
-        props.push({ kind, x, z, yaw, sx, sy, sz, color });
+        props.push({ kind, x, z, yaw, sx, sy, sz, color, near: lush });
       };
 
       // — the lawn itself: large soft patches of different health, so no yard is one flat green
@@ -1151,14 +1183,37 @@ export class Yards {
 
   // -- props: a few instanced meshes ----------------------------------------------------
 
+  /**
+   * The leaf-card model a prop is drawn as on the lots the camera passes close by (blender/make_buildings.py
+   * YARD_PLANTS, the town's own tree generator at hedge scale), or null for the procedural geometry. Phones
+   * take the lite shrub and evergreen. 'trunk' on its own marks the ornamental tree's procedural trunk, which
+   * the model carries itself.
+   */
+  private modelOf(p: PropPlacement, detail: 'high' | 'low'): string | null {
+    if (!p.near) return null;
+    const lite = detail === 'low' ? '-lite' : '';
+    switch (p.kind) {
+      case 'shrub': return BLOOM_SHRUBS.includes(p.color) && !lite ? 'yard-shrub-red' : `yard-shrub${lite}`;
+      case 'conifer': return `yard-arborvitae${lite}`;
+      case 'canopy': return new Color(p.color).g > new Color(p.color).r ? 'yard-ornamental-green' : 'yard-ornamental';
+      case 'trunk': return TRUNK_MARK;
+      default: return null;
+    }
+  }
+
+  private modelGroups: { model: string; kind: PropKind; inst: InstancedMesh; list: PropPlacement[] }[] = [];
+  private disposed = false;
+
   private buildProps(props: PropPlacement[], detail: 'high' | 'low'): void {
-    const byKind = new Map<PropKind, PropPlacement[]>();
+    const groups = new Map<string, { kind: PropKind; model: string | null; list: PropPlacement[] }>();
     for (const p of props) {
       // phones keep the shrubs, which carry the colour, and skip the small furniture
       if (detail === 'low' && !LOW_PROPS.has(p.kind)) continue;
-      const list = byKind.get(p.kind) ?? [];
-      list.push(p);
-      byKind.set(p.kind, list);
+      const model = this.modelOf(p, detail);
+      const key = `${p.kind}|${model ?? ''}`;
+      const g = groups.get(key) ?? { kind: p.kind, model, list: [] };
+      g.list.push(p);
+      groups.set(key, g);
     }
     const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05 });
     const tuftMap = tuftTexture();
@@ -1172,7 +1227,7 @@ export class Yards {
     const pos = new Vector3();
     const sc = new Vector3();
     const tint = new Color();
-    for (const [kind, list] of byKind) {
+    for (const { kind, model, list } of groups.values()) {
       const geometry = propGeometry(kind);
       const inst = new InstancedMesh(geometry, kind === 'tuft' ? tuftMaterial : material, list.length);
       list.forEach((p, i) => {
@@ -1188,7 +1243,70 @@ export class Yards {
       inst.receiveShadow = detail === 'high';
       this.group.add(inst);
       this.disposables.push(geometry, inst);
+      if (model) this.modelGroups.push({ model, kind, inst, list });
     }
+  }
+
+  /**
+   * Swaps the procedural shrubs, evergreens and ornamental trees on the lots the camera passes close
+   * by for the leaf-card models, once they have streamed in (the procedural ones stand until then, and
+   * stay if a model fails). Each is fitted to its stand-in's own width and height, so the placements'
+   * scales keep their meaning, and takes only a share of the stand-in's colour: the card atlas is
+   * already green, and the old absolute colours would turn it muddy.
+   */
+  async loadModels(manifest: KitManifest, tier: 'high' | 'low'): Promise<void> {
+    if (!this.modelGroups.length) return;
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    const geometries = new Map<string, BufferGeometry>();
+    const ids = [...new Set(this.modelGroups.map((g) => g.model).filter((m) => m !== TRUNK_MARK))];
+    await Promise.all(ids.map(async (id) => {
+      const mod = manifest.modules.find((m) => m.id === id);
+      if (!mod) return;
+      try {
+        const gltf = await loader.loadAsync(asset(`/models/${manifest.dir}/${mod.lod0}`));
+        let mesh: Mesh | null = null;
+        gltf.scene.updateMatrixWorld(true);
+        gltf.scene.traverse((o) => { if (!mesh && (o as Mesh).isMesh) mesh = o as Mesh; });
+        const source = mesh as Mesh | null;
+        if (source) geometries.set(id, dequantized(source.geometry).applyMatrix4(source.matrixWorld));
+      } catch {
+        // the procedural plant stays
+      }
+    }));
+    if (this.disposed || !geometries.size) return;
+    const material = KitCity.foliageMaterial(manifest, tier);
+    this.disposables.push({ dispose: () => { KitCity.release(material); material.dispose(); } });
+    const white = new Color('#ffffff');
+    const tint = new Color();
+    for (const g of this.modelGroups) {
+      if (g.model === TRUNK_MARK) continue;
+      const model = geometries.get(g.model);
+      if (!model) continue;
+      // the stand-in's footprint and height, base on the ground
+      const stand = g.inst.geometry;
+      stand.computeBoundingBox();
+      const sb = stand.boundingBox!;
+      model.computeBoundingBox();
+      const mb = model.boundingBox!;
+      const w = Math.max(sb.max.x - sb.min.x, sb.max.z - sb.min.z);
+      const mw = Math.max(mb.max.x - mb.min.x, mb.max.z - mb.min.z);
+      const fitXZ = w / Math.max(mw, 1e-4);
+      const fitY = sb.max.y / Math.max(mb.max.y - mb.min.y, 1e-4);
+      model.translate(-(mb.min.x + mb.max.x) / 2, -mb.min.y, -(mb.min.z + mb.max.z) / 2);
+      model.scale(fitXZ, fitY, fitXZ);
+      g.list.forEach((p, i) => {
+        // a share of the old colour: enough to vary one plant from the next
+        g.inst.setColorAt(i, tint.set(p.color).lerp(white, g.kind === 'shrub' && BLOOM_SHRUBS.includes(p.color) ? 0.55 : 0.7));
+      });
+      if (g.inst.instanceColor) g.inst.instanceColor.needsUpdate = true;
+      g.inst.geometry.dispose();
+      g.inst.geometry = model;
+      g.inst.material = material;
+      this.disposables.push(model);
+      requestCompile(g.inst);
+    }
+    // the ornamental tree's own trunk goes: the model has one
+    for (const g of this.modelGroups) if (g.model === TRUNK_MARK && geometries.size) g.inst.visible = false;
   }
 
   // -- lights: warm porch and path lamps, a blue pool glow, firepit embers -------------------
@@ -1227,6 +1345,7 @@ export class Yards {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const d of this.disposables) d.dispose();
   }
 }

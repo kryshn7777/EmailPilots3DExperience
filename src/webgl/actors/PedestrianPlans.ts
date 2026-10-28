@@ -70,7 +70,7 @@ export function townCrowd(
       const x1 = Math.min(xMax, flown ? r1 + 62 : n1 + 4);
       walks.push({
         points: [[x0, zc], [x1, zc]], width: 1.0, ends: 'wrap',
-        count: Math.round((x1 - x0) / (flown ? (high ? 2.8 : 6) : 9)),
+        count: Math.round((x1 - x0) / (flown ? (high ? 9 : 12) : 9)),
         joggers: 0.07, dogs: 0.1, pairs: 0.16,
       });
       if (flown) mainStreet.push({ z: zc, x0, x1, toHouses });
@@ -100,7 +100,7 @@ export function townCrowd(
         points: [[lot.x + side * 2.6, zLane], [lot.x, zLane], [lot.x, zDoor]], width: 0.8, ends: 'turn',
         pause: [2, 9], count: 1, dogs: 0.18, round: 0.45,
       });
-    } else if (d < errandReach + 2 && roll < (high ? 0.42 : 0.24)) {
+    } else if (d < errandReach + 2 && roll < (high ? 0.2 : 0.14)) {
       // on the porch steps: looking out at the street, on the phone, or two talking
       const out = toStreet > 0 ? -Math.PI / 2 : Math.PI / 2;
       if (rand() < 0.35) {
@@ -131,7 +131,7 @@ export function townCrowd(
   // (between two front walks, which sit on the lot centres, so nobody's way home is blocked)
   const { lotW } = HOME_CELL;
   for (const s of mainStreet) {
-    const n = high ? 5 : 2;
+    const n = high ? 2 : 1;
     const taken: number[] = [];
     for (let i = 0; i < n; i++) {
       const x1 = 14 + rand() * 34;

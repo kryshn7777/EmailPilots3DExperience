@@ -259,7 +259,7 @@ export class StreetCars {
     // the exotics' is glossier (a deeper, sharper clearcoat). Each type is one draw either way.
     const paintMat = high
       ? new MeshPhysicalMaterial({
-        color: '#ffffff', metalness: 0.5, roughness: 0.35, clearcoat: 0.9, clearcoatRoughness: 0.08,
+        color: '#ffffff', metalness: 0.12, roughness: 0.42, clearcoat: 0.9, clearcoatRoughness: 0.12,
       })
       : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.55, roughness: 0.33 });
     const exoticPaintMat = high
