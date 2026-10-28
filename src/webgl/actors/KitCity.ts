@@ -370,7 +370,7 @@ export class KitCity {
               float back = pow(clamp(dot(toLight, -toEye), 0.0, 1.0), 3.0);
               float wrap = clamp(0.5 - 0.5 * dot(normal, toLight), 0.0, 1.0);
               reflectedLight.indirectDiffuse += diffuseColor.rgb * directionalLights[0].color
-                * (back * 0.5 + wrap * 0.14) * vec3(1.0, 1.06, 0.7);
+                * (back * 0.3 + wrap * 0.14) * vec3(1.0, 1.0, 0.8);
             }
           #endif`,
         );

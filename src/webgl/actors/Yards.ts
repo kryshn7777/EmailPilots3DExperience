@@ -21,10 +21,10 @@ import {
   SRGBColorSpace,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HOME_CELL } from '../bake/cityGen.mjs';
 import { glowTexture } from '../bake/CanvasTextures';
-import { mulberry32 } from '../util';
+import { muted, mulberry32 } from '../util';
 import type { KitLot } from './KitCity';
 import type { PoolSite } from './Pools';
 
@@ -443,10 +443,34 @@ function blobs(n: number, spread: number, r: number, y: number, seed: number): B
   for (let k = 0; k < n; k++) {
     const ang = (k / n) * Math.PI * 2 + rnd();
     const d = k === 0 ? 0 : spread * (0.6 + rnd() * 0.4);
-    parts.push(tinted(new IcosahedronGeometry(r * (0.75 + rnd() * 0.4), 1)
-      .translate(Math.cos(ang) * d, y + (rnd() - 0.4) * r * 0.6, Math.sin(ang) * d).toNonIndexed(), '#ffffff'));
+    parts.push(lump(r * (0.75 + rnd() * 0.4), seed + k * 17)
+      .translate(Math.cos(ang) * d, y + (rnd() - 0.4) * r * 0.6, Math.sin(ang) * d));
   }
   return merge(parts);
+}
+
+/**
+ * One lump of foliage: a welded sphere with its surface pushed in and out by a few overlapping waves
+ * and smooth normals, and a darker underside (the crown shades itself). A faceted 80-triangle ball read
+ * as a toy; this reads as leaf mass at the distance the flight sees it.
+ */
+function lump(r: number, seed: number): BufferGeometry {
+  const g = mergeVertices(new IcosahedronGeometry(r, 2).deleteAttribute('normal').deleteAttribute('uv'));
+  const pos = g.attributes.position!;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) / r, y = pos.getY(i) / r, z = pos.getZ(i) / r;
+    const bump = Math.sin(x * 5.3 + seed) * Math.sin(y * 4.7 + seed * 1.3) * Math.sin(z * 6.1 + seed * 0.7) * 0.14
+      + Math.sin(x * 11.0 + y * 9.0 + seed) * Math.sin(z * 10.0 - seed) * 0.05;
+    const k = 1 + bump;
+    pos.setXYZ(i, x * r * k, y * r * k * 0.92, z * r * k);
+    const shade = 0.6 + 0.4 * Math.min(Math.max((y + 1) / 2, 0), 1);
+    colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = shade;
+  }
+  g.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  // merged with the trunks and stems beside it, which are not indexed
+  return g.toNonIndexed();
 }
 
 /** Prop geometry, modelled at site scale (a person would be ~0.55 tall), in neutral colours the instance tint shifts. */
@@ -612,14 +636,14 @@ interface Light { x: number; y: number; z: number; kind: 'path' | 'porch' | 'poo
 
 /** tufts carry their own green; the tint only shifts it toward straw or lush */
 const TUFT_TINTS = ['#ffffff', '#f4f8e4', '#e2efc0', '#f6efc4', '#d4e8a8', '#ffffff'];
-const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'];
-const BLOOM_SHRUBS = ['#c04a7a', '#d9a02e', '#b5392e', '#8a5ac0', '#e8e2d4', '#d8703a'];
-const FLOWERS = ['#e8d44a', '#d94a6a', '#f2f2ec', '#9a6ad8', '#f08a3a', '#d83a3a', '#6aa6e8'];
+const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'].map((c) => muted(c, 0.82));
+const BLOOM_SHRUBS = ['#c04a7a', '#d9a02e', '#b5392e', '#8a5ac0', '#e8e2d4', '#d8703a'].map((c) => muted(c, 0.7));
+const FLOWERS = ['#e8d44a', '#d94a6a', '#f2f2ec', '#9a6ad8', '#f08a3a', '#d83a3a', '#6aa6e8'].map((c) => muted(c, 0.75));
 const MULCH = ['#d6b79a', '#b89a80', '#9a8472', '#6f6a66', '#c9a27a'];
-const LAWN_TONES = ['#4c8a34', '#6f9a3a', '#3a6a2c', '#8a9a3a', '#2f5a30', '#a0a040', '#5a9a50'];
+const LAWN_TONES = ['#4c8a34', '#6f9a3a', '#3a6a2c', '#8a9a3a', '#2f5a30', '#a0a040', '#5a9a50'].map((c) => muted(c, 0.78));
 const SHED_TINTS = ['#ffffff', '#cfe0c8', '#d8a89a', '#a9bfd6', '#d8d0a0', '#a8a8ae', '#9ab0a0'];
-const UMBRELLAS = ['#e84a3a', '#2f7ad8', '#f2c230', '#2fa86a', '#e8e4d8', '#d86aa8'];
-const PLAY = ['#d8402f', '#2f6ad8', '#e8a82a', '#2faa5a', '#9a4ad8'];
+const UMBRELLAS = ['#e84a3a', '#2f7ad8', '#f2c230', '#2fa86a', '#e8e4d8', '#d86aa8'].map((c) => muted(c, 0.6));
+const PLAY = ['#d8402f', '#2f6ad8', '#e8a82a', '#2faa5a', '#9a4ad8'].map((c) => muted(c, 0.6));
 const BODY_TINTS = ['#ffffff', '#f0ece4', '#e4ecf4', '#f4e8e8'];
 /** foundation evergreens: arborvitae, juniper blue, yew */
 const CONIFERS = ['#2c5230', '#3b5e46', '#46684a', '#2a4a2c', '#557a52'];

@@ -24,7 +24,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { softShadowTexture } from '../bake/CanvasTextures';
 import { asset } from '../asset';
 import { LAMP_CASTER_LAYER } from '../layers';
-import { mulberry32 } from '../util';
+import { muted, mulberry32 } from '../util';
 import type { Quality } from '../quality';
 
 /** One figure in public/models/people/manifest.json (written by blender/make_people.py). */
@@ -107,7 +107,7 @@ const HAIR = ['#1b1512', '#2a1c14', '#3b291c', '#4f3524', '#6a4a2e', '#8c6a43', 
   '#c9c5bf', '#6e2f1c', '#121212'];
 const HAIR_W = [3, 3, 3, 2.5, 2, 1.4, 1, 0.8, 0.7, 0.4, 0.5, 2];
 const TOPS_DAY = ['#d64545', '#e8833a', '#efc54a', '#5aa264', '#3d7fc2', '#2f4d8a', '#8e5bb5', '#f2efe6', '#fdfdfb',
-  '#e9a7b6', '#76c1c4', '#a3b04f', '#3a404b', '#b23a5e', '#5fa8d3', '#cfc6b4', '#e86f5a', '#2d7d6e'];
+  '#e9a7b6', '#76c1c4', '#a3b04f', '#3a404b', '#b23a5e', '#5fa8d3', '#cfc6b4', '#e86f5a', '#2d7d6e'].map((c) => muted(c, 0.62));
 const BOTTOMS_DAY = ['#3b5068', '#2f3e55', '#4a6585', '#5b7aa0', '#b9a27c', '#8a7a5c', '#5a5e66', '#24262b', '#e6e1d4',
   '#26324d', '#5a5f3c', '#7d4a3a'];
 const SKIRTS_DAY = ['#d64545', '#3d7fc2', '#efc54a', '#2f4d8a', '#f2efe6', '#5aa264', '#e9a7b6', '#24262b', '#8e5bb5',

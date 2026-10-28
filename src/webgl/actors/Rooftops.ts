@@ -228,7 +228,7 @@ export class Rooftops {
     const map = softShadowTexture();
     const material = new MeshBasicMaterial({
       // with real sun shadows on HIGH these are only ambient contact darkening
-      map, color: '#000000', transparent: true, opacity: high ? 0.36 : 0.55, depthWrite: false, fog: true,
+      map, color: '#000000', transparent: true, opacity: high ? 0.2 : 0.4, depthWrite: false, fog: true,
     });
     const geometry = new PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
@@ -241,7 +241,7 @@ export class Rooftops {
     const Y = new Vector3(0, 1, 0);
     lots.forEach((lot, k) => {
       const tree = kinds.get(lot.moduleId) === 'tree';
-      const grow = tree ? 1.25 : 1.5;
+      const grow = tree ? 1.15 : 1.25;
       q.setFromAxisAngle(Y, lot.yaw);
       inst.setMatrixAt(k, m4.compose(p.set(lot.x, 0.04, lot.z), q, s.set(lot.w * grow, 1, lot.d * grow)));
     });
@@ -349,7 +349,7 @@ export class Rooftops {
     // Yard details for every house the flight passes over: beds, patios, pools,
     // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
     const yardReach = quality.tier === 'high' ? 90 : 50;
-    const richReach = quality.tier === 'high' ? 30 : 18;
+    const richReach = quality.tier === 'high' ? 18 : 12;
     const at2 = new Vector3();
     this.yards = new Yards(
       lots,

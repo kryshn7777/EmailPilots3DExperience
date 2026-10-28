@@ -240,7 +240,8 @@ float rNoise(vec2 p) {
   f = f * f * (3.0 - 2.0 * f);
   return mix(mix(rHash(i), rHash(i + vec2(1.0, 0.0)), f.x), mix(rHash(i + vec2(0.0, 1.0)), rHash(i + 1.0), f.x), f.y);
 }
-float rFbm(vec2 p) { return rNoise(p) * 0.6 + rNoise(p * 2.13 + 7.1) * 0.28 + rNoise(p * 4.7 + 3.3) * 0.12; }
+const mat2 rRot = mat2(1.6, 1.2, -1.2, 1.6);
+float rFbm(vec2 p) { return rNoise(p) * 0.6 + rNoise(rRot * p * 1.06 + 7.1) * 0.28 + rNoise(rRot * rRot * p * 1.18 + 3.3) * 0.12; }
 /** 1 where a pattern of this period is resolved on screen, 0 where it would alias */
 float rVis(float period, float fw) { return 1.0 - smoothstep(0.22, 0.5, fw / period); }
 /** soft-edged line at the start of each period, width w (all in metres) */
@@ -372,14 +373,14 @@ const FRAG_COLOR = /* glsl */ `
       // sun-bleach on the bright side
       col = mix(col, vec3(rLum(col)) * 1.18, 0.16 * max(sunward, 0.0) * (0.4 + age));
     }
-    float mossA = mossK * age * age * (0.3 + 0.9 * shady) * 1.3;
+    float mossA = mossK * age * age * (0.3 + 0.9 * shady) * 0.5;
     if (mossA > 0.02) {
       float n = rFbm(m * 0.9 + lot * 5.0) + (1.0 - clamp(m.y / max(H, 0.5), 0.0, 1.0)) * 0.22;
-      float moss = smoothstep(0.92 - mossA * 0.5, 1.08 - mossA * 0.5, n);
+      float moss = smoothstep(0.85 - mossA * 0.4, 1.15 - mossA * 0.4, n);
       vec3 mossC = mix(vec3(0.075, 0.1, 0.026), vec3(0.17, 0.2, 0.06), rNoise(m * 3.0));
       col = mix(col, mossC / max(shade, 0.4), moss * 0.85);
       // pale lichen rosettes on the open parts
-      float lich = step(0.86 - 0.12 * age, rHash(floor(m * 7.0) + lot)) * rVis(0.14, fw) * (1.0 - moss);
+      float lich = smoothstep(0.8, 0.95, rNoise(m * 7.0 + lot)) * rVis(0.14, fw) * (1.0 - moss);
       col = mix(col, vec3(0.42, 0.44, 0.36), lich * 0.5 * age);
     }
 

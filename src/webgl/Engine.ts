@@ -24,6 +24,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import {
   BlendFunction,
   BloomEffect,
+  SMAAEffect,
+  SMAAPreset,
   type Effect,
   EffectComposer,
   EffectPass,
@@ -155,6 +157,7 @@ export class Engine {
   private biplane: Biplane;
   private birds: Birds;
   private pinned: PinnedTitles;
+  private bloomFx: BloomEffect | null = null;
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
   private batch: BatchSend;
@@ -414,7 +417,7 @@ export class Engine {
           samples: 16,
           rings: 5,
           radius: 0.06,
-          intensity: 2.1,
+          intensity: 1.6,
           resolutionScale: 0.5,
           fade: 0.02,
         }),
@@ -430,7 +433,8 @@ export class Engine {
     // bloom is a mip chain over the whole frame and it exists to sell light —
     // blockout mode keeps only the scroll blur and the vignette
     if (!UNLIT) {
-      effects.push(new BloomEffect({ luminanceThreshold: 0.85, intensity: 1.1, mipmapBlur: true }));
+      this.bloomFx = new BloomEffect({ luminanceThreshold: 0.85, intensity: 1.1, mipmapBlur: true });
+      effects.push(this.bloomFx);
     }
     // sun shafts go in before the zoom blur, so a fast scrub streaks them with everything else
     if (this.quality.godRays && !new URLSearchParams(location.search).has('norays')) {
@@ -447,6 +451,11 @@ export class Engine {
     }
     this.composer.addPass(new EffectPass(this.camera, ...effects));
     if (this.cinema?.optics) this.composer.addPass(new EffectPass(this.camera, this.cinema));
+    // the post chain has no multisampling (antialias is off for it), so edges are smoothed last, on the
+    // finished frame: leaf cards, roof ridges and fence rails stood in stairs without this
+    if (this.quality.tier === 'high' && !UNLIT) {
+      this.composer.addPass(new EffectPass(this.camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));
+    }
 
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -750,13 +759,19 @@ export class Engine {
     this.sky.sunIntensity = sunLevel;
     this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2 * num((g) => g.key ?? 1);
+    // the film: some chapters (the town) take a neutral tone curve, a calmer saturation and a gentler bloom
+    this.cinema?.look(num((g) => g.filmic ?? 0), num((g) => g.exposure ?? 1), num((g) => g.sat ?? 1));
+    if (this.bloomFx) {
+      this.bloomFx.intensity = num((g) => g.bloom ?? 1.1);
+      this.bloomFx.luminanceMaterial.threshold = num((g) => g.bloomThreshold ?? 0.85);
+    }
     // sky-and-ground bounce: shadowed surfaces take the colour of the sky from above and of
     // the sunlit ground from below, so shade is never a flat grey and rooftops pick up warmth
     this.hemi.color.copy(this.sky.horizon).lerp(this.sky.zenith, 0.35);
     this.hemi.groundColor.copy(this.fog.color).lerp(this.sun.color, 0.3).multiplyScalar(0.55);
     this.hemi.intensity = 0.3 + 0.3 * MathUtils.clamp(sunLevel / 1.6, 0, 1);
     // lamps are lit under the window at night and go out as the sun comes up
-    this.lampLevel = 1 - MathUtils.smoothstep(sunLevel, 0.5, 1.3);
+    this.lampLevel = 1 - MathUtils.smoothstep(sunLevel, 0.35, 0.8);
     this.fog.near = num((g) => g.fogNear);
     this.fog.far = num((g) => g.fogFar);
     // mist standing on the ground or the sea: blends between chapters, with the base
@@ -986,7 +1001,7 @@ export class Engine {
       const idle = this.idlePreset !== null;
       this.cinema.letterbox = idle ? 0 : this.rig.cine.bars;
       const focus = idle ? this.camera.position.distanceTo(this.plane.group.position) : this.rig.cine.focus;
-      this.cinema.frame(focus, idle ? 1.2 : this.rig.cine.bokeh, 1.4 + this.blurLevel * 14);
+      this.cinema.frame(focus, idle ? 1.2 : this.rig.cine.bokeh, 0.7 + this.blurLevel * 14);
     }
 
     // sun follows the plane so the directional light never runs out of range
@@ -1211,7 +1226,7 @@ export class Engine {
     // the lens flare only while the sun's disc itself is in the frame
     const flare = MathUtils.smoothstep(this.sunLevel, 0.6, 1.2) * MathUtils.smoothstep(facing, 0.3, 0.6) *
       (1 - MathUtils.smoothstep(offscreen, 0.85, 1.0));
-    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5, this.idlePreset ? 0 : flare);
+    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5, this.idlePreset ? 0 : flare * 0.45);
   }
 
   private loop = (): void => {

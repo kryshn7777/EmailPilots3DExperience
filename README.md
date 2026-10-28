@@ -104,6 +104,22 @@ Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a
 
 The rig directs a different camera in every chapter, so each title's spot (`SPOTS`) was fitted to the camera across its window: the position that stays nearest the middle of the lens while the chapter plays. Where the camera looks steeply down, the title lies flat over the scene. If a chapter's camera changes, sample the camera across its window and refit that spot.
 
+## Town realism
+
+The town read as a game for a handful of reasons, each one fixed where it lives:
+
+| Cause | Fix |
+|---|---|
+| Light clipped to flat colour (no tone curve, hot sun, bloom from 0.85) | A neutral, hue-keeping tone curve (`filmic`, `exposure` in a chapter's grade, `post/Cinema.ts`), a lower sun key, bloom from 1.0 at 0.45 strength |
+| Primary-coloured lawns, shirts, umbrellas, play sets, flowers | `sat` in the grade (0.85 for the town), `Lawns.ts` pulled toward luminance, `muted()` on the prop and clothing palettes |
+| No anti-aliasing (the composer has no MSAA) | An SMAA pass last in the chain on HIGH |
+| Blocky roof moss and lichen, lawn patches | Wider, rotated noise octaves and softer thresholds in `Roofs.ts` and `Lawns.ts` |
+| Ground cell drawn at the wrong scale (4.5 m slabs, 4.5 m by 42 cm dashes, 2.7 m front walks) | `blender/make_ground.py`: 1.5 m slabs, 3 m by 12 cm dashes at a 12 m period, 1.2 m walks; re-baked (numpy only) |
+| Lamps half-lit and fog dark navy under a low sun | `lampLevel` goes out as the sun rises, the town's fog starts at 20 and is warm grey |
+| Blue metal puddle blobs | Dark dielectric water, mirroring the live probe |
+| Toy props and crowding | Faceted icosphere canopies are welded lumpy foliage masses; about a third of the people; lighter contact shadows; SSAO 1.6; duller car paint |
+| Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
+
 ## Camera direction and the lens
 
 The camera is directed per chapter and per beat, all keyed to story-t so a scrub always lands on the same frame.

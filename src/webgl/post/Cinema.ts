@@ -24,11 +24,31 @@ uniform float uGrain;
 uniform float uGrainSize;
 uniform float uSeed;
 uniform float uCurve;
+uniform float uFilmic;
+uniform float uExposure;
+uniform float uSat;
 #ifdef OPTICS
 uniform float uAberration;
 uniform float uFocus;
 uniform float uBokeh;
 #endif
+
+// Khronos PBR Neutral: values below about 0.76 pass untouched, brighter ones are compressed toward
+// white while keeping their hue, so a bright lit leaf stays a leaf and does not clip to flat lime
+vec3 neutralTone(vec3 color) {
+  const float startCompression = 0.8 - 0.04;
+  const float desaturation = 0.15;
+  float x = min(color.r, min(color.g, color.b));
+  float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+  color -= offset;
+  float peak = max(color.r, max(color.g, color.b));
+  if (peak < startCompression) return color;
+  float d = 1.0 - startCompression;
+  float newPeak = 1.0 - d * d / (peak + d - startCompression);
+  color *= newPeak / peak;
+  float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+  return mix(color, vec3(newPeak), g);
+}
 
 float cineHash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -88,12 +108,14 @@ MAIN_IMAGE {
   const float K = 0.8;
   vec3 over = max(c - K, 0.0);
   vec3 shoulder = K + (1.0 - K) * (1.0 - exp(-over / (1.0 - K)));
-  c = mix(c, mix(c, shoulder, step(K, c)), uCurve);
+  vec3 plain = mix(c, mix(c, shoulder, step(K, c)), uCurve);
+  c = mix(plain, neutralTone(c * uExposure), uFilmic);
   vec3 d = sqrt(min(c, vec3(1.0)));
   d = mix(d, d * d * (3.0 - 2.0 * d), 0.14 * uCurve);
   float l = dot(d, vec3(0.299, 0.587, 0.114));
   // a breath of split-tone: cool shadows, warm highlights
   d += (vec3(-0.006, 0.002, 0.010) * (1.0 - l) + vec3(0.010, 0.003, -0.008) * l) * uCurve;
+  d = mix(vec3(l), d, uSat);
 
   // grain: two hashes summed (a softer, film-like distribution), strongest in the mid-darks
   vec2 cell = floor(gl_FragCoord.xy / uGrainSize);
@@ -141,6 +163,9 @@ export class CinemaEffect extends Effect {
         ['uGrainSize', new Uniform(1)],
         ['uSeed', new Uniform(0)],
         ['uCurve', new Uniform(1)],
+        ['uFilmic', new Uniform(0)],
+        ['uExposure', new Uniform(1)],
+        ['uSat', new Uniform(1)],
         ['uAberration', new Uniform(0)],
         ['uFocus', new Uniform(4)],
         ['uBokeh', new Uniform(0)],
@@ -162,6 +187,14 @@ export class CinemaEffect extends Effect {
     u.get('uFocus')!.value = focus;
     u.get('uBokeh')!.value = bokeh;
     u.get('uAberration')!.value = aberration;
+  }
+
+  /** Per frame, from the chapter's grade: the neutral tone curve's weight, its exposure, and the frame's saturation. */
+  look(filmic: number, exposure: number, saturation: number): void {
+    const u = this.uniforms;
+    u.get('uFilmic')!.value = filmic;
+    u.get('uExposure')!.value = exposure;
+    u.get('uSat')!.value = saturation;
   }
 
   /** grain is drawn in CSS pixels, so a 2x phone does not get a finer, invisible grain */
