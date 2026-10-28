@@ -158,6 +158,8 @@ export class Engine {
   private birds: Birds;
   private pinned: PinnedTitles;
   private bloomFx: BloomEffect | null = null;
+  /** how much the grade asks of the sun shafts (1 is the default strength) */
+  private rayBoost = 1;
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
   private batch: BatchSend;
@@ -760,7 +762,10 @@ export class Engine {
     this.mountains.setSunIntensity(sunLevel);
     this.sun.intensity = sunLevel * 2.2 * num((g) => g.key ?? 1);
     // the film: some chapters (the town) take a neutral tone curve, a calmer saturation and a gentler bloom
-    this.cinema?.look(num((g) => g.filmic ?? 0), num((g) => g.exposure ?? 1), num((g) => g.sat ?? 1));
+    this.cinema?.look(num((g) => g.filmic ?? 0), num((g) => g.exposure ?? 1), num((g) => g.sat ?? 1), [
+      num((g) => g.balance?.[0] ?? 1), num((g) => g.balance?.[1] ?? 1), num((g) => g.balance?.[2] ?? 1),
+    ]);
+    this.rayBoost = num((g) => g.rays ?? 1);
     if (this.bloomFx) {
       this.bloomFx.intensity = num((g) => g.bloom ?? 1.1);
       this.bloomFx.luminanceMaterial.threshold = num((g) => g.bloomThreshold ?? 0.85);
@@ -1202,6 +1207,8 @@ export class Engine {
     ];
   }
 
+  private rayColor = new Color();
+  private white = new Color('#ffffff');
   private sunNdc = new Vector3();
   private sunUv = new Vector2();
 
@@ -1226,7 +1233,9 @@ export class Engine {
     // the lens flare only while the sun's disc itself is in the frame
     const flare = MathUtils.smoothstep(this.sunLevel, 0.6, 1.2) * MathUtils.smoothstep(facing, 0.3, 0.6) *
       (1 - MathUtils.smoothstep(offscreen, 0.85, 1.0));
-    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.sun.color, 1.5, this.idlePreset ? 0 : flare * 0.45);
+    // the shafts take the sun's colour, a good part of the way to white: a pure warm tint turned the whole frame yellow
+    this.rayColor.copy(this.sun.color).lerp(this.white, 0.45);
+    this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.rayColor, 1.5 * this.rayBoost, this.idlePreset ? 0 : flare * 0.8);
   }
 
   private loop = (): void => {

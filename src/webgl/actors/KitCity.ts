@@ -192,7 +192,7 @@ export class KitCity {
   private treeCounts = new Map<string, number[]>();
   private treeLots: KitLot[] = [];
   /** the camera distances inside which a tree draws its ultra, hero, detail and lite model (the lean one beyond) */
-  private treeRadii: number[] = [16, 28, 48, 70];
+  private treeRadii: number[] = [20, 34, 56, 90];
   private treeEye = new Vector3(1e9, 0, 0);
   private treeAt = new Vector3();
   /** the materials with lit windows, and the glow each was made with (see `setPower`) */
@@ -396,7 +396,7 @@ export class KitCity {
               float back = pow(clamp(dot(toLight, -toEye), 0.0, 1.0), 3.0);
               float wrap = clamp(0.5 - 0.5 * dot(normal, toLight), 0.0, 1.0);
               reflectedLight.indirectDiffuse += diffuseColor.rgb * directionalLights[0].color
-                * (back * 0.3 + wrap * 0.14) * vec3(1.0, 1.0, 0.8);
+                * (back * 0.5 + wrap * 0.14) * vec3(1.0, 1.03, 0.85);
             }
           #endif`,
         );
@@ -413,7 +413,7 @@ export class KitCity {
   ) {
     const modules = manifest.modules;
     this.treeLots = lots;
-    if (tier === 'low') this.treeRadii = [0, 0, 16, 36];
+    if (tier === 'low') this.treeRadii = [0, 0, 24, 50];
     // guard against a rings file from a different bake than the lot list
     const valid = (indices: number[]): number[] => indices.filter((i) => lots[i] !== undefined);
 

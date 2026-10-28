@@ -70,17 +70,17 @@ PARAMS = {
         cards_of='poplar', bark_of='maple', variants=(0, 1),
         trunk_r=(0.035, 0.02), lens=[0.18, 0.75], kids=[6], kid_t=(0.15, 1.0),
         angle=(20, 55), wobble=0.3, up=0.25, taper=0.8, sides=(4, 3),
-        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=95, size=(0.32, 0.5), lobes=5),
+        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=170, size=(0.48, 0.75), lobes=5),
     'shrub-red': dict(
         cards_of='maple', bark_of='maple', variants=(1, 2),
         trunk_r=(0.035, 0.02), lens=[0.18, 0.75], kids=[6], kid_t=(0.15, 1.0),
         angle=(20, 55), wobble=0.3, up=0.25, taper=0.8, sides=(4, 3),
-        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=95, size=(0.32, 0.5), lobes=5),
+        centre=(0, 0, 0.5), radii=(0.6, 0.6, 0.5), cards=170, size=(0.48, 0.75), lobes=5),
     'arborvitae': dict(
         cards_of='pine', bark_of='pine', variants=(0, 1),
         trunk_r=(0.06, 0.03), lens=[1.9, 0.5], kids=[5], kid_t=(0.1, 0.9),
         angle=(12, 28), wobble=0.12, up=0.3, taper=0.6, sides=(5, 3),
-        centre=(0, 0, 1.15), radii=(0.42, 0.42, 1.05), cards=100, size=(0.35, 0.55), lobes=5),
+        centre=(0, 0, 1.15), radii=(0.42, 0.42, 1.05), cards=300, size=(0.52, 0.8), lobes=5),
     'ornamental': dict(
         cards_of='maple', bark_of='maple', variants=(0, 1, 2),
         trunk_r=(0.12, 0.06), lens=[1.1, 1.3, 0.8], kids=[4, 3], kid_t=(0.55, 1.0),
@@ -148,9 +148,9 @@ LITE = {
     'pine': dict(whorl=(2.2, 1.75), branches=4, cards_per_branch=2, size=(1.9, 2.8), skirt=2),
 }
 LITE.update({
-    'shrub': dict(cards=35, kids=[3], sides=(3, 3)),
-    'shrub-red': dict(cards=35, kids=[3], sides=(3, 3)),
-    'arborvitae': dict(cards=35, kids=[3], sides=(3, 3)),
+    'shrub': dict(cards=80, size=(0.6, 0.9), kids=[3], sides=(3, 3)),
+    'shrub-red': dict(cards=80, size=(0.6, 0.9), kids=[3], sides=(3, 3)),
+    'arborvitae': dict(cards=110, size=(0.7, 1.0), kids=[3], sides=(3, 3)),
 })
 TIERS = {'ultra': ULTRA, 'detail': DETAIL, 'lite': LITE}
 
