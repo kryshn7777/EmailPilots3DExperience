@@ -126,6 +126,8 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 
 The ground and the house atlases are baked at a few centimetres a texel, so the grain of real materials is tiled over them at runtime from photographs: `public/models/homes/detail-{asphalt,concrete,plaster}.webp` (HIGH tier only). Each holds only the variation of its photograph about its mean, so a surface keeps the colour the bake gives it (`scripts/make-detail-maps.py`). The ground shader (`materials/Lawns.ts`) multiplies them over the asphalt and pavement, with relief while a pixel is smaller than a grain; the wall shader (`materials/Roofs.ts`) tiles the plaster over every house wall.
 
+**Weathering decals (HIGH tier).** On the houses the flight passes closest to (`rings.hero`), `actors/HouseDecals.ts` lays alpha-blended quads a few millimetres off the walls: rain streaks under every window sill, grime at the foot of each garage door and an oil stain on the drive. Where the windows and garages sit comes from the house DSL itself: `blender/make_anchors.py` rebuilds every home and writes `public/models/homes/anchors.json` (`[kind, x, y, z, nx, nz, ux, uz, w, h]` per row, in site units), and the decals place them with the same transform `KitCity` uses for the house. Rerun it whenever a house in `blender/bld/homes.py` changes.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens

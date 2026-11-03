@@ -21,6 +21,7 @@ import {
 } from '../bake/cityGen.mjs';
 import { PATH_POINTS } from '../rig/pathPoints.mjs';
 import { meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
+import { HouseDecals, type DecalAnchors } from './HouseDecals';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
 import { Hedges } from './Hedges';
@@ -93,6 +94,7 @@ export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
   private manifest: KitManifest | null = null;
+  private decals: HouseDecals | null = null;
   private fences: Fences | null = null;
   private hedges: Hedges | null = null;
   private cars: StreetCars | null = null;
@@ -321,6 +323,18 @@ export class Rooftops {
       trees: (lots as KitLot[]).filter((l) => kinds.get(l.moduleId) === 'tree' && !l.forest).map(site),
     };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
+    // weathering decals on the houses the flight passes close to (HIGH; blender/make_anchors.py)
+    if (quality.tier === 'high') {
+      void fetch(asset('/models/homes/anchors.json'))
+        .then((r) => r.json() as Promise<DecalAnchors>)
+        .then((anchors) => {
+          const decals = new HouseDecals(lots as KitLot[], manifest.modules, rings.hero ?? rings.near, anchors);
+          decals.group.position.y = ROOFTOP_BASE_Y;
+          this.group.add(decals.group);
+          this.decals = decals;
+        })
+        .catch(() => undefined);
+    }
     this.buildCars(lots as KitLot[], kinds, quality);
     this.buildFurniture(quality);
     // the wet-night look: lamps doubled in the road, puddles that mirror the sky, window light on the
@@ -431,6 +445,7 @@ export class Rooftops {
   }
 
   dispose(): void {
+    this.decals?.dispose();
     this.kitCity?.dispose();
     this.fences?.dispose();
     this.hedges?.dispose();

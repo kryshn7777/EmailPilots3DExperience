@@ -340,6 +340,8 @@ class Model:
             bmesh.ops.translate(b, verts=b.verts, vec=shift)
         for p in self.hp.panes:
             p['pts'] = [q + shift for q in p['pts']]
+        for a in self.hp.anchors:
+            a['p'] = a['p'] + shift
         for m in self.lp.meta:
             if 'o' in m:
                 m['o'] = m['o'] + shift
