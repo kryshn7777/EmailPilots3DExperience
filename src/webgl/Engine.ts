@@ -1086,7 +1086,7 @@ export class Engine {
       this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
       this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
     }
-    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position);
+    this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position, this.camera);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 

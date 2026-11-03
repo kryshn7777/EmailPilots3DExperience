@@ -94,7 +94,7 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
 | Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
 | Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
-| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 20 units, hero 34, detail 56, lite 90, lean beyond; phones 24/50), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
+| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 10 units, hero 24, detail 50, lite 90, lean beyond; phones 24/50), and a tree beyond 28 units that the lens cannot see is not drawn at all (repacked on a 2-unit move or a 3-degree turn), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
 | Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
 | Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
 

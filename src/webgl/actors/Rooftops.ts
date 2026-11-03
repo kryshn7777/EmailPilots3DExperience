@@ -1,3 +1,4 @@
+import type { Camera } from 'three';
 import {
   CatmullRomCurve3,
   Group,
@@ -252,11 +253,11 @@ export class Rooftops {
   }
 
   /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
-  update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
+  update(time: number, night = 1, focus?: Vector3, eye?: Vector3, camera?: Camera): void {
     if (!this.group.visible) return;
     KitCity.tick(time);
     if (eye) {
-      this.kitCity?.updateTrees(eye);
+      this.kitCity?.updateTrees(eye, camera);
       this.yards?.updatePlants(eye);
     }
     this.lamps?.setLevel(night);

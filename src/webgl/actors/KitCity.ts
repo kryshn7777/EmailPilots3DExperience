@@ -1,4 +1,4 @@
-import type { InterleavedBufferAttribute, Texture, WebGLProgramParametersWithUniforms } from 'three';
+import type { Camera, InterleavedBufferAttribute, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import {
   BoxGeometry,
   BufferAttribute,
@@ -7,6 +7,7 @@ import {
   DoubleSide,
   DynamicDrawUsage,
   Float32BufferAttribute,
+  Frustum,
   Group,
   IcosahedronGeometry,
   InstancedMesh,
@@ -15,6 +16,7 @@ import {
   MeshStandardMaterial,
   NoColorSpace,
   Quaternion,
+  Sphere,
   SRGBColorSpace,
   TextureLoader,
   Vector3,
@@ -192,9 +194,16 @@ export class KitCity {
   private treeCounts = new Map<string, number[]>();
   private treeLots: KitLot[] = [];
   /** the camera distances inside which a tree draws its ultra, hero, detail and lite model (the lean one beyond) */
-  private treeRadii: number[] = [20, 34, 56, 90];
+  private treeRadii: number[] = [10, 24, 50, 90];
   private treeEye = new Vector3(1e9, 0, 0);
   private treeAt = new Vector3();
+  private treeDir = new Vector3(0, 0, 1);
+  private treeDirNow = new Vector3();
+  private treeFrustum = new Frustum();
+  private treeProj = new Matrix4();
+  private treeSphere = new Sphere();
+  /** trees nearer than this always draw, in view or not: their shadows fall into view and windows mirror them */
+  private static readonly TREE_KEEP = 28;
   /** the materials with lit windows, and the glow each was made with (see `setPower`) */
   private glowing: { m: MeshStandardMaterial; base: number }[] = [];
   /** only the materials that opted into the cloud environment */
@@ -614,10 +623,23 @@ export class KitCity {
    * repacked with just the trees that belong in each. About a thousand lots, and only once the camera has
    * moved a little.
    */
-  updateTrees(eye: Vector3): void {
-    if (!this.treeSlots.length || eye.distanceToSquared(this.treeEye) < 4) return;
+  updateTrees(eye: Vector3, camera?: Camera): void {
+    if (!this.treeSlots.length) return;
+    // repacked when the camera has moved a little or turned a few degrees (a turn brings culled trees into view)
+    let turned = false;
+    if (camera) turned = camera.getWorldDirection(this.treeDirNow).dot(this.treeDir) < 0.9986;
+    if (eye.distanceToSquared(this.treeEye) < 4 && !turned) return;
     this.treeEye.copy(eye);
     this.group.updateWorldMatrix(true, false);
+    let frustum: Frustum | null = null;
+    if (camera) {
+      this.treeDir.copy(this.treeDirNow);
+      camera.updateMatrixWorld();
+      frustum = this.treeFrustum.setFromProjectionMatrix(
+        this.treeProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+      );
+    }
+    const base = this.group.position;
     const at = this.group.worldToLocal(this.treeAt.copy(eye));
     for (const tiers of this.treeTiers.values()) for (const t of tiers) if (t) t.fill = t.fixed;
     const [r0, r1, r2, r3] = this.treeRadii as [number, number, number, number];
@@ -626,6 +648,13 @@ export class KitCity {
       if (!tiers) continue;
       const lot = this.treeLots[slot.lot]!;
       const d = Math.hypot(lot.x - at.x, lot.h * 0.5 - at.y, lot.z - at.z);
+      // beyond the near ring a tree the lens cannot see is not drawn at all (its sphere, with room for
+      // the shadows it casts into the frame); the frustum is the camera's, the lots are the group's
+      if (frustum && d > KitCity.TREE_KEEP) {
+        this.treeSphere.center.set(lot.x + base.x, lot.h * 0.5 + base.y, lot.z + base.z);
+        this.treeSphere.radius = Math.max(lot.w, lot.d, lot.h) * 0.75 + 10;
+        if (!frustum.intersectsSphere(this.treeSphere)) continue;
+      }
       const want = d < r0 ? 0 : d < r1 ? 1 : d < r2 ? 2 : d < r3 ? 3 : LEAN_RANK;
       // the densest tier it may use that is near enough and has loaded
       let tier: TreeTier | undefined;
