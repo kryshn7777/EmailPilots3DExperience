@@ -150,6 +150,8 @@ export interface KitOptions {
    * weathering, solar arrays and skylights. The neighbourhood seen from above wants it.
    */
   roofs?: boolean;
+  /** a photographed plaster, as variation about its mean, tiled over the houses' baked walls (HIGH; see materials/Roofs.ts) */
+  wallDetail?: Texture;
 }
 
 /**
@@ -417,7 +419,7 @@ export class KitCity {
     lots: KitLot[],
     rings: KitRingSet,
     manifest: KitManifest,
-    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false }: KitOptions = {},
+    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false, wallDetail }: KitOptions = {},
     private color = new Color(),
   ) {
     const modules = manifest.modules;
@@ -508,7 +510,7 @@ export class KitCity {
       if (!m) {
         m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
         if (m.emissiveMap) this.glowing.push({ m, base: m.emissiveIntensity });
-        if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high');
+        if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high', wallDetail);
         materials.set(key, m);
       }
       return m;

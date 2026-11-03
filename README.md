@@ -122,6 +122,12 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 | Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
 | Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
 
+## Photo detail on the ground and walls
+
+The ground and the house atlases are baked at a few centimetres a texel, so the grain of real materials is tiled over them at runtime from photographs: `public/models/homes/detail-{asphalt,concrete,plaster}.webp` (HIGH tier only). Each holds only the variation of its photograph about its mean, so a surface keeps the colour the bake gives it (`scripts/make-detail-maps.py`). The ground shader (`materials/Lawns.ts`) multiplies them over the asphalt and pavement, with relief while a pixel is smaller than a grain; the wall shader (`materials/Roofs.ts`) tiles the plaster over every house wall.
+
+**Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
+
 ## Camera direction and the lens
 
 The camera is directed per chapter and per beat, all keyed to story-t so a scrub always lands on the same frame.

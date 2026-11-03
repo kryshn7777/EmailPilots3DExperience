@@ -1,5 +1,5 @@
 import { BufferAttribute, Color, Vector3 } from 'three';
-import type { BufferGeometry, MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three';
+import type { BufferGeometry, MeshStandardMaterial, Texture, WebGLProgramParametersWithUniforms } from 'three';
 
 /**
  * Roofs that read from above. Every house type is one Blender module instanced across the town, so
@@ -224,8 +224,9 @@ const VERT_MAIN = /* glsl */ `
   }
 `;
 
-const FRAG_PARS = (fine: boolean): string => /* glsl */ `
+const FRAG_PARS = (fine: boolean, photo: boolean): string => /* glsl */ `
 ${fine ? '#define ROOF_FINE' : ''}
+${photo ? '#define WALL_PHOTO\nuniform sampler2D uWallDetail;' : ''}
 uniform vec3 uRoofBase[16];
 varying vec4 vRoof;
 varying vec3 vRoofL;
@@ -513,6 +514,25 @@ if (roofOn < 0.5) {
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.96, 0.92, 0.82), grime * 0.5);
     float streak = smoothstep(0.62, 0.92, rNoise(vec2(w.x * 3.1, w.y * 0.35) + lot * 2.0));
     diffuseColor.rgb *= 1.0 - 0.07 * streak;
+    #ifdef WALL_PHOTO
+    {
+      // a photograph of dirty plaster tiled over the baked wall (a 1.3 m tile, two scales and a turn): the
+      // fine grain and blotching the atlas cannot hold, as variation only, so the wall keeps its colour
+      vec2 dq = w / 1.3;
+      vec3 p1 = texture2D(uWallDetail, dq).rgb;
+      vec3 p2 = texture2D(uWallDetail, vec2(dq.y, -dq.x) * 0.43 + 0.21).rgb;
+      diffuseColor.rgb *= mix(vec3(1.0), mix(p1, p2, 0.4) * 2.0, 0.55);
+      #ifdef ROOF_FINE
+      float vis2 = 1.0 - smoothstep(0.012, 0.035, px);
+      if (vis2 > 0.0) {
+        float h0 = dot(p1, vec3(0.3333));
+        float hx = dot(texture2D(uWallDetail, dq + vec2(0.006, 0.0)).rgb, vec3(0.3333));
+        float hy = dot(texture2D(uWallDetail, dq + vec2(0.0, 0.006)).rgb, vec3(0.3333));
+        wallGrad += vec2(hx - h0, hy - h0) * 5.0 * vis2;
+      }
+      #endif
+    }
+    #endif
     float stucco = smoothstep(0.925, 0.945, roughnessFactor) * step(0.6, w.y);
     if (stucco > 0.0) {
       float patchy = rNoise(w * 2.2 + lot) * 0.6 + rNoise(w * 5.3) * 0.4;
@@ -523,7 +543,7 @@ if (roofOn < 0.5) {
         vec2 q = w * 14.0;
         float e = 0.3;
         float h0 = rNoise(q);
-        wallGrad = vec2(rNoise(q + vec2(e, 0.0)) - h0, rNoise(q + vec2(0.0, e)) - h0) * 0.9 * vis * stucco;
+        wallGrad += vec2(rNoise(q + vec2(e, 0.0)) - h0, rNoise(q + vec2(0.0, e)) - h0) * 0.9 * vis * stucco;
         diffuseColor.rgb *= 1.0 - 0.1 * (h0 - 0.5) * vis * stucco;
       }
       #endif
@@ -537,7 +557,7 @@ if (roofOn < 0.5) {
  * modules' roofing colours (sRGB), in the order `roofAttributes` indexed them. `fine` adds the
  * procedural courses and their bump (HIGH); phones keep the colours, weathering and features.
  */
-export function applyRoofs(material: MeshStandardMaterial, bases: string[], fine: boolean): void {
+export function applyRoofs(material: MeshStandardMaterial, bases: string[], fine: boolean, wallDetail?: Texture): void {
   const c = new Color();
   const table = Array.from({ length: 16 }, (_, i) => {
     c.set(bases[i] ?? '#4d5056');
@@ -547,11 +567,12 @@ export function applyRoofs(material: MeshStandardMaterial, bases: string[], fine
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer) => {
     previous.call(material, shader, renderer);
     shader.uniforms.uRoofBase = { value: table };
+    if (wallDetail) shader.uniforms.uWallDetail = { value: wallDetail };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace('#include <project_vertex>', `#include <project_vertex>\n${VERT_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_PARS(fine)}`)
+      .replace('#include <common>', `#include <common>\n${FRAG_PARS(fine, !!wallDetail)}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${FRAG_COLOR}`)
       .replace(
         '#include <metalnessmap_fragment>',
@@ -583,5 +604,5 @@ export function applyRoofs(material: MeshStandardMaterial, bases: string[], fine
       );
   };
   const key = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${key()}|roofs-${fine ? 'fine' : 'lean'}`;
+  material.customProgramCacheKey = () => `${key()}|roofs-${fine ? 'fine' : 'lean'}${wallDetail ? '-photo' : ''}`;
 }

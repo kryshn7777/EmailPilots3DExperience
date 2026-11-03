@@ -1,4 +1,4 @@
-import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three';
+import type { MeshStandardMaterial, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { Vector2 } from 'three';
 import { HOME_CELL } from '../bake/cityGen.mjs';
 
@@ -14,12 +14,21 @@ import { HOME_CELL } from '../bake/cityGen.mjs';
  *
  * Coordinates are the town's (group-local x/z), from the plane's own vertex positions.
  */
-export function applyLawns(material: MeshStandardMaterial, origin: Vector2): void {
+export function applyLawns(
+  material: MeshStandardMaterial,
+  origin: Vector2,
+  /** tiling photo detail for the hard surfaces (public/models/homes/detail-*.webp, see scripts/make-detail-maps.py) */
+  detail?: { asphalt: Texture; concrete: Texture },
+): void {
   const { w, d, lotW, lots, lotD, street } = HOME_CELL;
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer) => {
     previous.call(material, shader, renderer);
     shader.uniforms.uLawnOrigin = { value: origin };
+    if (detail) {
+      shader.uniforms.uAsphalt = { value: detail.asphalt };
+      shader.uniforms.uConcrete = { value: detail.concrete };
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec2 uLawnOrigin;\nvarying vec2 vTown;')
       // the plane lies in x/y and is turned flat by -90 degrees about x: plane +y is town -z
@@ -36,7 +45,8 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
         const mat2 gRot = mat2(1.6, 1.2, -1.2, 1.6);
         float gFbm(vec2 p) { return gNoise(p) * 0.55 + gNoise(gRot * p + 5.3) * 0.3 + gNoise(gRot * gRot * p * 1.075 + 1.7) * 0.15; }
         float lawnBump = 0.0;
-        float lawnMask = 0.0;`)
+        float lawnMask = 0.0;
+        ${detail ? 'uniform sampler2D uAsphalt;\nuniform sampler2D uConcrete;' : ''}`)
       .replace('#include <map_fragment>', /* glsl */ `#include <map_fragment>
         {
           vec3 g = diffuseColor.rgb;
@@ -104,6 +114,22 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           vec3 hard = g * (0.9 + 0.2 * gFbm(vTown * 0.45 + 7.0)) * (0.94 + 0.12 * macro);
           // up close the paving and asphalt are speckled too, not one flat tone
           hard *= mix(1.0, 0.86 + 0.28 * gNoise(vTown * 55.0), near1);
+          ${detail ? `
+          // photographs of asphalt and of pavement tiled over the bake: the grain a centimetre-a-pixel
+          // bake cannot hold. Each map is only variation about its mean (scripts/make-detail-maps.py), so
+          // the colour of the surface stays what the bake says; two scales and a turn hide the repeat.
+          float hlum = dot(g, vec3(0.2126, 0.7152, 0.0722));
+          float onRoad = 1.0 - smoothstep(0.16, 0.30, hlum);
+          vec2 qa = vTown / 0.55;
+          vec3 pa = mix(texture2D(uAsphalt, qa).rgb, texture2D(uAsphalt, vec2(qa.y, -qa.x) * 0.41 + 0.27).rgb, 0.4) * 2.0;
+          vec2 qc = vTown / 0.6;
+          vec3 pc = mix(texture2D(uConcrete, qc).rgb, texture2D(uConcrete, vec2(qc.y, -qc.x) * 0.43 + 0.19).rgb, 0.4) * 2.0;
+          vec3 photo = mix(pc, pa, onRoad);
+          hard *= mix(vec3(1.0), photo, 0.8 * (1.0 - lawn));
+          // and its relief, while a pixel is still smaller than a grain
+          float nearP = 1.0 - smoothstep(0.02, 0.07, px);
+          lawnBump += (1.0 - lawn) * (dot(photo, vec3(0.3333)) - 1.0) * 0.0035 * nearP;
+          lawnMask = max(lawnMask, (1.0 - lawn) * nearP);` : ''}
           diffuseColor.rgb = mix(hard, c, lawn);
         }`)
       // the clumps and grain as relief, so the low sun rakes the lawn

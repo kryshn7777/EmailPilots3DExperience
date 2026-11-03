@@ -1,4 +1,4 @@
-import type { Camera } from 'three';
+import type { Camera, Texture } from 'three';
 import {
   CatmullRomCurve3,
   Group,
@@ -160,7 +160,16 @@ export class Rooftops {
     ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
     // every lot its own grass, mowing stripes, dry and lush patches (the cell alone repeats)
-    applyLawns(material, new Vector2(ground.position.x, ground.position.z));
+    // HIGH also tiles photographs of asphalt and pavement over the bake (scripts/make-detail-maps.py)
+    const detail = (file: string): ReturnType<TextureLoader['load']> => {
+      const t = loader.load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      return t;
+    };
+    const photo = shadows ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : undefined;
+    applyLawns(material, new Vector2(ground.position.x, ground.position.z), photo);
 
     // the meadow and fields under the woodland, out past the edge of town
     const meadow = meadowTexture();
@@ -174,6 +183,7 @@ export class Rooftops {
     this.groundMaterial = material;
     this.disposables.push(ground.geometry, material, color, glow, outskirts.geometry, meadowMaterial, meadow);
     if (normal) this.disposables.push(normal);
+    if (photo) this.disposables.push(photo.asphalt, photo.concrete);
     if (rough) this.disposables.push(rough);
   }
 
@@ -288,8 +298,16 @@ export class Rooftops {
     // chapter whose fog is tuned for a dark room, so its windows run a little
     // hotter than the city's. cloudEnv: homes in a cloud sea take their light
     // and reflections from the baked cloud environment.
+    // HIGH tiles a photograph of dirty plaster over the baked walls (scripts/make-detail-maps.py)
+    let wallDetail: Texture | undefined;
+    if (quality.tier === 'high') {
+      wallDetail = new TextureLoader().load(asset('/models/homes/detail-plaster.webp'));
+      wallDetail.colorSpace = NoColorSpace;
+      wallDetail.wrapS = wallDetail.wrapT = RepeatWrapping;
+      wallDetail.anisotropy = 8;
+    }
     this.kitCity = new KitCity(lots as KitLot[], rings, manifest, {
-      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high', roofs: true,
+      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high', roofs: true, wallDetail,
     });
     // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
