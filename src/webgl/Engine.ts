@@ -677,6 +677,11 @@ export class Engine {
         for (const [o] of hidden) o.visible = false;
         this.sky.followCamera(bake.position);
         office.bakeBackdrop(renderer, scene, bake);
+        // and the tower close up, with the city's detail drawn toward the entry, as the dart flies in
+        if (office.entry) {
+          this.city.update(T_S, (performance.now() - this.startTime) / 1000, office.entry);
+          office.warmApproach(renderer, scene, this.composer.inputBuffer);
+        }
         for (const [o, v] of hidden) o.visible = v;
       }
       this.applyVisibility(T_S, true);

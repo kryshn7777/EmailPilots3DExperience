@@ -837,6 +837,30 @@ export class Office {
 
   private warmCam: PerspectiveCamera | null = null;
 
+  /**
+   * The tower close up, as the dart flies at it: the main flight never comes this near it, so its
+   * close-up tier (and whatever streams in with it) is drawn once here, off screen, ahead of the
+   * detour. The Engine has set T_S's visibility and moved the city's detail toward the entry.
+   */
+  warmApproach(renderer: WebGLRenderer, scene: Scene, target: WebGLRenderTarget): void {
+    const stage = this.stage;
+    if (!stage) return;
+    if (!this.warmCam) this.warmCam = new PerspectiveCamera(100, 2, 0.1, 400);
+    const cam = this.warmCam;
+    cam.position.copy(stage.entry).addScaledVector(stage.normal, 5).add(this.tmpV.set(0, 0.5, 0));
+    cam.lookAt(stage.entry);
+    cam.updateMatrixWorld();
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(target);
+    renderer.render(scene, cam);
+    renderer.setRenderTarget(prev);
+  }
+
+  /** where the dart enters the tower (null before the tower is known) */
+  get entry(): Vector3 | null {
+    return this.stage?.entry ?? null;
+  }
+
   /** triangles and draws of the room as built (for the budget check) */
   stats(): { triangles: number; draws: number } {
     let triangles = 0;
