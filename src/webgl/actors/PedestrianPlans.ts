@@ -23,6 +23,8 @@ export function townCrowd(
   parked: { x: number; z: number; yaw: number }[],
   path: Vector3[],
   quality: Quality,
+  /** people and dogs out in the yards, placed with the yard clutter (YardClutter): appended last */
+  yardStands: Stand[] = [],
 ): CrowdPlan {
   const high = quality.tier === 'high';
   const rand = mulberry32(31337);
@@ -149,6 +151,7 @@ export function townCrowd(
       }
     }
   }
+  stands.push(...yardStands);
   return { walks, stands, look: 'day', far: high ? 75 : 45, seed: 2207 };
 }
 

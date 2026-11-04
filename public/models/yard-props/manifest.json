@@ -1,0 +1,888 @@
+{
+ "scale": 0.33,
+ "props": {
+  "gnome": {
+   "tris": 520,
+   "lean": 160,
+   "size": [
+    0.0851,
+    0.1977,
+    0.0692
+   ],
+   "radius": 0.0548
+  },
+  "car-cover": {
+   "tris": 1499,
+   "lean": 420,
+   "size": [
+    0.5904,
+    0.4657,
+    1.4455
+   ],
+   "radius": 0.7807
+  },
+  "picnic": {
+   "tris": 640,
+   "lean": 220,
+   "size": [
+    0.7395,
+    0.2462,
+    0.9974
+   ],
+   "radius": 0.6208
+  },
+  "monobloc": {
+   "tris": 418,
+   "lean": 158,
+   "size": [
+    0.2118,
+    0.2903,
+    0.2071
+   ],
+   "radius": 0.1481
+  },
+  "firepit": {
+   "tris": 639,
+   "lean": 219,
+   "size": [
+    0.478,
+    0.1281,
+    0.473
+   ],
+   "radius": 0.3362
+  },
+  "stepladder": {
+   "tris": 339,
+   "lean": 100,
+   "size": [
+    0.3165,
+    0.4405,
+    0.165
+   ],
+   "radius": 0.1785
+  },
+  "planter": {
+   "tris": 300,
+   "lean": 100,
+   "size": [
+    0.3012,
+    0.1402,
+    0.1365
+   ],
+   "radius": 0.1653
+  },
+  "clay-pot": {
+   "tris": 160,
+   "lean": 60,
+   "size": [
+    0.0878,
+    0.0732,
+    0.0869
+   ],
+   "radius": 0.0618
+  },
+  "watering-can": {
+   "tris": 505,
+   "lean": 456,
+   "size": [
+    0.063,
+    0.065,
+    0.1493
+   ],
+   "radius": 0.081
+  },
+  "barrel": {
+   "tris": 300,
+   "lean": 100,
+   "size": [
+    0.1611,
+    0.2904,
+    0.1599
+   ],
+   "radius": 0.1135
+  },
+  "trash-can": {
+   "tris": 420,
+   "lean": 130,
+   "size": [
+    0.2567,
+    0.299,
+    0.1836
+   ],
+   "radius": 0.1578
+  },
+  "trash-can-rust": {
+   "tris": 420,
+   "lean": 130,
+   "size": [
+    0.2552,
+    0.299,
+    0.1812
+   ],
+   "radius": 0.1565
+  },
+  "tyre": {
+   "tris": 260,
+   "lean": 90,
+   "size": [
+    0.198,
+    0.198,
+    0.0544
+   ],
+   "radius": 0.1027
+  },
+  "soccer-ball": {
+   "tris": 160,
+   "lean": 48,
+   "size": [
+    0.0731,
+    0.0726,
+    0.0726
+   ],
+   "radius": 0.0515
+  },
+  "football": {
+   "tris": 271,
+   "lean": 255,
+   "size": [
+    0.1496,
+    0.0844,
+    0.0844
+   ],
+   "radius": 0.0859
+  },
+  "propane": {
+   "tris": 239,
+   "lean": 133,
+   "size": [
+    0.1113,
+    0.1828,
+    0.1113
+   ],
+   "radius": 0.0787
+  },
+  "compost-bags": {
+   "tris": 300,
+   "lean": 100,
+   "size": [
+    0.2256,
+    0.0591,
+    0.2928
+   ],
+   "radius": 0.1848
+  },
+  "crate": {
+   "tris": 260,
+   "lean": 90,
+   "size": [
+    0.1746,
+    0.1531,
+    0.3849
+   ],
+   "radius": 0.2113
+  },
+  "bench": {
+   "tris": 420,
+   "lean": 160,
+   "size": [
+    0.3844,
+    0.2935,
+    0.1639
+   ],
+   "radius": 0.2089
+  },
+  "trash-bag": {
+   "tris": 240,
+   "lean": 80,
+   "size": [
+    0.1743,
+    0.1897,
+    0.1528
+   ],
+   "radius": 0.1159
+  },
+  "stump": {
+   "tris": 519,
+   "lean": 160,
+   "size": [
+    0.4704,
+    0.189,
+    0.5248
+   ],
+   "radius": 0.3524
+  },
+  "utility-box": {
+   "tris": 220,
+   "lean": 70,
+   "size": [
+    0.3036,
+    0.3697,
+    0.1426
+   ],
+   "radius": 0.1677
+  },
+  "power-pole": {
+   "tris": 2199,
+   "lean": 1450,
+   "size": [
+    0.6336,
+    3.2366,
+    1.0334
+   ],
+   "radius": 0.6061
+  },
+  "rocker": {
+   "tris": 640,
+   "lean": 200,
+   "size": [
+    0.2337,
+    0.3283,
+    0.275
+   ],
+   "radius": 0.1805
+  },
+  "patio-table": {
+   "tris": 320,
+   "lean": 109,
+   "size": [
+    0.2283,
+    0.2396,
+    0.2283
+   ],
+   "radius": 0.1614
+  },
+  "patio-chair": {
+   "tris": 420,
+   "lean": 130,
+   "size": [
+    0.1895,
+    0.2833,
+    0.2182
+   ],
+   "radius": 0.1445
+  },
+  "pumpkin": {
+   "tris": 300,
+   "lean": 90,
+   "size": [
+    0.1056,
+    0.0893,
+    0.1018
+   ],
+   "radius": 0.0733
+  },
+  "leaf-bag": {
+   "tris": 262,
+   "lean": 59,
+   "size": [
+    0.1499,
+    0.2781,
+    0.1076
+   ],
+   "radius": 0.0923
+  },
+  "hoop": {
+   "tris": 324,
+   "lean": 140,
+   "size": [
+    0.3696,
+    1.0782,
+    0.5551
+   ],
+   "radius": 0.3334
+  },
+  "bike": {
+   "tris": 900,
+   "lean": 260,
+   "size": [
+    0.5623,
+    0.3148,
+    0.1584
+   ],
+   "radius": 0.2921
+  },
+  "kid-bike": {
+   "tris": 900,
+   "lean": 240,
+   "size": [
+    0.3486,
+    0.1987,
+    0.1135
+   ],
+   "radius": 0.1833
+  },
+  "scooter": {
+   "tris": 212,
+   "lean": 70,
+   "size": [
+    0.2145,
+    0.2762,
+    0.1353
+   ],
+   "radius": 0.1268
+  },
+  "wheelbarrow": {
+   "tris": 376,
+   "lean": 150,
+   "size": [
+    0.5857,
+    0.1992,
+    0.2046
+   ],
+   "radius": 0.3102
+  },
+  "mower": {
+   "tris": 396,
+   "lean": 160,
+   "size": [
+    0.3555,
+    0.3082,
+    0.1799
+   ],
+   "radius": 0.1992
+  },
+  "hose-reel": {
+   "tris": 336,
+   "lean": 140,
+   "size": [
+    0.3436,
+    0.2537,
+    0.1241
+   ],
+   "radius": 0.1826
+  },
+  "hose": {
+   "tris": 699,
+   "lean": 200,
+   "size": [
+    0.3151,
+    0.0117,
+    0.2162
+   ],
+   "radius": 0.1911
+  },
+  "clothesline": {
+   "tris": 720,
+   "lean": 260,
+   "size": [
+    0.7934,
+    0.627,
+    0.7932
+   ],
+   "radius": 0.561
+  },
+  "slide": {
+   "tris": 548,
+   "lean": 120,
+   "size": [
+    0.6435,
+    0.363,
+    0.1716
+   ],
+   "radius": 0.333
+  },
+  "hot-tub": {
+   "tris": 552,
+   "lean": 76,
+   "size": [
+    0.8712,
+    0.3217,
+    0.7062
+   ],
+   "radius": 0.5607
+  },
+  "ladder": {
+   "tris": 308,
+   "lean": 90,
+   "size": [
+    0.0231,
+    1.386,
+    0.165
+   ],
+   "radius": 0.0833
+  },
+  "dish": {
+   "tris": 416,
+   "lean": 80,
+   "size": [
+    0.198,
+    0.2162,
+    0.198
+   ],
+   "radius": 0.14
+  },
+  "kettle-grill": {
+   "tris": 520,
+   "lean": 140,
+   "size": [
+    0.2195,
+    0.3301,
+    0.1967
+   ],
+   "radius": 0.1474
+  },
+  "gas-grill": {
+   "tris": 228,
+   "lean": 120,
+   "size": [
+    0.4686,
+    0.3201,
+    0.1756
+   ],
+   "radius": 0.2502
+  },
+  "mailbox-post": {
+   "tris": 168,
+   "lean": 70,
+   "size": [
+    0.1584,
+    0.467,
+    0.0875
+   ],
+   "radius": 0.0905
+  },
+  "mailbox-brick": {
+   "tris": 112,
+   "lean": 50,
+   "size": [
+    0.165,
+    0.3663,
+    0.165
+   ],
+   "radius": 0.1167
+  },
+  "mailbox-white": {
+   "tris": 252,
+   "lean": 80,
+   "size": [
+    0.1914,
+    0.4125,
+    0.0561
+   ],
+   "radius": 0.0997
+  },
+  "ball": {
+   "tris": 220,
+   "lean": 60,
+   "size": [
+    0.07,
+    0.0729,
+    0.0715
+   ],
+   "radius": 0.05
+  },
+  "toy-truck": {
+   "tris": 244,
+   "lean": 60,
+   "size": [
+    0.1743,
+    0.0911,
+    0.0924
+   ],
+   "radius": 0.0987
+  },
+  "kayak": {
+   "tris": 296,
+   "lean": 80,
+   "size": [
+    1.056,
+    0.0921,
+    0.2178
+   ],
+   "radius": 0.5391
+  }
+ },
+ "credits": {
+  "gnome": {
+   "id": "garden_gnome",
+   "name": "Garden Gnome",
+   "authors": [
+    "Bhargav Kubal"
+   ],
+   "dimensions_mm": [
+    257.918581366539,
+    209.71597731113434,
+    599.08585294761
+   ],
+   "polycount": 28858,
+   "url": "https://polyhaven.com/a/garden_gnome",
+   "license": "CC0 1.0"
+  },
+  "car-cover": {
+   "id": "covered_car",
+   "name": "Covered Car",
+   "authors": [
+    "MP"
+   ],
+   "dimensions_mm": [
+    1788.962960243225,
+    4380.25426864624,
+    1411.1130833625793
+   ],
+   "polycount": 12592,
+   "url": "https://polyhaven.com/a/covered_car",
+   "license": "CC0 1.0"
+  },
+  "picnic": {
+   "id": "wooden_picnic_table",
+   "name": "Wooden Picnic Table",
+   "authors": [
+    "Ulan Cabanilla"
+   ],
+   "dimensions_mm": [
+    2240.9759759902954,
+    3022.329568862915,
+    745.9869086742401
+   ],
+   "polycount": 10210,
+   "url": "https://polyhaven.com/a/wooden_picnic_table",
+   "license": "CC0 1.0"
+  },
+  "monobloc": {
+   "id": "plastic_monobloc_chair_01",
+   "name": "Plastic Monobloc Chair 01",
+   "authors": [
+    "Kuutti Siitonen"
+   ],
+   "dimensions_mm": [
+    641.8611407279968,
+    627.5919079780579,
+    879.8411972820759
+   ],
+   "polycount": 3356,
+   "url": "https://polyhaven.com/a/plastic_monobloc_chair_01",
+   "license": "CC0 1.0"
+  },
+  "firepit": {
+   "id": "stone_fire_pit",
+   "name": "Stone Fire Pit",
+   "authors": [
+    "Sebastian Platen"
+   ],
+   "dimensions_mm": [
+    1448.4962224960327,
+    1433.234453201294,
+    388.32607865333557
+   ],
+   "polycount": 3887,
+   "url": "https://polyhaven.com/a/stone_fire_pit",
+   "license": "CC0 1.0"
+  },
+  "stepladder": {
+   "id": "wooden_ladder",
+   "name": "Wooden Ladder",
+   "authors": [
+    "Miroslav Turura"
+   ],
+   "dimensions_mm": [
+    959.1718018054962,
+    500.0000149011612,
+    1334.923267364502
+   ],
+   "polycount": 8492,
+   "url": "https://polyhaven.com/a/wooden_ladder",
+   "license": "CC0 1.0"
+  },
+  "planter": {
+   "id": "planter_box_01",
+   "name": "Planter Box 01",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    912.6113951206207,
+    413.6679768562317,
+    424.96823612600565
+   ],
+   "polycount": 8094,
+   "url": "https://polyhaven.com/a/planter_box_01",
+   "license": "CC0 1.0"
+  },
+  "clay-pot": {
+   "id": "planter_pot_clay",
+   "name": "Planter Pot Clay",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "dimensions_mm": [
+    265.9967243671417,
+    263.4630501270294,
+    221.87034250237048
+   ],
+   "polycount": 3080,
+   "url": "https://polyhaven.com/a/planter_pot_clay",
+   "license": "CC0 1.0"
+  },
+  "watering-can": {
+   "id": "watering_can_metal_01",
+   "name": "Watering Can Metal 01",
+   "authors": [
+    "Charles Nderitu"
+   ],
+   "dimensions_mm": [
+    191.01857393980026,
+    452.33607292175293,
+    196.81852799840271
+   ],
+   "polycount": 11837,
+   "url": "https://polyhaven.com/a/watering_can_metal_01",
+   "license": "CC0 1.0"
+  },
+  "barrel": {
+   "id": "Barrel_02",
+   "name": "Barrel 02",
+   "authors": [
+    "Jorge Camacho"
+   ],
+   "dimensions_mm": [
+    488.17557096481323,
+    484.6164435148239,
+    879.9999924376607
+   ],
+   "polycount": 2688,
+   "url": "https://polyhaven.com/a/Barrel_02",
+   "license": "CC0 1.0"
+  },
+  "trash-can": {
+   "id": "metal_trash_can",
+   "name": "Metal Trash Can",
+   "authors": [
+    "GurJas Studios"
+   ],
+   "dimensions_mm": [
+    1846.9352722167969,
+    556.2898814678192,
+    906.1697272554738
+   ],
+   "polycount": 13960,
+   "url": "https://polyhaven.com/a/metal_trash_can",
+   "license": "CC0 1.0"
+  },
+  "trash-can-rust": {
+   "id": "metal_trash_can",
+   "name": "Metal Trash Can",
+   "authors": [
+    "GurJas Studios"
+   ],
+   "dimensions_mm": [
+    1846.9352722167969,
+    556.2898814678192,
+    906.1697272554738
+   ],
+   "polycount": 13960,
+   "url": "https://polyhaven.com/a/metal_trash_can",
+   "license": "CC0 1.0"
+  },
+  "tyre": {
+   "id": "old_tyre",
+   "name": "Old Tyre",
+   "authors": [
+    "MP"
+   ],
+   "dimensions_mm": [
+    600.0000238418579,
+    164.99999910593033,
+    600.0000238418579
+   ],
+   "polycount": 2880,
+   "url": "https://polyhaven.com/a/old_tyre",
+   "license": "CC0 1.0"
+  },
+  "soccer-ball": {
+   "id": "dirty_football",
+   "name": "Dirty Football",
+   "authors": [
+    "Rohit Seervi"
+   ],
+   "dimensions_mm": [
+    221.3953733444214,
+    220.00925242900848,
+    220.0465425848961
+   ],
+   "polycount": 37486,
+   "url": "https://polyhaven.com/a/dirty_football",
+   "license": "CC0 1.0"
+  },
+  "football": {
+   "id": "american_football",
+   "name": "American Football",
+   "authors": [
+    "Riley Queen"
+   ],
+   "dimensions_mm": [
+    453.26216518878937,
+    255.84320724010468,
+    255.84322214126587
+   ],
+   "polycount": 4480,
+   "url": "https://polyhaven.com/a/american_football",
+   "license": "CC0 1.0"
+  },
+  "propane": {
+   "id": "propane_tank",
+   "name": "Propane Tank",
+   "authors": [
+    "Slinc"
+   ],
+   "dimensions_mm": [
+    337.3616933822632,
+    337.3616933822632,
+    553.7950303405523
+   ],
+   "polycount": 5238,
+   "url": "https://polyhaven.com/a/propane_tank",
+   "license": "CC0 1.0"
+  },
+  "compost-bags": {
+   "id": "compost_bags",
+   "name": "Compost Bags",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    1847.2610712051392,
+    946.3564157485962,
+    767.9970413446426
+   ],
+   "polycount": 18708,
+   "url": "https://polyhaven.com/a/compost_bags",
+   "license": "CC0 1.0"
+  },
+  "crate": {
+   "id": "wooden_crate_02",
+   "name": "Wooden Crate 02",
+   "authors": [
+    "James Ray Cock",
+    "Jurita Burger"
+   ],
+   "dimensions_mm": [
+    1166.325867176056,
+    529.1010439395905,
+    463.95453810691833
+   ],
+   "polycount": 5176,
+   "url": "https://polyhaven.com/a/wooden_crate_02",
+   "license": "CC0 1.0"
+  },
+  "bench": {
+   "id": "painted_wooden_bench",
+   "name": "Painted Wooden Bench",
+   "authors": [
+    "Kirill Sannikov"
+   ],
+   "dimensions_mm": [
+    1164.9435758590698,
+    496.5430945158005,
+    889.2914750613272
+   ],
+   "polycount": 630,
+   "url": "https://polyhaven.com/a/painted_wooden_bench",
+   "license": "CC0 1.0"
+  },
+  "trash-bag": {
+   "id": "trashbag",
+   "name": "Trashbag",
+   "authors": [
+    "Benny Weimer"
+   ],
+   "dimensions_mm": [
+    528.0700623989105,
+    462.893009185791,
+    574.9993845820427
+   ],
+   "polycount": 4482,
+   "url": "https://polyhaven.com/a/trashbag",
+   "license": "CC0 1.0"
+  },
+  "stump": {
+   "id": "tree_stump_01",
+   "name": "Tree Stump 01",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "dimensions_mm": [
+    1425.5504608154297,
+    1590.3143286705017,
+    572.6675391197205
+   ],
+   "polycount": 41046,
+   "url": "https://polyhaven.com/a/tree_stump_01",
+   "license": "CC0 1.0"
+  },
+  "utility-box": {
+   "id": "utility_box_02",
+   "name": "Utility Box 02",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    920.0001955032349,
+    431.999996304512,
+    1120.3334331512451
+   ],
+   "polycount": 6268,
+   "url": "https://polyhaven.com/a/utility_box_02",
+   "license": "CC0 1.0"
+  },
+  "power-pole": {
+   "id": "modular_electricity_poles",
+   "name": "Modular Electricity Poles",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    13119.13776397705,
+    1957.2706818580627,
+    7000.0002812594175
+   ],
+   "polycount": 200610,
+   "url": "https://polyhaven.com/a/modular_electricity_poles",
+   "license": "CC0 1.0"
+  },
+  "rocker": {
+   "id": "Rockingchair_01",
+   "name": "Rockingchair 01",
+   "authors": [
+    "Jorge Camacho"
+   ],
+   "dimensions_mm": [
+    708.1280946731567,
+    833.482027053833,
+    994.9284568428993
+   ],
+   "polycount": 11866,
+   "url": "https://polyhaven.com/a/Rockingchair_01",
+   "license": "CC0 1.0"
+  },
+  "patio-table": {
+   "id": "outdoor_table_chair_set_01",
+   "name": "Outdoor Table Chair Set 01",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    776.0046124458313,
+    1831.0473561286926,
+    858.5816156119108
+   ],
+   "polycount": 9828,
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "license": "CC0 1.0"
+  },
+  "patio-chair": {
+   "id": "outdoor_table_chair_set_01",
+   "name": "Outdoor Table Chair Set 01",
+   "authors": [
+    "James Ray Cock"
+   ],
+   "dimensions_mm": [
+    776.0046124458313,
+    1831.0473561286926,
+    858.5816156119108
+   ],
+   "polycount": 9828,
+   "url": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+   "license": "CC0 1.0"
+  }
+ }
+}

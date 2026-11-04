@@ -124,6 +124,24 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 | Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
 | Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
 
+## Lived-in yards
+
+A neighbourhood where every lawn is clean reads as a model. `actors/YardClutter.ts` adds what households leave lying around, on the lots `Yards` already dresses:
+
+- *Kerb and front yard.* Paper leaf bags at the kerb or on the lawn, sometimes one fallen over. A trash bag. Green utility pedestals in front corners. Three kinds of mailbox (replacing Yards' stand-in). Pumpkins on the steps. Gnomes in the beds. Bikes, kid bikes and scooters dropped on their sides, balls and a toy truck. A portable basketball hoop at the end of the drive. A covered car on an empty drive. A mower stopped mid-lawn. A hose snaking out from the side of the house.
+- *Back yard.* Rotary washing lines with laundry. Hot tubs, picnic tables, and stone fire pits with odd chairs round them (monobloc, patio, rocker). Chairs, tables and pots on the patio. A slide and toys. A kayak by the fence. Kettle or gas grills (replacing Yards' stand-in) with a spare propane tank. Junk round the shed: a wheelbarrow, tyres, compost bags, a barrel, crates, pots, a stepladder.
+- *Walls (HIGH).* Satellite dishes, a ladder up to a window, rain barrels, hose reels and bins. Each sits beside a window on the real wall plane, taken from `anchors.json`, never over a window, and never on the street front.
+- *Lines (HIGH).* Distribution poles down the rear lot lines with three sagging conductors and a slacker cable line. They keep 6 units off the low part of the flight, off trees and off sheds.
+- *People.* Kids on the lawn and under the hoop, someone at the grill with a neighbour, a gardener by the barrow, someone on the phone by the mower, a dog out in the back. These are extra `Stand`s for the town crowd (`Stand.variant` picks a child or a dog). A person is about 2.4k triangles, so the yards add at most 36 on HIGH and 4 on phones.
+
+Each lot draws its household from a stream seeded by its own position, independent of `homeLots` and of every other generator: whether there are kids, a decorator, a gardener or a tinkerer, and how untidy they are. Every piece gets a random yaw and a little tilt, and is set down on its lowest point. Each piece keeps off what `Yards` placed (now recorded per lot as `Yards.lots`), the house and its front bed, the walk, the drive and the parked car, the fence runs, the trees, and the verge's street furniture and lamps.
+
+**Models.** `blender/make_yard_props.py` makes 50 props. 27 are Poly Haven CC0 models (see `public/models/yard-props/CREDITS.md`), decimated to 120 to 2,200 triangles. The rest are modelled procedurally. Cycles bakes everything from its full source into one 2048 atlas: albedo with AO folded in, ORM, and a tangent normal map (phones get a 1024 colour map only). Each prop ships a full mesh and a lean one in `props.glb`, meshopt-packed by `npm run compress:models`.
+
+**Cost.** Every kind and every instance is ONE `BatchedMesh` (one draw call, plus one for the lines on HIGH). Each piece draws only within a reach that suits its size (24 / 40 / 66 units, poles 110) and switches to its lean mesh past 42% of that reach. Phones draw a shorter list of kinds, lean only, at 85% of the reach, on lots within 40 units of the flight. `?noclutter` leaves the whole layer out, for an A/B. Measured at the street pass (t 0.185), the additions draw:
+- HIGH: 92 pieces in view, 28k triangles, plus 15k for the lines and up to 36 yard people (about 86k if all of them are in view), in 2 draw calls.
+- Phone: 15 pieces in view, 1.7k triangles, plus up to 4 people, in 1 draw call.
+
 ## Photo detail on the ground and walls
 
 The ground and the house atlases are baked at a few centimetres a texel, so the grain of real materials is tiled over them at runtime from photographs: `public/models/homes/detail-{asphalt,concrete,plaster}.webp` (HIGH tier only). Each holds only the variation of its photograph about its mean, so a surface keeps the colour the bake gives it (`scripts/make-detail-maps.py`). The ground shader (`materials/Lawns.ts`) multiplies them over the asphalt and pavement, with relief while a pixel is smaller than a grain; the wall shader (`materials/Roofs.ts`) tiles the plaster over every house wall.

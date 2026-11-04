@@ -641,6 +641,29 @@ interface PropPlacement {
 }
 interface Light { x: number; y: number; z: number; kind: 'path' | 'porch' | 'pool' | 'fire'; }
 
+/**
+ * One detailed lot as the yard clutter (YardClutter.ts) sees it: its frame (u across the lot, v from the
+ * street edge toward the rear; world x = cx + u, z = front - toStreet * v) and everything this pass put
+ * on it, so what comes later can keep off it.
+ */
+export interface YardLot {
+  lot: KitLot;
+  cx: number; front: number; toStreet: number;
+  hw: number; vF: number; vR: number;
+  lush: boolean;
+  /** footprints, lot-local: props, claimed features, trees (`tall` reaches above head height) */
+  taken: { u: number; v: number; r: number; tall?: boolean }[];
+  /** the paved drive, if any: centre u, width, from the street edge to v1 */
+  drive: { u: number; w: number; v1: number } | null;
+  /** the parked car, lot-local, if there is one */
+  car: { u: number; v: number } | null;
+  patio: [number, number, number, number] | null;
+  shed: [number, number] | null;
+  /** props a later pass may draw better: world position and yaw */
+  mailbox: { x: number; z: number; yaw: number; s: number } | null;
+  grills: { x: number; z: number; yaw: number; s: number }[];
+}
+
 /** tufts carry their own green; the tint only shifts it toward straw or lush */
 const TUFT_TINTS = ['#ffffff', '#f4f8e4', '#e2efc0', '#f6efc4', '#d4e8a8', '#ffffff'];
 const GREENS = ['#3f7a34', '#2f6a30', '#4f8a3a', '#5d8f3e', '#2c5a2d', '#6a9a45', '#3a6e46', '#7a9b3a'].map((c) => muted(c, 0.82));
@@ -671,6 +694,8 @@ export class Yards {
   private glow!: Points;
   /** where the pools are (HIGH tier: each gets real geometry from `Pools`; LOW keeps the painted decal) */
   readonly poolSites: PoolSite[] = [];
+  /** every detailed lot, its frame and what stands on it (see YardClutter) */
+  readonly lots: YardLot[] = [];
 
   /**
    * `lots` are the neighbourhood's lots; `parked` are the cars' front-yard spots, so a
@@ -738,10 +763,17 @@ export class Yards {
         const [x, z] = world(u, v);
         decals.push({ tile, x, z, w, d: dpt, yaw, color, layer });
       };
+      const record: YardLot = {
+        lot, cx, front, toStreet, hw, vF, vR, lush, taken: [], drive: null, car: null, patio: null, shed: null,
+        mailbox: null, grills: [],
+      };
       const prop = (kind: PropKind, u: number, v: number, yaw: number, s: number | [number, number, number], color = '#ffffff'): void => {
         const [x, z] = world(u, v);
         const [sx, sy, sz] = typeof s === 'number' ? [s, s, s] : s;
         props.push({ kind, x, z, yaw, sx, sy, sz, color, near: lush });
+        footprint(record, kind, u, v, yaw, sx, sy, sz, toStreet);
+        if (kind === 'mailbox') record.mailbox = { x, z, yaw, s: sx };
+        if (kind === 'bbq') record.grills.push({ x, z, yaw, s: sx });
       };
 
       // — the lawn itself: large soft patches of different health, so no yard is one flat green
@@ -824,9 +856,14 @@ export class Yards {
         const u = car.x - cx;
         const vCar = (front - car.z) * toStreet;
         decal('drive', u, (vCar + 0.85 - 0.05) / 2 + 0.05, 0.62, vCar + 0.85, Math.PI / 2, '#ffffff', 2);
+        record.drive = { u, w: 0.62, v1: vCar + 0.85 };
+        record.car = { u, v: vCar };
       } else if (chance(0.3)) {
         const u = (chance(0.5) ? -1 : 1) * (hw / 2 + 0.55);
-        if (Math.abs(u) < lotW / 2 - 0.35) decal('drive', u, (vF + 0.9) / 2, 0.62, vF + 0.9, Math.PI / 2, '#ffffff', 2);
+        if (Math.abs(u) < lotW / 2 - 0.35) {
+          decal('drive', u, (vF + 0.9) / 2, 0.62, vF + 0.9, Math.PI / 2, '#ffffff', 2);
+          record.drive = { u, w: 0.62, v1: vF + 0.9 };
+        }
       }
 
       // — the back yard: one big feature, then smaller ones around it
@@ -978,6 +1015,11 @@ export class Yards {
         if (!free(u, v, 0.05)) continue;
         prop('tuft', u, v, rand() * 3.14, between(0.7, 1.5), pick(TUFT_TINTS));
       }
+      record.patio = patio;
+      record.shed = shed;
+      // the features it claimed (pools, patios, beds, play sets) and the trees, besides its props
+      record.taken.push(...taken, ...nearbyTrees.map((t) => ({ ...t, tall: true })));
+      this.lots.push(record);
     }
 
     this.buildDecals(decals, detail === 'high');
@@ -1207,6 +1249,7 @@ export class Yards {
     /** once the model is in: every placement's matrix and colour, to repack by distance (updatePlants) */
     mats?: Float32Array; cols?: Float32Array;
   }[] = [];
+  private kindMeshes: { kind: PropKind; inst: InstancedMesh }[] = [];
   private plantEye = new Vector3(1e9, 0, 0);
   private plantAt = new Vector3();
   /** beyond this from the camera a shrub or evergreen is a few pixels, and is not drawn */
@@ -1252,6 +1295,7 @@ export class Yards {
       inst.receiveShadow = detail === 'high';
       this.group.add(inst);
       this.disposables.push(geometry, inst);
+      this.kindMeshes.push({ kind, inst });
       if (model) this.modelGroups.push({ model, kind, inst, list });
     }
   }
@@ -1381,6 +1425,11 @@ export class Yards {
     }
   }
 
+  /** stops drawing the procedural stand-ins of these kinds (the yard clutter draws them as models now) */
+  hideKinds(kinds: string[]): void {
+    for (const k of this.kindMeshes) if (kinds.includes(k.kind)) k.inst.visible = false;
+  }
+
   /** the firepits breathe a little */
   update(time: number): void {
     if (this.glow) (this.glow.material as PointsMaterial).opacity = 0.75 + Math.sin(time * 7.3) * 0.1 + Math.sin(time * 12.1) * 0.06;
@@ -1389,6 +1438,41 @@ export class Yards {
   dispose(): void {
     this.disposed = true;
     for (const d of this.disposables) d.dispose();
+  }
+}
+
+/**
+ * What a prop of Yards covers on the ground, as circles in the lot's frame (hedges and beds as a row of
+ * them). Tufts and flower heads cover nothing worth keeping off.
+ */
+function footprint(rec: YardLot, kind: PropKind, u: number, v: number, yaw: number, sx: number, sy: number, sz: number, toStreet: number): void {
+  const add = (du: number, dv: number, r: number, tall = false): void => { rec.taken.push({ u: u + du, v: v + dv, r, tall }); };
+  switch (kind) {
+    case 'tuft': case 'bloom': return;
+    case 'hedge': case 'raised': {
+      // a box sx long along its yaw (world x turned by yaw; lot-local v runs against world z when toStreet > 0)
+      const len = sx * (kind === 'raised' ? 0.8 : 1);
+      const ca = Math.cos(yaw), sa = Math.sin(yaw) * toStreet;
+      const n = Math.max(1, Math.ceil(len / 0.25));
+      for (let k = 0; k < n; k++) {
+        const t = ((k + 0.5) / n - 0.5) * len;
+        add(ca * t, sa * t, Math.max(sz * (kind === 'raised' ? 0.34 : 1), 0.12) * 0.75, kind === 'hedge' && sy > 0.25);
+      }
+      return;
+    }
+    case 'shrub': case 'mound': case 'conifer': add(0, 0, Math.max(sx, sz) * 0.5 + 0.02, kind === 'conifer' && sy > 0.5); return;
+    case 'canopy': add(0, 0, Math.max(sx, sz) * 0.5, true); return;
+    case 'trunk': add(0, 0, 0.08, true); return;
+    case 'mailbox': add(0, 0, 0.07); return;
+    case 'shed': add(0, 0, 0.4 * sx, true); return;
+    case 'patioSet': case 'umbrellaSet': add(0, 0, 0.32 * sx, kind === 'umbrellaSet'); return;
+    case 'bbq': add(0, 0, 0.09 * sx); return;
+    case 'swing': add(0, 0, 0.45 * sx, true); return;
+    case 'trampoline': add(0, 0, 0.37 * sx); return;
+    case 'woodpile': add(0, 0, 0.17 * sx); return;
+    case 'pot': add(0, 0, 0.045 * sx); return;
+    case 'birdbath': add(0, 0, 0.16 * sx); return;
+    case 'chair': case 'bench': add(0, 0, 0.12 * sx); return;
   }
 }
 

@@ -86,6 +86,8 @@ export interface Stand {
   mood?: 'idle' | 'chat' | 'phone';
   /** people with the same `group` talk in turns rather than all at once */
   group?: number;
+  /** who stands here (a variant id: 'child', 'dog', ...); default a grown-up of the plan's look */
+  variant?: string;
 }
 
 export interface CrowdPlan {
@@ -872,7 +874,8 @@ export class Pedestrians {
     // people standing about; within a group, every other one talks while the rest listen
     const turns = new Map<number, number>();
     for (const st of plan.stands) {
-      const body = dress(weighted(MIX[plan.look]));
+      const asked = st.variant && byId.has(st.variant) ? st.variant : null;
+      const body = asked === 'dog' ? { ...dogBody(), moving: false } : dress(asked ?? weighted(MIX[plan.look]));
       body.x = st.x;
       body.z = st.z;
       body.yaw = st.yaw;

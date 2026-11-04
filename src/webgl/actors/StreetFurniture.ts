@@ -131,6 +131,8 @@ const HYDRANT_TINTS = ['#ffffff', '#ffffff', '#ffe08a'];
  */
 export class StreetFurniture {
   readonly group = new Group();
+  /** where every piece stands (world x/z) and how much ground it covers, for later passes to keep off */
+  readonly spots: { x: number; z: number; r: number }[] = [];
   private disposables: { dispose(): void }[] = [];
 
   constructor(houses: TownSite[], near: (x: number, z: number) => boolean, tier: 'high' | 'low') {
@@ -193,6 +195,8 @@ export class StreetFurniture {
       }
     }
 
+    const RADII: Record<string, number> = { hydrant: 0.08, stop: 0.1, bin: 0.14, shelter: 0.7, bench: 0.28, bike: 0.2, news: 0.1 };
+    for (const [kind, list] of Object.entries(place)) for (const it of list) this.spots.push({ x: it.x, z: it.z, r: RADII[kind] ?? 0.15 });
     const geometry = kinds(tier === 'high');
     const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.15 });
     this.disposables.push(material);
