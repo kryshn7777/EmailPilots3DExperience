@@ -283,6 +283,12 @@ How a person is made (`bld/humans.py`):
   `atlas-color.webp` (RGB + alpha), `atlas-orm.webp` (R occlusion, G roughness),
   `atlas-normal.webp`; `*-low.webp` are a quarter size, for phones (which skip the normal map).
 
+Sizes after meshopt: `humans.glb` (lean + dog) 285 KB, `humans-hero.glb` 1.3 MB (HIGH only); the
+atlas 2.6 MB colour, 1.1 MB ORM, 0.9 MB normal (HIGH), 0.6 MB in all at a quarter (LOW). At the
+canyon's street-level view (t 0.7, `?probe`) the city crowd draws 158 people in 13 draws and 542k
+triangles on HIGH (8 of them hero; the lofted figures were 6 draws, 389k) and 68 in 9 draws and
+177k on LOW (175k before).
+
 Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
 
 | byte | holds |
