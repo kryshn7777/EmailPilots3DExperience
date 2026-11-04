@@ -567,6 +567,7 @@ export class BatchFleet {
 
   /** The columns of light that come up over each landing. */
   private updateBeams(t: number): void {
+    let any = false;
     this.deliveries.forEach((d, i) => {
       if (d.kind === 'window' || !d.planned) {
         this.beams.setMatrixAt(i, this.zero);
@@ -584,8 +585,11 @@ export class BatchFleet {
       const h = spec.h * up;
       this.m4.makeScale(spec.r, h, spec.r).setPosition(at.x, ground + h / 2, at.z);
       this.beams.setMatrixAt(i, this.m4);
+      any = true;
       this.beams.setColorAt(i, this.c.copy(this.beamColor).multiplyScalar(BEAM_GAIN[d.kind] * up));
     });
+    // no column up: no draw (LOW then adds the darts' single draw)
+    this.beams.visible = any;
     this.beams.instanceMatrix.needsUpdate = true;
     if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true;
   }
