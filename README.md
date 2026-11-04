@@ -147,6 +147,8 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 
 **Cars:** all nine vehicles are generated (`blender/make_cars.py`): a high-poly build is baked into a hero tier (21 to 25k triangles, occlusion, road-grime and normal maps) for cars within 12 units on HIGH, a mid tier (the old close-up model with baked occlusion) out to 28 units, and the lean shells beyond and on LOW (see blender/README.md). No downloaded vehicle was realistic and licensed for this use; the survey is in `public/models/cars/CREDITS.md`.
 
+**IT office props:** the night office level's furniture and kit are generated (`blender/make_it_office.py`, see "IT office props" in blender/README.md): thirteen props in `public/models/office/office-props.glb`, each a root node named in `manifest.json` (size in metres, the emissive materials the engine drives, triangle counts), all on one baked 2048 px atlas. Every prop is modelled procedurally and built twice, a high-poly twin with real bevels, procedural PBR materials and wear, and the lean mesh that ships with the twin baked onto it. No downloaded model is used; the survey is in `public/models/office/CREDITS.md`.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens

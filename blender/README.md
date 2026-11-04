@@ -20,6 +20,8 @@ python blender/make_airliner.py                  # the landing chapter's A320neo
 python blender/make_biplane.py && npm run compress:models   # the storm chapter's banner-tow biplane and its fabric normal map
 python blender/make_ship.py && npm run compress:models      # the lighthouse chapter's 181 m container ship, in metres (ship.glb, and ship-lo.glb for phones)
                                                  # (--render DIR: Cycles previews, VIEWS=side,bridge,... picks them)
+python blender/make_it_office.py && npm run compress:models # the night IT office's 13 props in one GLB on one baked atlas (see "IT office props")
+                                                 # (--render DIR: Cycles high-poly vs shipped comparisons; --debug DIR: the maps as PNGs)
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
@@ -305,6 +307,57 @@ job. The only lit pass is the occlusion one.
 Faces that share a texture slot (opposite walls of a tower) are identical by
 construction, and the bake uses one representative per slot with every face on its
 own vertices, so the cage extrudes straight out of each face.
+
+## IT office props
+
+`make_it_office.py` builds the night office level's props into `public/models/office/`:
+`office-props.glb` (one root node per prop, an identity-transform group named for it with the mesh
+on a child `<name>_mesh`, so the meshopt dequantization transform never moves the origin) and
+`manifest.json` (`{ file, nodes: [{ name, size: [w, h, d], emissive: [...], tris, canvas? }] }`).
+Units are metres, Y up, each prop faces +Z with its origin at the floor-centre of its footprint (the
+ceiling panel's at the centre of its lit face; the whiteboard's at the bottom of its marker tray,
+its back against the wall).
+
+| node | what | lean tris | high-poly tris |
+| --- | --- | --- | --- |
+| `desk_pod` | 1.6 m oak sit desk on a white frame, perforated modesty panel, cable tray and power strip, felt privacy screen, a 24-inch monitor on a gas arm, keyboard (every key), mouse on a pad, mug, notebook and pen, papers, sticky notes, a dock | 3.0k | 27k |
+| `monitor_24` | 6.5 mm bezels, 18 mm chin, power LED, rounded back housing, VESA plate, tilting neck on an oval foot | 0.4k | 2.5k |
+| `chair_office` | five-star polished base, twin-wheel casters, gas lift, tilt mechanism and levers, waterfall fabric seat, curved mesh back with a ribbed shell, lumbar pad, height-adjustable arms | 2.4k | 26k |
+| `rack_42u` | 800 x 1000 mm cabinet, double perforated front doors swung open, perforated rear door, 19-inch rails, finger ducts; UPSs, servers (drive caddies, vents, control panels), a 4U storage shelf, KVM, firewall, two 48-port switches, three 24-port patch panels, D-ring managers, blanking panels; colour-coded patch leads with boots, uplinks and velcro-tied bundles in the ducts | 12.3k | 123k |
+| `cable_tray` | 2 m zinc wire-mesh tray, two strut trapezes with rod stubs, three cable bundles (each cable modelled in the twin) in velcro ties | 3.9k | 103k |
+| `it_bench` | 1.8 m steel bench, lower shelf, riser with pegboard (tools), shelf and power strip; ESD mat with ground cord, a laptop lid-down with its bottom off (board, fan, heat pipe, battery, RAM, SSD), a multimeter with probes and leads, 3.5- and 2.5-inch drives, screwdriver stand, label printer, parts organiser, magnetic bowl, screws, cable coil, mug; a wall-mounted patch panel with leads to a desktop switch; boxes, a cable reel, a PC tower | 4.1k | 61k |
+| `desk_lamp` | weighted base, sprung parallel arms, shade (white inside) round an emissive `bulb` | 1.2k | 15k |
+| `ceiling_light_panel` | 600 x 600 edge-lit panel: frame, emissive `panel` diffuser (UV 0..1), tray, driver | 0.2k | 2k |
+| `filing_cabinet` | four-drawer steel cabinet, pulls, label holders, lock, a folder and papers on top | 0.5k | 4k |
+| `whiteboard` | 1.2 x 0.9 m board, aluminium frame and corner caps, marker tray with markers and an eraser; the face is its own material `board` (UV 0..1) for the engine to draw on | 0.6k | 4k |
+| `printer` | floor-standing MFP: cabinet on casters, four paper drawers, output bay with prints, scanner and document feeder, tilted touch panel (`led`, lcd tint) | 0.9k | 4k |
+| `plant_pot` | fiddle-leaf fig in a tapered planter, mulch, three stems, 42 two-sided leaves | 5.2k | 41k |
+| `coffee_station` | base unit (doors, drawers, oak top), bean-to-cup machine (display, spouts, drip tray, cup), kettle, jars, mugs, paper cups, a sugar tray | 2.6k | 19k |
+
+37.2k triangles for one of each; 1.8 MB after `compress:models` (positions, 10-bit normals and
+tangents, 14-bit UVs, meshopt). Materials: `office` (the atlas: `office-color` sRGB, `office-orm`
+occlusion/roughness/metalness and `office-normal`, 2048 px WebP, 334 + 354 + 515 KB), `led` (samples
+the colour atlas's palette cells for base and emission: one LED tint per cell, so blinking is one
+material), and the plain `screen`, `bulb`, `panel`, `board`.
+
+**How it is built.** `bld/office.py` describes each prop once; `build(name, hi)` builds the
+high-poly twin (three-segment rounded bevels, 24 to 64 sides, every small detail as geometry:
+keycaps, RJ45 jacks, drive caddies, vents, screws, sticky notes, mouse pad, cables lying flat) or the
+lean mesh (chamfers or none, 6 to 20 sides, anything within a few millimetres of a surface left to the
+maps). `bld/office_mats.py` gives the twin procedural PBR materials (powder-coat orange peel, plastic
+grain, fabric weave and mesh, oak grain, brushed metal, perforated steel, paper, leaf veins) with wear
+evaluated on the twin itself: chipped and rubbed convex edges from a ray-traced curvature mask (Bevel
+node against the true normal), grime in creases (AO node), dust on up-facing surfaces, smudged
+roughness. `bld/office_bake.py` triangulates the lean meshes, deletes faces nobody can see (buried in
+a closed part, pressed against another, flat on the floor), unwraps them all into one atlas (a part's
+share scales with its weight squared: equipment fronts and keyboards high, carcass sides low), and
+bakes each twin onto its lean mesh: normals, bounce-aware occlusion under a white sky over a white
+floor (and the wall or ceiling it backs onto), albedo and roughness/metalness. Occlusion goes to the
+ORM map's R, and 28% of it into the albedo; empty texels are filled by push-pull. `scripts/office-pack.mjs`
+nests the nodes and attaches the maps. A full build takes about 25 minutes on four cores.
+
+`--render DIR` (or `--compare GLB --render DIR` for an existing build) renders the twins and the
+shipped GLB (re-imported) under the same lights and cameras, side by side as `compare-<view>.png`.
 
 ## What is baked, and what deliberately is not
 

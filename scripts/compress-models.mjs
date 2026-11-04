@@ -1,5 +1,5 @@
-// Compresses the buildings', trees', biplane's, ship's and cars' GLBs in place (public/models/city-kit, public/models/homes, public/models/ship, public/models/cars,
-// public/models/biplane):
+// Compresses the buildings', trees', biplane's, ship's, cars' and office props' GLBs in place (public/models/city-kit,
+// public/models/homes, public/models/ship, public/models/cars, public/models/biplane, public/models/office):
 // welds identical vertices, quantizes them (KHR_mesh_quantization) and packs the buffers with
 // meshopt (EXT_meshopt_compression), which KitCity decodes with three's MeshoptDecoder.
 //
@@ -17,7 +17,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
-const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars'];
+const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars', 'public/models/office'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
@@ -39,7 +39,10 @@ for (const dir of DIRS) {
     const size0 = statSync(path).size;
     // the cars' clear-coated paint mirrors the street, so its normals keep 12 bits (16-bit storage):
     // the default 8 bits band the reflections on a smooth body
-    const extra = dir.endsWith('/cars') ? { quantizeNormal: 12 } : {};
+    // the office props sample one 2048 px atlas: their UVs keep 14 bits (12 can shift a texel) and
+    // their normals and tangents 10, for the smooth plastics and the baked normal map
+    const extra = dir.endsWith('/cars') ? { quantizeNormal: 12 }
+      : dir.endsWith('/office') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
     await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high', ...extra }));
     await io.write(path, doc);
     const size1 = statSync(path).size;
