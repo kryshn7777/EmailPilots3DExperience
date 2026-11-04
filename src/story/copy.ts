@@ -214,12 +214,18 @@ export const WHY: BlockCopy = {
  * The titles pinned into the flight itself (webgl/actors/PinnedTitles): three stacked lines each,
  * heavy / thin / heavy, in the chapter's own words, and optionally a small tracked line under them.
  */
-export const PINNED_TITLES: { id: string; lines: [string, string, string]; note?: string; logo?: 'outlook' }[] = [
+/**
+ * The titles pinned into the world (webgl/actors/PinnedTitles.ts): `id` names the spot it stands at and,
+ * unless `kicker` is given, the chapter whose label it carries.
+ */
+export const PINNED_TITLES: { id: string; lines: [string, string, string]; note?: string; logo?: 'outlook'; kicker?: string }[] = [
   { id: 'desk', lines: ['Some emails', 'deserve', 'a pilot'] },
   { id: 'preflight', lines: ['Ready', 'for', 'takeoff'], note: 'Works with Outlook', logo: 'outlook' },
   { id: 'takeoff', lines: ['Write once', 'it flies the', 'follow-ups'] },
   { id: 'formation', lines: ['Your sequences', 'in', 'formation'] },
   { id: 'storm', lines: ['Filters', 'ground the', 'fakes'] },
+  // over the open sea on the way in to the lighthouse, before the tower is out of the fog
+  { id: 'ocean', lines: ['Send mail to', 'anyone, anywhere', 'in the world'], kicker: 'CH 06 · Open water' },
   { id: 'beacon', lines: ['Cleared', 'for', 'delivery'] },
   { id: 'no-fly', lines: ['Never the', 'wrong person', 'twice'] },
   { id: 'city', lines: ['Delivered', 'where it', 'matters'] },
