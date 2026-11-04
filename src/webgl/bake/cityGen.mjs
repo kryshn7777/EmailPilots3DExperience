@@ -130,6 +130,8 @@ export function cityRecipes(modules, canyonZ = 0) {
   modules = modules.filter((m) => !m.lean);
   const lots = [];
   const rand = mulberry32(CITY_SEED + 7);
+  // no two storeys-counts alike: heights vary a little from a stream of its own, so no lot ever moves for it
+  const jit = mulberry32(CITY_SEED + 419);
   for (const b of cityLayout(canyonZ)) {
     const tall = b.h > 6.5;
     const pool = modules.filter((m) => (tall ? /sky/i.test(m.id) : !/sky/i.test(m.id)));
@@ -183,7 +185,7 @@ export function cityRecipes(modules, canyonZ = 0) {
       const gx = Math.abs(x - sx) - reachX;
       if (gx < CROSS_CLEAR) x += Math.sign(x - sx || 1) * (CROSS_CLEAR - gx);
     }
-    const rise = /sky/i.test(mod.id) ? TOWER_RISE : BLOCK_RISE;
+    const rise = (/sky/i.test(mod.id) ? TOWER_RISE : BLOCK_RISE) * (0.88 + 0.26 * jit());
     lots.push({
       x, z, w, d, h: mod.height * s * ls * rise, yaw, tint, moduleId: mod.id,
       ...(rise !== 1 ? { rise } : {}),

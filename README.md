@@ -135,6 +135,13 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 - *House entropy.* Each house gets its own upkeep (`dirtK` in the wall shader, `dirt` in `HouseDecals.ts`): scrubbed ones stay clean; neglected ones get longer sill streaks, mildew at the foot of the wall, algae in sill corners, flaking paint beside windows, rubber and oil on the drive. Squared repainted patches sit a shade off the wall.
 - *Layout entropy.* `homeLots` nudges each house a few centimetres off its mark and a few tenths of a degree off true (a seventh visibly crooked) from a stream of its own, so no other house moves; `npm run bake:rings` after changing it.
 
+**City realism (the night canyon).** The same ideas, in world metres, for the downtown (`materials/glsl.ts` holds the shared noise, crack and parallax GLSL):
+
+- *Roads and pavement* (`materials/Streets.ts`, applied in `City.ts`): cracks and sealed seams with parallax-occluded grooves (HIGH), squared repair patches, a utility trench or two, manhole covers, oil and rubber down the wheel tracks, photographed asphalt and concrete grain, chewing gum and stains on the pavement, and puddles in the ruts and gutters that lower roughness and flatten the normal, so the lamps and neon mirror in them. Phones keep the stains, oil and puddles.
+- *Facades* (`materials/Facades.ts`, applied by `KitCity` to the `tower` and `block` modules): upkeep per building (`dirtK`), soot up the first storeys, rain streaks, a slow mottle, repainted sections, and on HIGH a photographed concrete grain with parallax and relief. Only the wall texels (rough, non-metal) are touched, so lit windows and glass are as baked.
+- *Skyline and grade*: tower and block heights vary about 12% from a stream of their own (`cityGen.mjs`, rings rebaked); the `city` grade now has the town's tone curve, a little less saturation and a cooler white balance.
+- Still to do: decals from Blender anchors (shopfronts, signs, AC units: grime, rust, posters, litter) and lamp and street-furniture irregularity.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens

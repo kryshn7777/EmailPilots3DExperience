@@ -13,11 +13,14 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  NoColorSpace,
   PlaneGeometry,
   Points,
   PointsMaterial,
   Quaternion,
   RepeatWrapping,
+  type Texture,
+  TextureLoader,
   Vector3,
 } from 'three';
 import {
@@ -36,6 +39,7 @@ import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footpr
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
 import { pavingMaps } from '../bake/RoomTextures';
+import { applyStreets } from '../materials/Streets';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -99,6 +103,19 @@ export class City {
       color: '#8c8c94',
       metalness: 0.05,
     });
+    // stains, gum, hairline cracks, shallow puddles; HIGH adds photographed concrete grain
+    const high = quality.tier === 'high';
+    const detail = (file: string): Texture => {
+      const t = new TextureLoader().load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      this.disposables.push(t);
+      return t;
+    };
+    const streetMaps = high ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : {};
+    const origin = this.group.position;
+    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, ...streetMaps });
     // 260x200, not 140x100: the district is 97 x 39 now and the old sheet's
     // edge cut across the frame in the upper corners of the dive
     const ground = new Mesh(new PlaneGeometry(260, 200), groundMaterial);
@@ -107,7 +124,7 @@ export class City {
     this.group.add(ground);
     this.disposables.push(ground.geometry, groundMaterial);
 
-    this.buildTraffic();
+    this.buildTraffic(quality);
     this.buildCars(quality);
     void this.init(path, quality);
   }
@@ -128,7 +145,15 @@ export class City {
     ]);
     const rings = allRings.city[quality.tier] as KitRingSet;
     const { lots } = cityRecipes(manifest.modules);
-    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, { tier: quality.tier, glow: 0.9 });
+    // the towers and blocks weather: upkeep, grime, rain streaks (HIGH adds photographed concrete grain)
+    const wall = quality.tier === 'high' ? new TextureLoader().load(asset('/models/homes/detail-concrete.webp')) : undefined;
+    if (wall) {
+      wall.colorSpace = NoColorSpace;
+      wall.wrapS = wall.wrapT = RepeatWrapping;
+      wall.anisotropy = 8;
+      this.disposables.push(wall);
+    }
+    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, { tier: quality.tier, glow: 0.9, facades: wall ? { wall } : {} });
     this.group.add(this.kitCity.group);
 
     // effective wall half-extents per lot: kit modules are uniform-fit
@@ -317,7 +342,7 @@ export class City {
 
 
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
-  private buildTraffic(): void {
+  private buildTraffic(quality: Quality): void {
     const road = roadTexture();
     // wet asphalt: the lamps and the neon streak in it
     const roadMat = new MeshStandardMaterial({ map: road, roughness: 0.42, metalness: 0.1 });
@@ -327,6 +352,18 @@ export class City {
     junctionMat.polygonOffset = true;
     junctionMat.polygonOffsetFactor = -2;
     junctionMat.polygonOffsetUnits = -2;
+    // cracked, patched, oil-stained, with puddles in the ruts (HIGH adds the parallax cracks and photo grain)
+    const high = quality.tier === 'high';
+    const loadDetail = (file: string): Texture => {
+      const t = new TextureLoader().load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      this.disposables.push(t);
+      return t;
+    };
+    const asphalt = high ? loadDetail('detail-asphalt.webp') : undefined;
+    for (const m of [roadMat, junctionMat]) applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, ...(asphalt ? { asphalt } : {}) });
     this.disposables.push(roadMat, road, junctionMat);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
