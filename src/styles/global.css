@@ -1529,6 +1529,13 @@ body.is-clean[data-route='/'].is-landing .site-header {
   list-style: none;
 }
 
+.landing__mark {
+  width: 0.95rem;
+  height: auto;
+  margin-right: 0.45rem;
+  vertical-align: -0.12em;
+}
+
 .landing__proof li {
   padding: 0.4rem 0.85rem;
   border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
@@ -1640,4 +1647,12 @@ button.btn {
   cursor: pointer;
   font-size: inherit;
   line-height: inherit;
+}
+
+.site-footer__legal {
+  flex-basis: 100%;
+  max-width: 46rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  opacity: 0.65;
 }

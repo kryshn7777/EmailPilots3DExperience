@@ -39,6 +39,24 @@ vec2 nParaDir(vec2 uv, vec3 Nv) {
   float vn = max(dot(V, Nv), 0.2);
   return -vec2(dot(V, T) * inversesqrt(tt), dot(V, B) * inversesqrt(bb)) / vn;
 }
+/**
+ * Like nParaDir, for a uv of any scale (window-cell coordinates): xy = cells moved per world unit of depth
+ * along the view ray, z = the world width of one cell.
+ */
+vec3 nParaCell(vec2 uv, vec3 Nv) {
+  vec3 pos = -vViewPosition;
+  vec3 dp1 = dFdx(pos), dp2 = dFdy(pos);
+  vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, Nv), dp1perp = cross(Nv, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  float D = dot(Nv, cross(dp1, dp2));
+  float lt = length(T);
+  if (abs(D) < 1e-12 || lt < 1e-9) return vec3(0.0);
+  vec3 V = normalize(vViewPosition);
+  float vn = max(dot(V, Nv), 0.2);
+  return vec3(-vec2(dot(V, T), dot(V, B)) / D / vn, abs(D) / lt);
+}
 `;
 
 /** the city's scale: a person stands 0.76 units tall (1.75 m) */

@@ -10,6 +10,7 @@ import {
   Vector3,
 } from 'three';
 import { HOME_CHAPTERS, PINNED_TITLES } from '../../story/copy';
+import { asset } from '../asset';
 
 /**
  * Chapter titles pinned into the world, the way a camera-tracked title is in a film: real geometry
@@ -114,10 +115,17 @@ export class PinnedTitles {
     } catch {
       return;
     }
+    // the Outlook mark beside the claim, drawn unaltered (public/images/outlook.svg); without it the text stands alone
+    const outlook = await new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = asset('/images/outlook.svg');
+    });
     PINNED_TITLES.forEach((copy, i) => {
       const kicker = HOME_CHAPTERS.find((c) => c.id === copy.id)?.kicker ?? '';
       const title = this.titles[i]!;
-      const { canvas, aspect } = lockup(kicker, copy.lines, copy.note);
+      const { canvas, aspect } = lockup(kicker, copy.lines, copy.note, copy.logo === 'outlook' ? outlook : null);
       const map = new CanvasTexture(canvas);
       map.colorSpace = SRGBColorSpace;
       map.anisotropy = 8;
@@ -154,7 +162,7 @@ export class PinnedTitles {
 }
 
 /** Draws the lockup on a canvas and returns it with its height-to-width ratio. */
-function lockup(kicker: string, lines: string[], note?: string): { canvas: HTMLCanvasElement; aspect: number } {
+function lockup(kicker: string, lines: string[], note?: string, logo?: HTMLImageElement | null): { canvas: HTMLCanvasElement; aspect: number } {
   const scratch = document.createElement('canvas').getContext('2d')!;
   const heavy = (px: number): string => `700 ${px}px Oswald`;
   const thin = (px: number): string => `400 ${px}px Oswald`;
@@ -228,9 +236,18 @@ function lockup(kicker: string, lines: string[], note?: string): { canvas: HTMLC
     const text = note.toUpperCase();
     const glyphs = [...text].map((ch) => ctx.measureText(ch).width);
     const tracking = 22;
-    const total = glyphs.reduce((a, b) => a + b, 0) + tracking * (text.length - 1);
+    const textW = glyphs.reduce((a, b) => a + b, 0) + tracking * (text.length - 1);
+    // the mark stands to the left of the claim at cap height plus a half, with a gap of its own
+    const markH = logo ? noteCap * 1.6 : 0;
+    const markW = markH * (570.02 / 539.67);
+    const markGap = logo ? 56 : 0;
+    const total = textW + (logo ? markW + markGap : 0);
     let px = PAD + (TEXT_W - total) / 2;
     const base = y - gap + gap * 1.1 + noteCap;
+    if (logo) {
+      ctx.drawImage(logo, px, base - noteCap / 2 - markH / 2, markW, markH);
+      px += markW + markGap;
+    }
     [...text].forEach((ch, k) => {
       ctx.fillText(ch, px, base);
       px += glyphs[k]! + tracking;
