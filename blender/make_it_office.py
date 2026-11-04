@@ -30,6 +30,7 @@ from bld import office, office_bake as OB  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'public', 'models', 'office')
+KEEP_HP = False
 QUALITY = dict(color=90, orm=88, normal=94)
 
 
@@ -43,9 +44,12 @@ def main():
     ap.add_argument('--atlas', type=int, default=OB.ATLAS, help='atlas size (tests only; ships 2048)')
     ap.add_argument('--only', help='comma-separated props (tests only)')
     ap.add_argument('--out', default=OUT)
+    ap.add_argument('--keep-hp', action='store_true', help='reuse high-poly renders already in the render folder')
     ap.add_argument('--compare', help='only render: the high-poly twins against this (uncompressed) GLB; needs --render')
     args = ap.parse_args(sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:])
     OB.ATLAS = args.atlas
+    global KEEP_HP
+    KEEP_HP = args.keep_hp
     names = args.only.split(',') if args.only else list(office.BUILDERS)
     os.makedirs(args.out, exist_ok=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -122,6 +126,8 @@ def compare(props, glb, out, views, samples, res='1200x675'):
         OB.place(p['hp'], p['name'])
         hps.append(p['hp'])
     for v in views:
+        if KEEP_HP and os.path.exists(os.path.join(out, f'hp-{v}.png')):
+            continue
         OB.aim(cam, v)
         OB.render(os.path.join(out, f'hp-{v}.png'))
     for o in hps:

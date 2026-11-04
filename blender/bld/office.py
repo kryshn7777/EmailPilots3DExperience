@@ -760,7 +760,7 @@ def build_rack_42u(b):
             for hz in (0.15, dh - 0.15):
                 b.add(cyl(0.008, 0.06, 24, (0.0, -0.004, hz)), 'steel_bare')
         else:
-            b.add(box(dw, 0.022, dh, (dw / 2, -0.011, dh / 2), bev=0.004, segs=1), 'perf_black', 0.45)
+            b.add(box(dw, 0.022, dh, (dw / 2, -0.011, dh / 2), bev=0.004, segs=1), 'perf_black', 1.0)
             # the inner face has the same perforation: the lean door is a solid slab baked both sides
         if sx == 1:  # the handle is on the right-hand door's free edge
             bx(b, 0.02, 0.03, 0.18, (dw - 0.03, -0.035, dh / 2), 'plastic_black', r=0.006, w=0.2, chamfer=True)

@@ -24,9 +24,9 @@ from . import office, office_mats as M
 ATLAS = 2048
 AREA = 0.978            # islands pack into [0, AREA]^2; the strip beyond holds the LED palette cells
 CELL = 1.0 / 32         # LED palette cell height (v)
-CAGE = 0.012            # cage extrusion (m): every high-poly detail sits within this of its lean surface
+CAGE = 0.008            # cage extrusion (m): every high-poly detail sits within this of its lean surface
 REACH = 0.05            # max ray distance
-SAMPLES = dict(normal=6, color=4, orm=3, mask=1, gi=32)
+SAMPLES = dict(normal=6, color=8, orm=4, mask=1, gi=32)
 
 
 def led_uv(tint):
@@ -579,6 +579,7 @@ def setup_render_scene(res=(1200, 675), samples=48):
 def place(ob, name):
     x, y, z, rz = LAYOUT[name]
     ob.location = (x, y, z)
+    ob.rotation_mode = 'XYZ'      # the glTF importer leaves objects in quaternion mode
     ob.rotation_euler = (0, 0, math.radians(rz))
 
 

@@ -334,9 +334,9 @@ its back against the wall).
 | `plant_pot` | fiddle-leaf fig in a tapered planter, mulch, three stems, 42 two-sided leaves | 5.2k | 41k |
 | `coffee_station` | base unit (doors, drawers, oak top), bean-to-cup machine (display, spouts, drip tray, cup), kettle, jars, mugs, paper cups, a sugar tray | 2.6k | 19k |
 
-37.2k triangles for one of each; 1.8 MB after `compress:models` (positions, 10-bit normals and
+37.2k triangles for one of each; 1.9 MB after `compress:models` (positions, 10-bit normals and
 tangents, 14-bit UVs, meshopt). Materials: `office` (the atlas: `office-color` sRGB, `office-orm`
-occlusion/roughness/metalness and `office-normal`, 2048 px WebP, 334 + 354 + 515 KB), `led` (samples
+occlusion/roughness/metalness and `office-normal`, 2048 px WebP, 333 + 398 + 559 KB), `led` (samples
 the colour atlas's palette cells for base and emission: one LED tint per cell, so blinking is one
 material), and the plain `screen`, `bulb`, `panel`, `board`.
 
@@ -354,7 +354,7 @@ share scales with its weight squared: equipment fronts and keyboards high, carca
 bakes each twin onto its lean mesh: normals, bounce-aware occlusion under a white sky over a white
 floor (and the wall or ceiling it backs onto), albedo and roughness/metalness. Occlusion goes to the
 ORM map's R, and 28% of it into the albedo; empty texels are filled by push-pull. `scripts/office-pack.mjs`
-nests the nodes and attaches the maps. A full build takes about 25 minutes on four cores.
+nests the nodes and attaches the maps. A full build takes 15 to 25 minutes on four cores.
 
 `--render DIR` (or `--compare GLB --render DIR` for an existing build) renders the twins and the
 shipped GLB (re-imported) under the same lights and cameras, side by side as `compare-<view>.png`.
