@@ -80,10 +80,12 @@ const SCHEDULE: readonly { kind: Kind; from: number; land: number; place: string
 ];
 /** how the light column over each kind of landing is sized, and when it goes (absolute t, or after landing) */
 const BEAM: Record<Exclude<Kind, 'window'>, { h: number; r: number; off: (land: number) => [number, number] }> = {
-  town: { h: 7, r: 0.3, off: () => [0.334, 0.345] },
+  town: { h: 10, r: 0.5, off: () => [0.334, 0.345] },
   ship: { h: 26, r: 1.3, off: () => [0.572, 0.585] },
   phone: { h: 2.4, r: 0.11, off: (land) => [land + 0.02, land + 0.034] },
 };
+/** how bright each column is (additive): the town's stands in a bright evening haze */
+const BEAM_GAIN: Record<Exclude<Kind, 'window'>, number> = { town: 1.2, ship: 0.8, phone: 0.7 };
 /** where the HUD pins a landed chip above each kind of landing */
 const CHIP_UP: Record<Kind, number> = { town: 2.1, ship: 15, phone: 1.0, window: 0.7 };
 
@@ -251,9 +253,10 @@ export class BatchFleet {
     if (t < j0) return 0;
     const v = this.slot(i, aspect, this.slotV);
     const ph = this.phases[i]!;
-    const f = MathUtils.lerp(v.x - 10 - 2 * Math.sin(ph), v.x, e);
-    let s = v.y * MathUtils.lerp(1.7, 1, e);
-    let u = MathUtils.lerp(v.z - 8, v.z, e);
+    // they come up out of the cloud deck under the V, not from behind the lens
+    const f = MathUtils.lerp(v.x - 3 - 1.5 * Math.sin(ph), v.x, e);
+    let s = v.y * MathUtils.lerp(1.5, 1, e);
+    let u = MathUtils.lerp(v.z - 10, v.z, e);
     // a little life in the V: each plane rides its own gentle swell (in story-t, so it scrubs)
     u += 0.14 * Math.sin(t * 900 + ph);
     s += 0.1 * Math.sin(t * 610 + ph * 2);
@@ -324,6 +327,23 @@ export class BatchFleet {
     return Math.max(this.offCentre(t, at, aspect), this.offCentre(t - 0.006, at, aspect));
   }
 
+  /**
+   * The lighthouse stands between the held shot and the sea: a spot whose screen x falls inside the
+   * tower's silhouette (about 5 units either side of its axis) is hidden. Returns 0 when clear, else
+   * more than IN_VIEW, larger the deeper behind it the spot is.
+   */
+  private behindTower(t: number, at: Vector3, aspect: number): number {
+    const cam = this.modelCamera(t, aspect);
+    const lamp = this.beacon.lantern;
+    if (cam.position.distanceTo(at) < cam.position.distanceTo(lamp)) return 0;
+    const sx = this.p2.copy(at).project(cam).x;
+    const lx = this.p0.copy(lamp).project(cam).x;
+    this.p1.setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(5).add(lamp);
+    const half = Math.abs(this.p1.project(cam).x - lx);
+    const dx = Math.abs(sx - lx);
+    return dx < half ? 1 + (half - dx) : 0;
+  }
+
   /** A random pick from what is in view, or failing that from the few nearest the middle of the screen. */
   private pick<T extends { view: number }>(options: T[], rand: () => number): T | undefined {
     let pool = options.filter((o) => o.view < IN_VIEW);
@@ -376,7 +396,11 @@ export class BatchFleet {
     const free = [...SHIP_DECK_SPOTS];
     for (const d of this.deliveries) {
       if (d.kind !== 'ship') continue;
-      const options = free.map((spot) => ({ spot, view: this.view(d.land, this.beacon.shipDeckAt(d.land, spot, new Vector3()), aspect) }));
+      const options = free.map((spot) => {
+        const at = this.beacon.shipDeckAt(d.land, spot, new Vector3());
+        const view = this.view(d.land, at, aspect);
+        return { spot, view: Math.max(view, this.behindTower(d.land, at, aspect)) };
+      });
       const choice = this.pick(options, rand);
       if (!choice) continue;
       free.splice(free.indexOf(choice.spot), 1);
@@ -414,12 +438,17 @@ export class BatchFleet {
         .map((h) => ({ at: new Vector3(h.x, h.y, h.z).add(origin), yaw: h.yaw, view: 0 }))
         .filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5))
         .map((o) => ({ ...o, view: this.view(d.land, o.at, aspect) }));
-      // a phone in view; if no one with a phone is, someone standing who is
-      let options = optionsFor(holders);
-      if (!options.some((o) => o.view < IN_VIEW)) {
-        const stands = optionsFor(anyStand);
-        if (stands.some((o) => o.view < IN_VIEW)) options = stands;
+      // a phone in view and near enough to read the person; if no one with a phone is, the nearest
+      // few people standing in view (a dart landing 50 units down the canyon is a speck)
+      const cam = this.modelCamera(d.land, aspect).position.clone();
+      const near = (list: { at: Vector3; view: number }[]): typeof list =>
+        list.filter((o) => o.view < IN_VIEW && o.at.distanceTo(cam) < 25);
+      let options = near(optionsFor(holders));
+      if (!options.length) {
+        options = optionsFor(anyStand).filter((o) => o.view < IN_VIEW)
+          .sort((a, b) => a.at.distanceTo(cam) - b.at.distanceTo(cam)).slice(0, 3);
       }
+      if (!options.length) options = optionsFor(holders);
       const choice = this.pick(options, rand);
       if (!choice) continue;
       used.push(choice.at);
@@ -548,7 +577,7 @@ export class BatchFleet {
       const h = spec.h * up;
       this.m4.makeScale(spec.r, h, spec.r).setPosition(at.x, ground + h / 2, at.z);
       this.beams.setMatrixAt(i, this.m4);
-      this.beams.setColorAt(i, this.c.copy(this.beamColor).multiplyScalar(0.55 * up));
+      this.beams.setColorAt(i, this.c.copy(this.beamColor).multiplyScalar(BEAM_GAIN[d.kind] * up));
     });
     this.beams.instanceMatrix.needsUpdate = true;
     if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true;
