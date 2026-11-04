@@ -16,7 +16,7 @@ ASSETS = [
     'fire_hydrant', 'metal_trash_can', 'trashbag', 'exterior_aircon_unit', 'utility_box_01', 'utility_box_02',
     'concrete_road_barrier_02', 'barrel_03', 'wooden_crate_02', 'plastic_crate_02', 'cardboard_box_01', 'old_tyre',
     'standing_chalkboard_01', 'WetFloorSign_01', 'CoffeeCart_01', 'planter_box_01', 'propane_tank',
-    'plastic_monobloc_chair_01', 'modular_airduct_circular_01',
+    'plastic_monobloc_chair_01',
 ]
 HERE = os.path.dirname(os.path.abspath(__file__))
 

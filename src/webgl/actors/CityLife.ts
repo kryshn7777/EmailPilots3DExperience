@@ -359,7 +359,7 @@ export class CityLife {
     for (const side of [1, -1]) {
       let x = x0 + 4 + r(0, 2);
       while (x < x1 - 4) {
-        const step = high ? r(1.1, 2.4) : r(3, 5);
+        const step = high ? r(1.1, 2.4) : r(2.2, 3.8);
         x += step;
         if (nearCross(x, 0.35)) continue;
         const depth = Math.min(face(side, x), 99) - FACE;
@@ -385,10 +385,11 @@ export class CityLife {
           }
         }
         // the parking lane where no car is parked: bags at the kerb, deliveries, roadworks, bikes at the kerb
-        for (let t = 0; t < (high ? 2 : 1); t++) {
+        for (let t = 0; t < (high && rand() < 0.5 ? 2 : 1); t++) {
           const kx = x + (t ? r(-1.6, -0.6) : r(-0.4, 0.4));
           const gap = rand() * (high ? 1 : 1.8);
-          if (gap < 0.36) bagPile(kx, side * r(2.06, 2.2), side, rand() < 0.55);
+          // bags come out in heaps by some doors and not at all by others
+          if (gap < 0.2) bagPile(kx, side * r(2.04, 2.2), side, rand() < 0.4);
           else if (gap < 0.5) delivery(kx, side * r(1.85, 2.05));
           else if (gap < 0.57) works(kx, side);
           else if (gap < 0.66) {
@@ -662,7 +663,8 @@ export class CityLife {
     const buckets = new Map<string, Item[]>();
     for (const it of this.items) {
       if (!this.high && it.k.startsWith('litter') && it.x % 3 > 1) continue;
-      const key = `${it.roof ? 'r' : 's'}${Math.floor(it.x / (it.roof ? CH * 1.5 : CH))}`;
+      // phones draw the roofs with the street below them (fewer, larger draws)
+      const key = this.high ? `${it.roof ? 'r' : 's'}${Math.floor(it.x / (it.roof ? CH * 1.5 : CH))}` : `s${Math.floor(it.x / CH)}`;
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key)!.push(it);
     }
@@ -695,7 +697,7 @@ export class CityLife {
     if (uvOf) { cableUv[0] = uvOf.getX(0); cableUv[1] = uvOf.getY(0); }
     let cablesDone = false;
     for (const [key, list] of buckets) {
-      const roof = key.startsWith('r');
+      const roof = key.startsWith('r') || (!this.high && list.every((i) => i.roof));
       // the wires go with the first street chunk (they are a few hundred triangles in all)
       const withCables = !roof && !cablesDone && this.cableRuns.length > 0;
       if (withCables) cablesDone = true;
