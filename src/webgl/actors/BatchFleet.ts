@@ -73,6 +73,7 @@ const SCHEDULE: readonly { kind: Kind; from: number; land: number; place: string
   { kind: 'town', from: 0.308, land: 0.328, place: 'a lawn in the town' },
   { kind: 'ship', from: 0.525, land: 0.548, place: 'harbour freighter' },
   { kind: 'ship', from: 0.537, land: 0.561, place: 'harbour freighter' },
+  // (a phone delivery may land up to 0.012 either side of its time: see planPhones)
   { kind: 'phone', from: 0.7, land: 0.722, place: 'a phone in the city' },
   { kind: 'window', from: 0.698, land: 0.728, place: 'a window in the city' },
   { kind: 'phone', from: 0.722, land: 0.744, place: 'a phone in the city' },
@@ -434,22 +435,34 @@ export class BatchFleet {
     const used: Vector3[] = [];
     for (const d of this.deliveries) {
       if (d.kind !== 'phone') continue;
-      const optionsFor = (list: typeof holders): { at: Vector3; yaw: number; view: number }[] => list
-        .map((h) => ({ at: new Vector3(h.x, h.y, h.z).add(origin), yaw: h.yaw, view: 0 }))
-        .filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5))
-        .map((o) => ({ ...o, view: this.view(d.land, o.at, aspect) }));
-      // a phone in view and near enough to read the person; if no one with a phone is, the nearest
-      // few people standing in view (a dart landing 50 units down the canyon is a speck)
-      const cam = this.modelCamera(d.land, aspect).position.clone();
-      const near = <T extends { at: Vector3; view: number }>(list: T[]): T[] =>
-        list.filter((o) => o.view < IN_VIEW && o.at.distanceTo(cam) < 25);
-      let options = near(optionsFor(holders));
-      if (!options.length) {
-        options = optionsFor(anyStand).filter((o) => o.view < IN_VIEW)
-          .sort((a, b) => a.at.distanceTo(cam) - b.at.distanceTo(cam)).slice(0, 3);
+      // the canyon camera sees few of the plazas: try the scheduled landing and a few moments either
+      // side of it (inside 0.70-0.76), and take the first with someone standing in view
+      const times = [0, -0.006, 0.006, -0.012, 0.012].map((k) => d.land + k).filter((l) => l - 0.022 >= 0.7 && l <= 0.758);
+      let choice: { at: Vector3; yaw: number; view: number } | undefined;
+      for (const land of times) {
+        const optionsFor = (list: typeof holders): { at: Vector3; yaw: number; view: number }[] => list
+          .map((h) => ({ at: new Vector3(h.x, h.y, h.z).add(origin), yaw: h.yaw, view: 0 }))
+          .filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5))
+          .map((o) => ({ ...o, view: this.view(land, o.at, aspect) }));
+        // a phone in view and near enough to read the person; if no one with a phone is, the nearest
+        // few people standing in view (a dart landing 50 units down the canyon is a speck)
+        const cam = this.modelCamera(land, aspect).position.clone();
+        let options = optionsFor(holders).filter((o) => o.view < IN_VIEW && o.at.distanceTo(cam) < 25);
+        if (!options.length) {
+          options = optionsFor(anyStand).filter((o) => o.view < IN_VIEW)
+            .sort((a, b) => a.at.distanceTo(cam) - b.at.distanceTo(cam)).slice(0, 3);
+        }
+        if (!options.length) continue;
+        choice = this.pick(options, rand);
+        d.land = land;
+        d.from = land - 0.022;
+        break;
       }
-      if (!options.length) options = optionsFor(holders);
-      const choice = this.pick(options, rand);
+      // nobody in view at any of them: the phone holder nearest the middle of the screen
+      if (!choice) choice = this.pick(holders.map((h) => {
+        const at = new Vector3(h.x, h.y, h.z).add(origin);
+        return { at, yaw: h.yaw, view: this.view(d.land, at, aspect) };
+      }).filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5)), rand);
       if (!choice) continue;
       used.push(choice.at);
       const start = this.path.pointAt(d.from, new Vector3());
