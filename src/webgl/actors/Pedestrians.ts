@@ -163,12 +163,12 @@ const MIX: Record<'day' | 'night', Record<string, number>> = {
 };
 
 /** walking speed in metres a second (scaled to site units by 0.33 and the crowd's scale) */
-const WALK = [1.15, 1.5];
+const WALK = [1.0, 1.35];
 const JOG = [2.4, 2.95];
 const METRE = 0.33;
 /** stance share of the cycle and how far the ankle reaches ahead of the hip, per leg length (see legPose) */
 const WALK_STANCE = 0.62;
-const WALK_REACH = 0.46;
+const WALK_REACH = 0.33; // the ankle reaches this fraction of the leg ahead of and behind the hip (0.46 splayed the longer-legged people into a wide V)
 const JOG_STANCE = 0.36;
 const JOG_REACH = 0.44;
 /** units over which a walker grows in and shrinks away at a wrapping walk's ends */
