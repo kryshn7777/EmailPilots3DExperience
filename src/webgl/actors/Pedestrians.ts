@@ -266,9 +266,9 @@ void pose(inout vec3 p, inout vec3 n) {
   // +1 while the left leg is forward
   float sw = cos(2.0 * PI * (ph - 0.04));
   // arms swing against the legs; the elbow bends on the forward swing
-  float armA = mix(0.34, 0.62, j) * a;
+  float armA = mix(0.44, 0.62, j) * a;
   float shL = -armA * sw, shR = armA * sw;
-  float elB = mix(0.18, 1.45, j);
+  float elB = mix(0.26, 1.45, j);
   float elL = elB + a * mix(0.3, 0.2, j) * max(0.0, -sw);
   float elR = elB + a * mix(0.3, 0.2, j) * max(0.0, sw);
   shL += still * 0.035 * sin(t * 0.8 + seed * 31.0);
@@ -284,7 +284,7 @@ void pose(inout vec3 p, inout vec3 n) {
   if (mode == 1) { shR = 0.42; elR = 0.6; abR = -0.1; }                         // holding a leash
   if (mode == 2) { shR = 0.32; elR = 1.9; abR = 0.12; hPitch = -0.42; }          // reading a phone
   // chest against pelvis, forward lean, a standing weight shift
-  float tYaw = 0.09 * a * sw * (1.0 + j);
+  float tYaw = 0.11 * a * sw * (1.0 + j);
   float pYaw = -0.07 * a * sw;
   float lean = -(0.03 * a + 0.14 * j * a);
   float roll = still * 0.02 * sin(t * 0.43 + seed * 13.0);
