@@ -83,7 +83,7 @@ const SCHEDULE: readonly { kind: Kind; from: number; land: number; place: string
 const BEAM: Record<Exclude<Kind, 'window'>, { h: number; r: number; off: (land: number) => [number, number] }> = {
   town: { h: 10, r: 0.5, off: () => [0.334, 0.345] },
   ship: { h: 26, r: 1.3, off: () => [0.572, 0.585] },
-  phone: { h: 2.4, r: 0.11, off: (land) => [land + 0.02, land + 0.034] },
+  phone: { h: 4, r: 0.18, off: (land) => [land + 0.02, land + 0.034] },
 };
 /** how bright each column is (additive): the town's stands in a bright evening haze */
 const BEAM_GAIN: Record<Exclude<Kind, 'window'>, number> = { town: 1.2, ship: 0.8, phone: 0.7 };
@@ -182,7 +182,7 @@ export class BatchFleet {
       curve: null,
       rest: new Vector3(),
       spot: null,
-      scale: s.kind === 'town' ? [0.8, 1.5] : s.kind === 'ship' ? [1, 2.4] : [0.55, 0.24],
+      scale: s.kind === 'town' ? [0.8, 1.5] : s.kind === 'ship' ? [1, 2.4] : [0.6, 0.4],
       chip: new Vector3(),
     }));
 
@@ -442,7 +442,7 @@ export class BatchFleet {
       for (const land of times) {
         const optionsFor = (list: typeof holders): { at: Vector3; yaw: number; view: number }[] => list
           .map((h) => ({ at: new Vector3(h.x, h.y, h.z).add(origin), yaw: h.yaw, view: 0 }))
-          .filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5))
+          .filter((o) => !used.some((u) => u.distanceTo(o.at) < 0.3))
           .map((o) => ({ ...o, view: this.view(land, o.at, aspect) }));
         // a phone in view and near enough to read the person; if no one with a phone is, the nearest
         // few people standing in view (a dart landing 50 units down the canyon is a speck)
@@ -462,7 +462,7 @@ export class BatchFleet {
       if (!choice) choice = this.pick(holders.map((h) => {
         const at = new Vector3(h.x, h.y, h.z).add(origin);
         return { at, yaw: h.yaw, view: this.view(d.land, at, aspect) };
-      }).filter((o) => !used.some((u) => u.distanceTo(o.at) < 1.5)), rand);
+      }).filter((o) => !used.some((u) => u.distanceTo(o.at) < 0.3)), rand);
       if (!choice) continue;
       used.push(choice.at);
       const start = this.path.pointAt(d.from, new Vector3());
