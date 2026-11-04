@@ -1150,7 +1150,7 @@ export class Engine {
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
-    this.city.update(t, time, this.rig.planeWorldPos);
+    this.city.update(t, time, this.rig.planeWorldPos, this.camera.position);
     this.copilot.update(
       this.rig.planeWorldPos,
       this.plane.group.quaternion,
@@ -1204,6 +1204,8 @@ export class Engine {
     return [
       this.plane.group, this.trail.line, this.airTrail.mesh, this.flock.group, this.launchString.line,
       this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
+      // the street's clutter is small and many draws: the reflections do without it
+      ...(this.city.life ? [this.city.life.group] : []),
     ];
   }
 

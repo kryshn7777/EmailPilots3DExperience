@@ -17,7 +17,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
-const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars'];
+const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars', 'public/models/city-props'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
