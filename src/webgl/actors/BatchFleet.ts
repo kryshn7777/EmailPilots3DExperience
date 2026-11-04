@@ -542,9 +542,16 @@ export class BatchFleet {
     const fade = d && d.planned ? 1 - MathUtils.smoothstep(t, d.land, d.land + 0.008) : 1;
     let o = i * (TRAIL_POINTS - 1) * 6;
     let prevS = scale > 1e-4 ? this.pose(i, base, aspect, this.p1) : 0;
+    // a plane off stage leaves its trail collapsed at the origin (black, so it draws nothing)
+    if (prevS <= 1e-4) {
+      pos.fill(0, o, o + (TRAIL_POINTS - 1) * 6);
+      col.fill(0, o, o + (TRAIL_POINTS - 1) * 6);
+      return;
+    }
     this.p2.copy(this.p1);
     for (let k = 1; k < TRAIL_POINTS; k++) {
       const s = prevS > 1e-4 ? this.pose(i, base - k * TRAIL_STEP, aspect, this.p1) : 0;
+      if (s <= 1e-4) this.p1.copy(this.p2);
       const live = prevS > 1e-4 && s > 1e-4;
       const a = live ? 0.55 * fade * Math.min(prevS / 0.8, 1) * Math.pow(1 - (k - 1) / (TRAIL_POINTS - 1), 2) : 0;
       const b = live ? 0.55 * fade * Math.min(prevS / 0.8, 1) * Math.pow(1 - k / (TRAIL_POINTS - 1), 2) : 0;
@@ -631,7 +638,9 @@ export class BatchFleet {
     }
     if (!d.planned) return { anchor: d.chip, shown: false, mode: 'flying', label };
     const flying = t < d.land;
-    if (flying) {
+    if (flying && t < d.from) {
+      d.chip.copy(d.rest);
+    } else if (flying) {
       this.pose(d.plane, t, aspect, this.chipScratch);
       d.chip.copy(this.chipScratch).y += d.kind === 'ship' ? 3 : 0.9;
     } else if (d.kind === 'ship') {
