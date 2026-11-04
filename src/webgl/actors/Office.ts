@@ -72,11 +72,11 @@ import {
 
 /** the office's grade, laid over the chapter grade while the camera is inside (Engine.applyOfficeGrade) */
 export const OFFICE_GRADE = {
-  fogColor: '#121722', fogNear: 30, fogFar: 90, envIntensity: 0.2, rays: 0,
-  filmic: 1, exposure: 1.1, sat: 1, bloom: 0.8, bloomThreshold: 0.9, bounce: 1.2, wet: 0.08,
+  fogColor: '#121722', fogNear: 30, fogFar: 90, envIntensity: 0.45, rays: 0,
+  filmic: 1, exposure: 1.3, sat: 1, bloom: 0.8, bloomThreshold: 0.9, bounce: 1.2, wet: 0.08,
   /** the scene's sun and sky light stand in for the ceiling's light: soft, cool, from above */
-  sunColor: '#e9eeff', sunIntensity: 0.55, sunDir: [0.22, 1, 0.38] as [number, number, number],
-  hemiSky: '#a9b6cf', hemiGround: '#3b352f', hemiIntensity: 0.62,
+  sunColor: '#e9eeff', sunIntensity: 0.95, sunDir: [0.22, 1, 0.38] as [number, number, number],
+  hemiSky: '#a9b6cf', hemiGround: '#3b352f', hemiIntensity: 1.15,
 } as const;
 
 /** how far below the world the room is staged */
