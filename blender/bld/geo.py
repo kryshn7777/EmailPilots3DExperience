@@ -55,6 +55,9 @@ class Builder:
         self.bm = bmesh.new()
         self.mats = []
         self.meta = []
+        # where the openings are on the walls (windows, garage doors): the runtime lays its weathering decals
+        # there (blender/make_anchors.py, src/webgl/actors/HouseDecals.ts)
+        self.anchors = []
         # set by Model.ctx while a wall or roof is being built: the texture slot the
         # faces belong to, so the hero tier can sample the same baked pixels
         self.ctx = None

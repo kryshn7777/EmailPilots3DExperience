@@ -242,22 +242,37 @@ def suburban():
 
 
 def tudor():
+    """A modern farmhouse. The id is historical: this slot was a half-timbered Tudor revival, which read as a
+    17th-century house among the rest of the town, and the lot generator and the ring bake know the id.
+    White board-and-batten, black-framed tall windows, a standing-seam metal roof, a stone base, a full-width
+    porch and a one-storey garage wing."""
     m = Model('home-tudor', 'house', scale=SCALE)
-    w, d, fh, pitch = 10.0, 8.5, 2.9, 1.0
+    w, d, fh, pitch = 7.6, 8.5, 2.8, 0.7
     ze = 2 * fh
-    stucco = 'stucco_cream'
-    front = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True, grille=(3, 3), boxes=0.6, openings=(
-        [win(2.0, 0, w=1.2, h=1.5), door(w / 2, mat='door_red', w=1.1), win(8.0, 0, w=1.2, h=1.5)] +
-        [win(u, 1, w=1.0, h=1.4, sill=0.5) for u in (2.0, 4.0, 6.0, 8.0)]))
-    side = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True, grille=(3, 3), boxes=0.6,
-             openings=[win(u, f, w=1.2, h=1.4, sill=0.8 if f else 0.9) for f in range(2) for u in (1.9, d - 1.9)])
-    back = S(stucco, floor_h=fh, trim='trim_dark', timber=(fh, ze), attic=True, grille=(3, 3), boxes=0.6, openings=(
-        [win(2.2, 0, w=1.2, h=1.5), door(w / 2, mat='door_green', w=1.0), win(w - 2.2, 0, w=1.2, h=1.5)] +
-        [win(u, 1, w=1.0, h=1.4, sill=0.5) for u in (2.5, w - 2.5)]))
-    house_block(m, 0, 0, w, d, 0, ze, dict(S=front, E=side, W=side, N=back),
-                dict(kind='gable', mat='shingle_brn_hi', pitch=pitch, oh=0.45, rake=0.3,
-                     fascia='trim_dark'), 'b', ridge='y')
-    chimney(m, -w / 2 - 0.45, 0, 1.0, 1.8, 0, ze + w / 2 * pitch + 0.6, mat='brick_h_brn')
+    wall = 'siding_white'
+    base = (0.8, 'fieldstone')
+    tall = dict(w=1.1, h=1.95, sill=0.4)
+    front = S(wall, floor_h=fh, trim='trim_dark', found=base, attic=True, grille=(1, 2), openings=(
+        [win(1.7, 0, **tall), door(w / 2, mat='door_blue', w=1.1), win(w - 1.7, 0, **tall)] +
+        [win(u, 1, **tall) for u in (1.7, w / 2, w - 1.7)]))
+    side = S(wall, floor_h=fh, trim='trim_dark', found=base, attic=True, grille=(1, 2),
+             openings=[win(u, f, **tall) for f in range(2) for u in (2.2, d - 2.2)])
+    back = S(wall, floor_h=fh, trim='trim_dark', found=base, attic=True, grille=(1, 2), openings=(
+        [win(1.7, 0, **tall), door(w / 2, mat='door_blue', w=1.0), win(w - 1.7, 0, **tall)] +
+        [win(u, 1, **tall) for u in (1.7, w / 2, w - 1.7)]))
+    roof = dict(kind='gable', mat='metal_seam_dk', pitch=pitch, oh=0.45, rake=0.25, fascia='trim_dark')
+    house_block(m, 0, 0, w, d, 0, ze, dict(S=front, E=side, W=side, N=back), roof, 'b', ridge='y')
+    # the garage wing, one storey, set back a little from the porch line
+    gw, gd = 5.2, 7.0
+    house_block(m, -w / 2 - gw / 2 + 0.3, -d / 2 + gd / 2 + 0.8, gw, gd, 0, 2.9,
+                dict(S=S(wall, trim='trim_dark', found=base, openings=[garage(gw / 2, w=4.4)]),
+                     E=plain(wall, found=base), N=plain(wall, found=base),
+                     W=S(wall, trim='trim_dark', found=base, attic=True,
+                         openings=[win(gd / 2, 0, w=1.1, h=1.5, sill=0.9)])),
+                dict(kind='gable', mat='metal_seam_dk', pitch=0.5, oh=0.4, rake=0.2, fascia='trim_dark'),
+                'g', ridge='y')
+    porch(m, 0, -d / 2 - 1.0, w - 0.4, 2.0, 2.75, posts=4, roof_mat='metal_seam_dk')
+    chimney(m, w / 2 + 0.45, 0.4, 1.0, 1.6, 0, ze + d / 2 * 0.2 + 1.7, mat='fieldstone')
     return m
 
 

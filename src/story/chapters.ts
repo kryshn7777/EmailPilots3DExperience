@@ -54,6 +54,10 @@ export interface GradeParams {
   exposure?: number;
   /** saturation of the whole frame, 1 untouched. Default 1. */
   sat?: number;
+  /** white balance: a multiplier on red, green and blue before the tone curve (cools a frame that has gone yellow). Default [1, 1, 1]. */
+  balance?: [number, number, number];
+  /** strength of the sun shafts (post/GodRays.ts). Default 1. */
+  rays?: number;
   /** bloom strength and the brightness it starts at (post chain). Defaults 1.1 and 0.85. */
   bloom?: number;
   bloomThreshold?: number;
@@ -126,22 +130,22 @@ export const CHAPTERS: Chapter[] = [
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffb65c', sunIntensity: 0.85, sunDir: [0.55, 0.2, 0.4], key: 1.25, fogColor: '#5f6273', fogNear: 20, fogFar: 480, envIntensity: 0.65, cloud: 0.6, wet: 0.35, bounce: 0.9,
-      filmic: 1, exposure: 1.3, sat: 0.85, bloom: 0.45, bloomThreshold: 1.0,
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffd8aa', sunIntensity: 0.85, sunDir: [0.55, 0.2, 0.4], key: 1.25, fogColor: '#6c788f', fogNear: 40, fogFar: 520, envIntensity: 0.65, cloud: 0.6, wet: 0.35, bounce: 0.9,
+      filmic: 1, exposure: 1.1, sat: 0.92, bloom: 0.5, bloomThreshold: 1.0, balance: [0.94, 1.0, 1.14], rays: 1.35,
       // fog belongs to the distance: clear streets below the window, the far town
       // sinking into the horizon (the mist term thickens it along the ground only)
       mist: { strength: 1, boost: 1.3, scale: 6, base: 'ground' },
-      inscatter: 0.5, volume: { density: 0.007, scale: 3.5, noise: 0.4, aniso: 0.8, sun: 0.6, ambient: 0.25, base: 'ground' } },
+      inscatter: 0.3, volume: { density: 0.007, scale: 3.5, noise: 0.5, aniso: 0.8, sun: 0.75, ambient: 0.25, base: 'ground' } },
   },
   {
     id: 'takeoff', t0: 0.17, t1: 0.26,
     // low and closer than the other chapters: the street is a long zone, and at the old 0.020
     // lag the camera rode eleven units back with the dart a speck between the lamps
     rig: { fov: 58, camLag: 0.014, lookAhead: 0.010, turbAmp: 0.06, offsetUp: 0.75, offsetSide: 0.45, offsetBack: 0.6, bank: 0.5, lookUp: 0.35 },
-    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffc987', sunIntensity: 0.9, sunDir: [0.6, 0.24, 0.25], key: 1.2, fogColor: '#98a0b0', fogNear: 20, fogFar: 500, envIntensity: 0.65, cloud: 0.5, wet: 0.4, bounce: 0.9,
-      filmic: 1, exposure: 1.3, sat: 0.85, bloom: 0.45, bloomThreshold: 1.0,
+    grade: { zenith: '#27324a', horizon: '#8fa8cc', sunColor: '#ffe0bc', sunIntensity: 0.9, sunDir: [0.6, 0.24, 0.25], key: 1.2, fogColor: '#a2b0c6', fogNear: 40, fogFar: 540, envIntensity: 0.65, cloud: 0.5, wet: 0.4, bounce: 0.9,
+      filmic: 1, exposure: 1.1, sat: 0.92, bloom: 0.5, bloomThreshold: 1.0, balance: [0.94, 1.0, 1.14], rays: 1.35,
       mist: { strength: 1, boost: 1.3, scale: 7, base: 'ground' },
-      inscatter: 0.5, volume: { density: 0.009, scale: 3.5, noise: 0.4, aniso: 0.8, sun: 0.6, ambient: 0.25, base: 'ground' } },
+      inscatter: 0.3, volume: { density: 0.009, scale: 3.5, noise: 0.5, aniso: 0.8, sun: 0.75, ambient: 0.25, base: 'ground' } },
   },
   {
     id: 'formation', t0: 0.26, t1: 0.36,

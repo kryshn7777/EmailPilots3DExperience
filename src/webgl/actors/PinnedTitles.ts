@@ -117,7 +117,7 @@ export class PinnedTitles {
     PINNED_TITLES.forEach((copy, i) => {
       const kicker = HOME_CHAPTERS.find((c) => c.id === copy.id)?.kicker ?? '';
       const title = this.titles[i]!;
-      const { canvas, aspect } = lockup(kicker, copy.lines);
+      const { canvas, aspect } = lockup(kicker, copy.lines, copy.note);
       const map = new CanvasTexture(canvas);
       map.colorSpace = SRGBColorSpace;
       map.anisotropy = 8;
@@ -154,7 +154,7 @@ export class PinnedTitles {
 }
 
 /** Draws the lockup on a canvas and returns it with its height-to-width ratio. */
-function lockup(kicker: string, lines: string[]): { canvas: HTMLCanvasElement; aspect: number } {
+function lockup(kicker: string, lines: string[], note?: string): { canvas: HTMLCanvasElement; aspect: number } {
   const scratch = document.createElement('canvas').getContext('2d')!;
   const heavy = (px: number): string => `700 ${px}px Oswald`;
   const thin = (px: number): string => `400 ${px}px Oswald`;
@@ -180,7 +180,12 @@ function lockup(kicker: string, lines: string[]): { canvas: HTMLCanvasElement; a
 
   const kickerH = 46;
   const gap = 58;
-  const height = Math.ceil(PAD + kickerH + gap + rows.reduce((h, r) => h + r.cap, 0) + gap * (rows.length - 1) + PAD);
+  // the note is the claim a visitor should leave with: set big, in the beam colour, so it reads from the air
+  const noteFont = '700 92px Oswald';
+  scratch.font = noteFont;
+  const noteCap = note ? scratch.measureText('H').actualBoundingBoxAscent : 0;
+  const noteH = note ? gap * 1.1 + noteCap : 0;
+  const height = Math.ceil(PAD + kickerH + gap + rows.reduce((h, r) => h + r.cap, 0) + gap * (rows.length - 1) + noteH + PAD);
   const canvas = document.createElement('canvas');
   canvas.width = CANVAS_W;
   canvas.height = height;
@@ -216,6 +221,20 @@ function lockup(kicker: string, lines: string[]): { canvas: HTMLCanvasElement; a
       });
     }
     y += gap;
+  }
+  if (note) {
+    ctx.font = noteFont;
+    ctx.fillStyle = '#7fe8d8';
+    const text = note.toUpperCase();
+    const glyphs = [...text].map((ch) => ctx.measureText(ch).width);
+    const tracking = 22;
+    const total = glyphs.reduce((a, b) => a + b, 0) + tracking * (text.length - 1);
+    let px = PAD + (TEXT_W - total) / 2;
+    const base = y - gap + gap * 1.1 + noteCap;
+    [...text].forEach((ch, k) => {
+      ctx.fillText(ch, px, base);
+      px += glyphs[k]! + tracking;
+    });
   }
   return { canvas, aspect: height / CANVAS_W };
 }

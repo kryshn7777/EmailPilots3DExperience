@@ -212,11 +212,11 @@ export const WHY: BlockCopy = {
 
 /**
  * The titles pinned into the flight itself (webgl/actors/PinnedTitles): three stacked lines each,
- * heavy / thin / heavy, in the chapter's own words.
+ * heavy / thin / heavy, in the chapter's own words, and optionally a small tracked line under them.
  */
-export const PINNED_TITLES: { id: string; lines: [string, string, string] }[] = [
+export const PINNED_TITLES: { id: string; lines: [string, string, string]; note?: string }[] = [
   { id: 'desk', lines: ['Some emails', 'deserve', 'a pilot'] },
-  { id: 'preflight', lines: ['Ready', 'for', 'takeoff'] },
+  { id: 'preflight', lines: ['Ready', 'for', 'takeoff'], note: 'Works with Outlook' },
   { id: 'takeoff', lines: ['Write once', 'it flies the', 'follow-ups'] },
   { id: 'formation', lines: ['Your sequences', 'in', 'formation'] },
   { id: 'storm', lines: ['Filters', 'ground the', 'fakes'] },

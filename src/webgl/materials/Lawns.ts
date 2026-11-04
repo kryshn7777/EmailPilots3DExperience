@@ -1,4 +1,4 @@
-import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three';
+import type { MeshStandardMaterial, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { Vector2 } from 'three';
 import { HOME_CELL } from '../bake/cityGen.mjs';
 
@@ -10,16 +10,27 @@ import { HOME_CELL } from '../bake/cityGen.mjs';
  * - every lot its own grass: lush, blue-green, bright, yellowing, a few gone to straw;
  * - mowing stripes on most lots, along or across, with the strip by the fences left unmown;
  * - patches of drier and lusher grass at two scales, so the green has weather in it;
- * - the asphalt and pavements get repairs and wear at the same scales.
+ * - the asphalt and pavements get repairs and wear at the same scales;
+ * - and the mess a tidy cell lacks (HIGH): cracked asphalt with parallax-occluded grooves, patched repairs, oil,
+ *   drifts of fallen leaves, bare worn lawn and dead spots, so no two lots read as stamped from one mould.
  *
  * Coordinates are the town's (group-local x/z), from the plane's own vertex positions.
  */
-export function applyLawns(material: MeshStandardMaterial, origin: Vector2): void {
+export function applyLawns(
+  material: MeshStandardMaterial,
+  origin: Vector2,
+  /** tiling photo detail for the hard surfaces (public/models/homes/detail-*.webp, see scripts/make-detail-maps.py) */
+  detail?: { asphalt: Texture; concrete: Texture },
+): void {
   const { w, d, lotW, lots, lotD, street } = HOME_CELL;
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms, renderer) => {
     previous.call(material, shader, renderer);
     shader.uniforms.uLawnOrigin = { value: origin };
+    if (detail) {
+      shader.uniforms.uAsphalt = { value: detail.asphalt };
+      shader.uniforms.uConcrete = { value: detail.concrete };
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec2 uLawnOrigin;\nvarying vec2 vTown;')
       // the plane lies in x/y and is turned flat by -90 degrees about x: plane +y is town -z
@@ -35,8 +46,17 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
         }
         const mat2 gRot = mat2(1.6, 1.2, -1.2, 1.6);
         float gFbm(vec2 p) { return gNoise(p) * 0.55 + gNoise(gRot * p + 5.3) * 0.3 + gNoise(gRot * gRot * p * 1.075 + 1.7) * 0.15; }
+        // crack network: contour lines of two noise fields, thick in the worn zones; 0 on sound surface, 1 at the groove
+        float gCrack(vec2 p) {
+          float zone = smoothstep(0.42, 0.72, gNoise(p * 0.11 + 9.0));
+          float n = gNoise(p * 0.85) * 0.62 + gNoise(gRot * p * 0.85 + 3.7) * 0.38;
+          float line = 1.0 - smoothstep(0.0, 0.03, abs(n - 0.5));
+          float fine = 1.0 - smoothstep(0.0, 0.02, abs(gNoise(p * 3.1 + 2.0) * 0.7 + gNoise(gRot * p * 3.1) * 0.3 - 0.5));
+          return clamp(line * (0.3 + 0.7 * zone) + fine * zone * 0.85, 0.0, 1.0);
+        }
         float lawnBump = 0.0;
-        float lawnMask = 0.0;`)
+        float lawnMask = 0.0;
+        ${detail ? 'uniform sampler2D uAsphalt;\nuniform sampler2D uConcrete;' : ''}`)
       .replace('#include <map_fragment>', /* glsl */ `#include <map_fragment>
         {
           vec3 g = diffuseColor.rgb;
@@ -97,6 +117,16 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           c = mix(c, vec3(0.62, 0.62, 0.56), heads * near2 * 0.7);
           float grain = gNoise(vTown * vec2(41.0, 37.0)) * 0.55 + gNoise(vTown * 83.0) * 0.45;
           c *= mix(1.0, 0.82 + 0.36 * grain, near2);
+          // bare earth where feet and wheels have worn the grass, dead spots, and a few dandelions
+          float bare = smoothstep(0.68, 0.8, gFbm(vTown * 0.26 + id * 1.3)) * step(h1, 0.55) * inLot;
+          c = mix(c, vec3(0.2, 0.15, 0.1) * (0.8 + 0.4 * gNoise(vTown * 9.0)), bare * 0.85);
+          vec2 sc = floor(vTown / 1.6);
+          if (gHash(sc + id) < 0.18) {
+            vec2 so = vec2(0.4 + 0.8 * gHash(sc + 3.1), 0.4 + 0.8 * gHash(sc + 6.2));
+            float sd = length(vTown - sc * 1.6 - so);
+            float spot = (1.0 - smoothstep(0.12, 0.26, sd + (gNoise(vTown * 14.0) - 0.5) * 0.08)) * inLot;
+            c = mix(c, vec3(lum) * vec3(1.35, 1.22, 0.82), spot * 0.55);
+          }
           // a height in town units: clumps a few centimetres high, the grain a few millimetres
           lawnBump = lawn * (near1 * 0.03 * (clump - 0.5) + near2 * 0.004 * (grain - 0.5));
           lawnMask = lawn * max(near1, near2);
@@ -104,7 +134,79 @@ export function applyLawns(material: MeshStandardMaterial, origin: Vector2): voi
           vec3 hard = g * (0.9 + 0.2 * gFbm(vTown * 0.45 + 7.0)) * (0.94 + 0.12 * macro);
           // up close the paving and asphalt are speckled too, not one flat tone
           hard *= mix(1.0, 0.86 + 0.28 * gNoise(vTown * 55.0), near1);
-          diffuseColor.rgb = mix(hard, c, lawn);
+          ${detail ? `
+          // the view ray in town units: where the texel under a point at depth d is, per metre of d
+          vec3 gVw = transpose(mat3(viewMatrix)) * normalize(vViewPosition);
+          vec2 gPd = -gVw.xz / max(gVw.y, 0.22);
+          float nearC = 1.0 - smoothstep(0.04, 0.13, px);
+          float asphalt = (1.0 - lawn) * (1.0 - smoothstep(0.16, 0.30, dot(g, vec3(0.2126, 0.7152, 0.0722))));
+          // repairs: squared patches of newer, darker asphalt with a sealed edge
+          vec2 rc = floor(vTown / 6.5);
+          float rh = gHash(rc + 3.3);
+          if (rh < 0.16 && asphalt > 0.0) {
+            vec2 ro = vec2(0.6 + 3.0 * gHash(rc + 1.1), 0.6 + 3.2 * gHash(rc + 2.2));
+            vec2 rs = vec2(0.8 + 1.7 * gHash(rc + 4.4), 0.7 + 1.1 * gHash(rc + 5.5));
+            vec2 rq = vTown - rc * 6.5 - ro;
+            float inR = step(0.0, rq.x) * step(0.0, rq.y) * step(rq.x, rs.x) * step(rq.y, rs.y);
+            float edgeR = inR * (1.0 - step(0.07, min(min(rq.x, rs.x - rq.x), min(rq.y, rs.y - rq.y))));
+            hard *= mix(1.0, 0.8 + 0.1 * gHash(rc + 7.7), inR * asphalt);
+            hard = mix(hard, hard * 0.4, edgeR * asphalt * 0.8);
+          }
+          // oil and tyre rubber: broad dark stains where the traffic stops and turns
+          float oil = smoothstep(0.58, 0.76, gFbm(vTown * 0.8 + 21.0)) * smoothstep(0.5, 0.8, gNoise(vTown * 0.12 + 4.0));
+          hard *= 1.0 - 0.28 * oil * asphalt;
+          // cracks, the grooves ray-marched against their own depth so they shift with the view (5 cm deep)
+          float crack = 0.0;
+          if (asphalt > 0.0 && nearC > 0.0) {
+            vec2 cp = vTown;
+            if (gCrack(vTown) < 0.999) {
+              for (int i = 1; i <= 6; i++) {
+                float l = float(i) / 6.0;
+                cp = vTown + gPd * (0.05 * l);
+                if (l >= gCrack(cp)) break;
+              }
+            }
+            crack = gCrack(cp) * nearC * asphalt;
+            hard = mix(hard, vec3(0.022, 0.024, 0.028), crack * 0.85);
+            lawnBump -= crack * 0.012;
+            lawnMask = max(lawnMask, crack);
+          }
+          // photographs of asphalt and of pavement tiled over the bake: the grain a centimetre-a-pixel
+          // bake cannot hold. Each map is only variation about its mean (scripts/make-detail-maps.py), so
+          // the colour of the surface stays what the bake says; two scales and a turn hide the repeat.
+          float hlum = dot(g, vec3(0.2126, 0.7152, 0.0722));
+          float onRoad = 1.0 - smoothstep(0.16, 0.30, hlum);
+          vec2 tp = vTown + gPd * (1.0 - dot(texture2D(uAsphalt, vTown / 0.55).rgb, vec3(0.3333))) * 0.008 * near1;
+          vec2 qa = tp / 0.55;
+          vec3 pa = mix(texture2D(uAsphalt, qa).rgb, texture2D(uAsphalt, vec2(qa.y, -qa.x) * 0.41 + 0.27).rgb, 0.4) * 2.0;
+          vec2 qc = tp / 0.6;
+          vec3 pc = mix(texture2D(uConcrete, qc).rgb, texture2D(uConcrete, vec2(qc.y, -qc.x) * 0.43 + 0.19).rgb, 0.4) * 2.0;
+          vec3 photo = mix(pc, pa, onRoad);
+          hard *= mix(vec3(1.0), photo, 0.8 * (1.0 - lawn));
+          // and its relief, while a pixel is still smaller than a grain
+          float nearP = 1.0 - smoothstep(0.02, 0.07, px);
+          lawnBump += (1.0 - lawn) * (dot(photo, vec3(0.3333)) - 1.0) * 0.0035 * nearP;
+          lawnMask = max(lawnMask, (1.0 - lawn) * nearP);` : ''}
+          vec3 outC = mix(hard, c, lawn);
+          // fallen leaves: drifts where the wind drops them (and under the trees), each a few centimetres of ochre
+          float drift = smoothstep(0.52, 0.8, gFbm(vTown * 0.24 + 13.0));
+          outC *= 1.0 - 0.05 * drift;
+          outC = mix(outC, outC * vec3(1.12, 0.96, 0.76), drift * 0.16);
+          if (near1 > 0.0 && drift > 0.05) {
+            vec2 lc = vTown / 0.15;
+            vec2 li = floor(lc);
+            float lh = gHash(li + 41.0);
+            if (lh < 0.06 + 0.4 * drift) {
+              vec2 lf = fract(lc) - 0.5;
+              float a = gHash(li + 7.0) * 6.2832;
+              lf = vec2(lf.x * cos(a) - lf.y * sin(a), lf.x * sin(a) + lf.y * cos(a));
+              float leaf = 1.0 - smoothstep(0.55, 0.9, length(lf * vec2(1.0, 2.2)) * (1.7 + 1.6 * gHash(li + 3.0)));
+              float pick = gHash(li + 17.0);
+              vec3 lcol = pick < 0.3 ? vec3(0.33, 0.17, 0.07) : pick < 0.6 ? vec3(0.3, 0.23, 0.09) : pick < 0.85 ? vec3(0.2, 0.15, 0.08) : vec3(0.24, 0.24, 0.08);
+              outC = mix(outC, lcol, leaf * near1 * 0.75);
+            }
+          }
+          diffuseColor.rgb = outC;
         }`)
       // the clumps and grain as relief, so the low sun rakes the lawn
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>

@@ -94,7 +94,7 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | Late arrivals | the town, city and lighthouse ask for a warm pass as they stream in (`warm.ts`), coalesced into one |
 | Normals | SSAO reads the same depth-rebuilt normals as SSGI/SSR; the full-resolution `NormalPass` (a second draw of the whole scene) is gone |
 | Shadows, probe | the sun's shadow map and the reflection probe refresh every other frame |
-| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 16 units, hero 28, detail 48, lite 70, lean beyond; phones 16/36), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
+| Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 10 units, hero 24, detail 50, lite 90, lean beyond; phones 24/50), and a tree beyond 28 units that the lens cannot see is not drawn at all (repacked on a 2-unit move or a 3-degree turn), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
 | Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
 | Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
 
@@ -117,9 +117,25 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 | Ground cell drawn at the wrong scale (4.5 m slabs, 4.5 m by 42 cm dashes, 2.7 m front walks) | `blender/make_ground.py`: 1.5 m slabs, 3 m by 12 cm dashes at a 12 m period, 1.2 m walks; re-baked (numpy only) |
 | Lamps half-lit and fog dark navy under a low sun | `lampLevel` goes out as the sun rises, the town's fog starts at 20 and is warm grey |
 | Blue metal puddle blobs | Dark dielectric water, mirroring the live probe |
+| Warm cast, flat light, washed shafts | `balance` (white balance), `rays` and a lighter sun colour in the town grades; shafts are tinted halfway to white; fog is a cool grey from 40 units |
 | Toy props and crowding | Faceted icosphere canopies are welded lumpy foliage masses; about a third of the people; lighter contact shadows; SSAO 1.6; duller car paint |
 | Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
 | Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
+
+## Photo detail on the ground and walls
+
+The ground and the house atlases are baked at a few centimetres a texel, so the grain of real materials is tiled over them at runtime from photographs: `public/models/homes/detail-{asphalt,concrete,plaster}.webp` (HIGH tier only). Each holds only the variation of its photograph about its mean, so a surface keeps the colour the bake gives it (`scripts/make-detail-maps.py`). The ground shader (`materials/Lawns.ts`) multiplies them over the asphalt and pavement, with relief while a pixel is smaller than a grain; the wall shader (`materials/Roofs.ts`) tiles the plaster over every house wall.
+
+**Weathering decals (HIGH tier).** On the houses the flight passes closest to (`rings.hero`), `actors/HouseDecals.ts` lays alpha-blended quads a few millimetres off the walls: rain streaks under every window sill, grime at the foot of each garage door and an oil stain on the drive. Where the windows and garages sit comes from the house DSL itself: `blender/make_anchors.py` rebuilds every home and writes `public/models/homes/anchors.json` (`[kind, x, y, z, nx, nz, ux, uz, w, h]` per row, in site units), and the decals place them with the same transform `KitCity` uses for the house. Rerun it whenever a house in `blender/bld/homes.py` changes.
+
+**Parallax and entropy (HIGH tier).** A tidy cell reads as a model, so the town is deliberately a little broken, and the broken parts are parallax-mapped so they hold depth as the camera moves:
+
+- *Parallax.* `materials/Lawns.ts` ray-marches the asphalt cracks (6 steps against a 5 cm groove depth, from the view ray in town units) and offsets the photo grain by its own height; `materials/Roofs.ts` offsets every roof course by its rise (the tab edges slide against the weathering) and the wall grain and stucco by theirs. The roof and wall frames come from screen-space derivatives (`rParaDir`), so no tangents are needed on instanced, rotated modules.
+- *Ground entropy.* Cracks in worn zones, squared repair patches with a sealed edge, oil and rubber stains, drifts of fallen leaves with single leaves up close, bare worn lawn and dead spots.
+- *House entropy.* Each house gets its own upkeep (`dirtK` in the wall shader, `dirt` in `HouseDecals.ts`): scrubbed ones stay clean; neglected ones get longer sill streaks, mildew at the foot of the wall, algae in sill corners, flaking paint beside windows, rubber and oil on the drive. Squared repainted patches sit a shade off the wall.
+- *Layout entropy.* `homeLots` nudges each house a few centimetres off its mark and a few tenths of a degree off true (a seventh visibly crooked) from a stream of its own, so no other house moves; `npm run bake:rings` after changing it.
+
+**Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens
 

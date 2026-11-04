@@ -1,3 +1,4 @@
+import type { Camera, Texture } from 'three';
 import {
   CatmullRomCurve3,
   Group,
@@ -20,6 +21,7 @@ import {
 } from '../bake/cityGen.mjs';
 import { PATH_POINTS } from '../rig/pathPoints.mjs';
 import { meadowTexture, softShadowTexture } from '../bake/CanvasTextures';
+import { HouseDecals, type DecalAnchors } from './HouseDecals';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
 import { Fences } from './Fences';
 import { Hedges } from './Hedges';
@@ -92,6 +94,7 @@ export class Rooftops {
   readonly group = new Group();
   private kitCity: KitCity | null = null;
   private manifest: KitManifest | null = null;
+  private decals: HouseDecals | null = null;
   private fences: Fences | null = null;
   private hedges: Hedges | null = null;
   private cars: StreetCars | null = null;
@@ -159,7 +162,16 @@ export class Rooftops {
     ground.position.set(w * (HOME_CELLS.x[0] + HOME_CELLS.x[1]) / 2, ROOFTOP_BASE_Y, d * (HOME_CELLS.z[0] + HOME_CELLS.z[1]) / 2);
     this.group.add(ground);
     // every lot its own grass, mowing stripes, dry and lush patches (the cell alone repeats)
-    applyLawns(material, new Vector2(ground.position.x, ground.position.z));
+    // HIGH also tiles photographs of asphalt and pavement over the bake (scripts/make-detail-maps.py)
+    const detail = (file: string): ReturnType<TextureLoader['load']> => {
+      const t = loader.load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      return t;
+    };
+    const photo = shadows ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : undefined;
+    applyLawns(material, new Vector2(ground.position.x, ground.position.z), photo);
 
     // the meadow and fields under the woodland, out past the edge of town
     const meadow = meadowTexture();
@@ -173,6 +185,7 @@ export class Rooftops {
     this.groundMaterial = material;
     this.disposables.push(ground.geometry, material, color, glow, outskirts.geometry, meadowMaterial, meadow);
     if (normal) this.disposables.push(normal);
+    if (photo) this.disposables.push(photo.asphalt, photo.concrete);
     if (rough) this.disposables.push(rough);
   }
 
@@ -252,10 +265,13 @@ export class Rooftops {
   }
 
   /** Per-frame work: lamps by the hour, traffic, and the firepits' flicker. `night` is 0 by day, 1 in the dark. */
-  update(time: number, night = 1, focus?: Vector3, eye?: Vector3): void {
+  update(time: number, night = 1, focus?: Vector3, eye?: Vector3, camera?: Camera): void {
     if (!this.group.visible) return;
     KitCity.tick(time);
-    if (eye) this.kitCity?.updateTrees(eye);
+    if (eye) {
+      this.kitCity?.updateTrees(eye, camera);
+      this.yards?.updatePlants(eye);
+    }
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
     // the pools of lamplight painted on the streets fade with the lamps
@@ -284,8 +300,16 @@ export class Rooftops {
     // chapter whose fog is tuned for a dark room, so its windows run a little
     // hotter than the city's. cloudEnv: homes in a cloud sea take their light
     // and reflections from the baked cloud environment.
+    // HIGH tiles a photograph of dirty plaster over the baked walls (scripts/make-detail-maps.py)
+    let wallDetail: Texture | undefined;
+    if (quality.tier === 'high') {
+      wallDetail = new TextureLoader().load(asset('/models/homes/detail-plaster.webp'));
+      wallDetail.colorSpace = NoColorSpace;
+      wallDetail.wrapS = wallDetail.wrapT = RepeatWrapping;
+      wallDetail.anisotropy = 8;
+    }
     this.kitCity = new KitCity(lots as KitLot[], rings, manifest, {
-      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high', roofs: true,
+      tier: quality.tier, glow: 1.2, cloudEnv: true, shadows: quality.tier === 'high', roofs: true, wallDetail,
     });
     // the ground sits at ROOFTOP_BASE_Y; every module stands on y = 0 of its group
     this.kitCity.group.position.y = ROOFTOP_BASE_Y;
@@ -299,6 +323,18 @@ export class Rooftops {
       trees: (lots as KitLot[]).filter((l) => kinds.get(l.moduleId) === 'tree' && !l.forest).map(site),
     };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
+    // weathering decals on the houses the flight passes close to (HIGH; blender/make_anchors.py)
+    if (quality.tier === 'high') {
+      void fetch(asset('/models/homes/anchors.json'))
+        .then((r) => r.json() as Promise<DecalAnchors>)
+        .then((anchors) => {
+          const decals = new HouseDecals(lots as KitLot[], manifest.modules, rings.hero ?? rings.near, anchors);
+          decals.group.position.y = ROOFTOP_BASE_Y;
+          this.group.add(decals.group);
+          this.decals = decals;
+        })
+        .catch(() => undefined);
+    }
     this.buildCars(lots as KitLot[], kinds, quality);
     this.buildFurniture(quality);
     // the wet-night look: lamps doubled in the road, puddles that mirror the sky, window light on the
@@ -409,6 +445,7 @@ export class Rooftops {
   }
 
   dispose(): void {
+    this.decals?.dispose();
     this.kitCity?.dispose();
     this.fences?.dispose();
     this.hedges?.dispose();

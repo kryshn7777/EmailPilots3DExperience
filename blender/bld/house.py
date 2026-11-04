@@ -82,6 +82,7 @@ def _window(hp, fr, o, z0, spec, rng):
     z = z0 + o['floor'] * spec.get('floor_h', 2.7) + o['sill']
     z1 = z + h
     trim, depth = spec.get('trim', 'trim_white'), 0.22
+    hp.anchors.append(dict(k='win', p=fr.p(uc, 0.0, z), n=fr.n.copy(), u=fr.u.copy(), w=w, h=h))
     hp.pane(fr, u0, u1, z, z1, -depth + 0.02, _room_light(hp, rng, spec))
     _frame4(hp, fr, u0, u1, z, z1, -depth, depth + 0.03, 0.07, trim)
     zm = z + h * 0.52
@@ -185,6 +186,7 @@ def _door(hp, fr, o, z0, spec, rng):
 def _garage(hp, fr, o, z0, spec, rng):
     uc, w, h = o['u'], o['w'], o['h']
     u0, u1 = uc - w / 2, uc + w / 2
+    hp.anchors.append(dict(k='gar', p=fr.p(uc, 0.0, z0), n=fr.n.copy(), u=fr.u.copy(), w=w, h=h))
     hp.fquad(fr, u0, u1, z0, z0 + h, -0.06, 'garage_door')
     _frame4(hp, fr, u0 - 0.06, u1 + 0.06, z0, z0 + h + 0.1, -0.22, 0.26, 0.12, spec.get('trim', 'trim_white'))
     for k in range(4):

@@ -250,6 +250,7 @@ const TREE_TINTS = ['#ffffff', '#f2f6ea', '#eaf1e2'];
  */
 export function homeLots(modules) {
   const rand = mulberry32(CITY_SEED + 53);
+  const jit = mulberry32(CITY_SEED + 331);
   // lots are placed with the lean modules; a module that carries `lean` is a
   // hero/detail replacement the rings swap in, never a lot of its own
   const houses = modules.filter((m) => m.kind === 'house' && !m.lean);
@@ -292,9 +293,14 @@ export function homeLots(modules) {
           const hw = mod.footprint[0] * s;
           const hd = mod.footprint[1] * s;
           const setback = 1.5 + rand() * 1.3;
+          // nothing in a real street is quite square: a house settles a few centimetres off its mark and a few
+          // tenths of a degree off true, a few of them visibly crooked. From a stream of its own, so no house
+          // above or below ever moves for the others' sake.
+          const slack = Math.min(0.25, Math.max(0, (lotW - 0.5 - hw) / 2));
+          const crooked = jit() < 0.14;
           lots.push({
-            x: cx, z: front - toStreet * (setback + hd / 2), w: hw, d: hd, h: mod.height * s,
-            yaw: row === 0 ? 0 : Math.PI, tint: pick(HOUSE_TINTS), moduleId: mod.id,
+            x: cx + (jit() - 0.5) * 2 * slack, z: front - toStreet * (setback + hd / 2) + (jit() - 0.5) * 0.5, w: hw, d: hd, h: mod.height * s,
+            yaw: (row === 0 ? 0 : Math.PI) + (jit() - 0.5) * (crooked ? 0.11 : 0.035), tint: pick(HOUSE_TINTS), moduleId: mod.id,
           });
           // backyard tree behind the house, most of the time
           if (rand() < 0.85) {
