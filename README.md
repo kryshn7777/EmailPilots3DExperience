@@ -82,7 +82,7 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | seam (t) | what happens |
 | :-- | :-- |
 | formation to storm (0.335 to 0.38) | the town is swallowed by the closing fog, and the storm's first bolts strike as it goes |
-| storm to lighthouse (0.40 to 0.5) | the sea rises under the storm first, then the lamp glows out of the murk, then the tower and islet form out of the mist; the sweep lights the ship |
+| storm to lighthouse (0.40 to 0.54) | the sea rises under the storm first, then the tower and islet come out of the sea fog, then the freighter beyond them. The fog is an extinction by distance (`Beacon.ts`, `MIST_FRAG`): each fragment is kept with probability exp(-density x its range to the lens) and the rest goes to what lies behind it in the murk (pale sky above the horizon, dark sea below), so the base and the top of the tower, and the bow and the funnel of the ship, come out together; the density eases to exactly 0 (tower 0.452 to 0.515, ship 0.462 to 0.54). Neither model is drawn until it has loaded completely, geometry and every texture, and one that arrives late eases up over 1.5 s instead of appearing. The mist banks stand on the lens's side of what they veil (never through it), fade out to the water at their lower edge and thin with the same fog; the sweep lights the ship |
 | lighthouse to city (0.59 to 0.71) | fog draws in as the sea goes and the night cloud deck thickens into a bank across the gap; the city is switched on inside it and powers up in a wave (street lamps first, then windows, glass and neon) while a mist stands on its streets and thins as the flight dives in; the lightning carries across and lands on the roofs |
 | copilot to the airfield (0.82 to 0.9) | the descent goes through cloud: fog closes while the starfield is left behind, the airfield is switched on inside it, and the edge lights, the threshold bars and PAPI, then the approach rabbit come up as the runway appears |
 
@@ -101,6 +101,8 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 ## Pinned titles
 
 Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a canvas-drawn lockup (heavy / thin / heavy condensed capitals, Oswald) on a plane with the depth test on, so towers, trees and the lighthouse pass in front of it and the haze dims it, the way a camera-tracked title is made in a film. The words come from `PINNED_TITLES` in `src/story/copy.ts`.
+
+A spot can carry a `portrait` alternative for phones, whose lens is less than a third as wide: the ocean title ("Send mail to anyone, anywhere in the world", 0.452 to 0.512) stands on the water to the left of the lighthouse on a landscape screen, and straight ahead behind it on a phone, where it is read while the tower is still in the fog and goes as the tower comes out in front of it.
 
 The rig directs a different camera in every chapter, so each title's spot (`SPOTS`) was fitted to the camera across its window: the position that stays nearest the middle of the lens while the chapter plays. Where the camera looks steeply down, the title lies flat over the scene. If a chapter's camera changes, sample the camera across its window and refit that spot.
 

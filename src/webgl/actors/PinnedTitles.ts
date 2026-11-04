@@ -37,6 +37,11 @@ interface Spot {
   flat?: number;
   /** false: stays crisp in thick weather (default: the haze dims it with distance) */
   fog?: boolean;
+  /**
+   * A spot of its own for a portrait screen (a phone), where the lens is less than a third as wide and a
+   * spot fitted to the landscape frame can fall outside it or behind what the chapter is showing.
+   */
+  portrait?: Omit<Spot, 'portrait' | 'fog'>;
 }
 
 const SPOTS: Record<string, Spot> = {
@@ -45,6 +50,18 @@ const SPOTS: Record<string, Spot> = {
   takeoff: { from: 0.163, to: 0.217, pos: [44.47, 0.55, 14.21], width: 12.17, face: [28.47, 0.55, 12.93] },
   formation: { from: 0.288, to: 0.342, pos: [81.49, 24.34, 0.76], width: 9.94, face: [67.6, 24.34, 4.87] },
   storm: { from: 0.388, to: 0.442, pos: [128.18, -3.34, -14.97], width: 34.76, face: [98.48, -3.34, 0.05], fog: false },
+  // Out over the open sea on the run in to the lighthouse (the camera flies +x at about y 18, turning
+  // left onto the tower). Fitted to the frames of 0.466 to 0.5 to stand on the water out to sea LEFT of the
+  // tower, 62 to 68 units out (twice the tower's range, so the tower passes in front of it, never it in front
+  // of the tower) and clear of the tower's screen box the whole way: the tower comes out of the fog beside
+  // it. Crisp (no haze), as the sea mist lying on the water would otherwise swallow its bottom line.
+  // On a phone the lens is too narrow for anything beside the tower, so it stands straight ahead, 60 units
+  // out (behind the tower), while the tower is still lost in the fog, and goes as the tower comes out in
+  // front of it; the camera's turn carries it across the frame from 0.455 to 0.485.
+  ocean: {
+    from: 0.452, to: 0.512, pos: [169, 13.6, -45], width: 19, face: [114.94, 13.6, 1.42], fog: false,
+    portrait: { from: 0.452, to: 0.492, pos: [171.5, 13.8, -5.6], width: 18, face: [114.91, 13.8, 1.1] },
+  },
   beacon: { from: 0.518, to: 0.572, pos: [109.91, 35.32, -33.71], width: 20.87, face: [147.6, 35.32, 0.9] },
   'no-fly': { from: 0.568, to: 0.622, pos: [152.88, -3.72, 11.0], width: 22.84, flat: -2.693 },
   city: { from: 0.688, to: 0.742, pos: [199.14, 1.78, 0.55], width: 10.5, face: [185.86, 1.78, 1.18] },
@@ -63,6 +80,7 @@ const FADE_OUT = 0.014;
 interface Title {
   mesh: Mesh;
   material: MeshBasicMaterial;
+  spot: Spot;
   from: number;
   to: number;
 }
@@ -72,6 +90,8 @@ export class PinnedTitles {
   private titles: Title[] = [];
   private ready = false;
   private tmp = new Vector3();
+  /** which frame the spots are placed for (null: not yet placed) */
+  private portrait: boolean | null = null;
 
   constructor() {
     this.group.name = 'pinned-titles';
@@ -86,22 +106,36 @@ export class PinnedTitles {
         opacity: 0,
       });
       const mesh = new Mesh(new PlaneGeometry(1, 1), material);
-      mesh.position.set(...spot.pos);
-      if (spot.flat !== undefined) {
-        // lying over the scene, top toward the heading
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.rotateOnWorldAxis(UP, spot.flat);
-      } else {
-        mesh.lookAt(...spot.face!);
-      }
-      mesh.userData.width = spot.width;
+      mesh.userData.aspect = 0;
       mesh.visible = false;
       mesh.renderOrder = 6;
       mesh.frustumCulled = false;
       this.group.add(mesh);
-      this.titles.push({ mesh, material, from: spot.from, to: spot.to });
+      const title: Title = { mesh, material, spot, from: spot.from, to: spot.to };
+      this.place(title, false);
+      this.titles.push(title);
     });
     void this.draw();
+  }
+
+  /** stands a title at its spot (or its portrait spot), sized to its lockup once that is drawn */
+  private place(title: Title, portrait: boolean): void {
+    const spot = (portrait && title.spot.portrait) || title.spot;
+    const { mesh } = title;
+    mesh.position.set(...spot.pos);
+    mesh.rotation.set(0, 0, 0);
+    if (spot.flat !== undefined) {
+      // lying over the scene, top toward the heading
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotateOnWorldAxis(UP, spot.flat);
+    } else {
+      mesh.lookAt(...spot.face!);
+    }
+    mesh.userData.width = spot.width;
+    const aspect = mesh.userData.aspect as number;
+    if (aspect) mesh.scale.set(spot.width, spot.width * aspect, 1);
+    title.from = spot.from;
+    title.to = spot.to;
   }
 
   /** the lockups are drawn once the fonts are in: until then the titles simply are not there */
@@ -123,7 +157,7 @@ export class PinnedTitles {
       img.src = asset('/images/outlook.svg');
     });
     PINNED_TITLES.forEach((copy, i) => {
-      const kicker = HOME_CHAPTERS.find((c) => c.id === copy.id)?.kicker ?? '';
+      const kicker = copy.kicker ?? HOME_CHAPTERS.find((c) => c.id === copy.id)?.kicker ?? '';
       const title = this.titles[i]!;
       const { canvas, aspect } = lockup(kicker, copy.lines, copy.note, copy.logo === 'outlook' ? outlook : null);
       const map = new CanvasTexture(canvas);
@@ -132,6 +166,7 @@ export class PinnedTitles {
       map.minFilter = LinearMipmapLinearFilter;
       title.material.map = map;
       title.material.needsUpdate = true;
+      title.mesh.userData.aspect = aspect;
       const width = title.mesh.userData.width as number;
       title.mesh.scale.set(width, width * aspect, 1);
     });
@@ -142,6 +177,11 @@ export class PinnedTitles {
     const on = enabled && this.ready;
     this.group.visible = on;
     if (!on) return;
+    const portrait = innerWidth < innerHeight;
+    if (portrait !== this.portrait) {
+      this.portrait = portrait;
+      for (const title of this.titles) if (title.spot.portrait) this.place(title, portrait);
+    }
     for (const { mesh, material, from, to } of this.titles) {
       const window = MathUtils.smoothstep(t, from, from + FADE_IN) * (1 - MathUtils.smoothstep(t, to - FADE_OUT, to));
       // it dissolves as the lens closes on it, instead of the camera slicing through it
