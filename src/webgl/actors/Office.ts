@@ -826,7 +826,15 @@ export class Office {
     cam.updateMatrixWorld();
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
+    // the flare is drawn too (fully transparent), so its program is the one the frame will ask for
+    const flareShown = this.flare.visible;
+    const flareMat = this.flare.material as MeshBasicMaterial;
+    const flareOpacity = flareMat.opacity;
+    this.flare.visible = true;
+    flareMat.opacity = 0;
     renderer.render(scene, cam);
+    this.flare.visible = flareShown;
+    flareMat.opacity = flareOpacity;
     // and from the window, looking in (the other side of every desk)
     cam.position.set(o.x - 1 * ROOM_K, o.y + 2 * ROOM_K, o.z + 0.4 * ROOM_K);
     cam.lookAt(o.x, o.y + 0.8 * ROOM_K, o.z + 6 * ROOM_K);
