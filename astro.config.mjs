@@ -35,5 +35,8 @@ export default defineConfig({
   ],
   vite: {
     plugins: [glsl({ minify: false })],
+    // stamped on every asset URL (src/webgl/asset.ts): models and textures keep their file names from
+    // deploy to deploy, and GitHub Pages lets a browser keep them for ten minutes or more
+    define: { __BUILD_ID__: JSON.stringify((process.env.GITHUB_SHA || String(Date.now())).slice(0, 10)) },
   },
 });
