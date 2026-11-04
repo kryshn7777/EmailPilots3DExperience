@@ -117,6 +117,33 @@ export class CameraRig {
   /** a jolt to the camera, 0..1 (the Engine feeds it the storm's lightning) */
   jolt = 0;
 
+  // --- office detour (rig/detour.ts, rig/officeShot.ts): laid over everything else, last ---
+  /**
+   * The office detour's own camera and dart, blended in by `weight` (0 at both ends of the detour,
+   * so the frame there IS this rig's). The main rig's dart pose is kept in `mainPlanePos/Quat`.
+   */
+  readonly detour = {
+    weight: 0,
+    camPos: new Vector3(), look: new Vector3(), fov: 45, roll: 0,
+    planePos: new Vector3(), planeQuat: new Quaternion(),
+    mainPlanePos: new Vector3(), mainPlaneQuat: new Quaternion(),
+  };
+
+  /** The main rig's pose at story-t `t` with no turbulence, damping or roll; returns the fov. */
+  mainPose(t: number, pos: Vector3, look: Vector3): number {
+    const rig = rigParamsAt(t);
+    this.chasePosition(t, rig, pos);
+    this.path.pointAt(Math.min(t + rig.lookAhead, 1), look);
+    look.y += rig.lookUp ?? 0;
+    let fovMul = 1;
+    for (const beat of BEATS) {
+      const w = beatWeight(beat, t);
+      if (w > 0 && beat.fov !== undefined) fovMul *= 1 + (beat.fov - 1) * w;
+    }
+    return rig.fov * (this.options.reducedMotion ? 1 : fovMul);
+  }
+  // --- end office detour ---
+
   private noise = new ImprovedNoise();
   private roll = 0;
   private camRoll = 0;
@@ -222,6 +249,15 @@ export class CameraRig {
     this.rollQuat.setFromAxisAngle(this.tangent, this.roll + (att ? att.sway : 0));
     this.plane.group.quaternion.copy(this.rollQuat).multiply(this.baseQuat);
     if (att && att.pitch !== 0) this.plane.group.quaternion.multiply(this.qLaunch.setFromAxisAngle(X_AXIS, att.pitch));
+    // office detour: the dart leaves the main line (the main pose is kept for the copilot)
+    const dw = this.detour.weight;
+    this.detour.mainPlanePos.copy(this.planePos);
+    this.detour.mainPlaneQuat.copy(this.plane.group.quaternion);
+    if (dw > 0) {
+      this.planePos.lerp(this.detour.planePos, dw);
+      this.plane.group.position.copy(this.planePos);
+      this.plane.group.quaternion.slerp(this.detour.planeQuat, dw);
+    }
 
     this.planeWorldPos.copy(this.planePos);
     this.currentTangent.copy(this.tangent);
@@ -273,6 +309,7 @@ export class CameraRig {
       this.camPos.y += this.noise.noise(0, time * 29 + 7.1, 0) * j;
     }
     if (this.shot.weight > 0) this.camPos.lerp(this.shot.position, this.shot.weight);
+    if (dw > 0) this.camPos.lerp(this.detour.camPos, dw);
     this.camera.position.copy(this.camPos);
 
     const lookT = Math.min(t + rig.lookAhead, 1);
@@ -290,6 +327,7 @@ export class CameraRig {
     // a held camera pans with the dart itself rather than with the point ahead of it
     if (hold > 0) this.lookAtPoint.lerp(this.planePos, hold);
     if (this.shot.weight > 0) this.lookAtPoint.lerp(this.shot.look, this.shot.weight);
+    if (dw > 0) this.lookAtPoint.lerp(this.detour.look, dw);
     this.camera.lookAt(this.lookAtPoint);
 
     // roll: a dutch angle where the beat wants one, and a share of the dart's bank into turns —
@@ -298,7 +336,8 @@ export class CameraRig {
     const bank = calm ? 0 : -this.pathTurn(t) * 2.4 * (rig.bank ?? 0) * free;
     const rollTarget = calm ? 0 : MathUtils.clamp(bank, -0.18, 0.18) + dutch * DEG;
     this.camRoll = MathUtils.damp(this.camRoll, rollTarget, 4, dt);
-    if (Math.abs(this.camRoll) > 1e-4) this.camera.rotateZ(this.camRoll);
+    const roll = dw > 0 ? MathUtils.lerp(this.camRoll, this.detour.roll, dw) : this.camRoll;
+    if (Math.abs(roll) > 1e-4) this.camera.rotateZ(roll);
 
     // focal length: the chapter's lens times the beat's push, plus a kick when lightning hits
     let fov = rig.fov * (calm ? 1 : fovMul) + (calm ? 0 : this.jolt * 0.8);
@@ -306,8 +345,9 @@ export class CameraRig {
     const widen = MathUtils.lerp(1, MathUtils.clamp(1.25 / this.camera.aspect, 1, 1.9), study);
     if (widen > 1.001) fov = (2 * Math.atan(Math.tan((fov * DEG) / 2) * widen)) / DEG;
     this.fovTarget = calm ? fov : MathUtils.damp(this.fovTarget, fov, 5, dt);
-    if (Math.abs(this.camera.fov - this.fovTarget) > 0.01) {
-      this.camera.fov = this.fovTarget;
+    const lens = dw > 0 ? MathUtils.lerp(this.fovTarget, this.detour.fov, dw) : this.fovTarget;
+    if (Math.abs(this.camera.fov - lens) > 0.01) {
+      this.camera.fov = lens;
       this.camera.updateProjectionMatrix();
     }
 

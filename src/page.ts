@@ -86,17 +86,25 @@ function bindChromeOnce(): void {
   const bar = document.querySelector<HTMLElement>('#scroll-progress i');
   let lastChapter = -1;
   let lastAlt = -1;
+  // the bar follows the scroll's own progress, which keeps moving through the office detour while
+  // story-t holds still (rig/detour.ts); the chapter readout says where the flight is
+  let detourU = 0;
+  window.addEventListener('flight:progress', (e) => {
+    const { p, u } = (e as CustomEvent<{ p: number; u: number }>).detail;
+    if (bar) bar.style.transform = `scaleX(${p.toFixed(4)})`;
+    detourU = u;
+  });
   window.addEventListener('flight:t', (e) => {
     const t = (e as CustomEvent<number>).detail;
-    if (bar) bar.style.transform = `scaleX(${t.toFixed(4)})`;
 
     if (hudChapter && hudAlt) {
       let i = 0;
       while (i < 9 && t >= CHAPTER_T[i + 1]!) i++;
       // textContent writes force style/layout work — only touch on change
-      if (i !== lastChapter) {
-        lastChapter = i;
-        hudChapter.textContent = `CH ${String(i + 1).padStart(2, '0')} / 10 · ${CHAPTER_NAMES[i]}`;
+      const key = detourU > 0 ? -2 : i;
+      if (key !== lastChapter) {
+        lastChapter = key;
+        hudChapter.textContent = `CH ${String(i + 1).padStart(2, '0')} / 10 · ${detourU > 0 ? 'DETOUR · IT OFFICE' : CHAPTER_NAMES[i]}`;
       }
       const alt = Math.round(120 + Math.sin(t * Math.PI) * 2280);
       if (alt !== lastAlt) {

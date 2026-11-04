@@ -12,6 +12,10 @@
  *
  * Its copy is hidden by default (canvas-only; `?copy=1` shows it) with `visibility`, never
  * `display`: the stage's height is the timeline.
+ *
+ * Office detour: one more stretch of scroll (`[data-detour]`, 120vh) after the copilot chapter.
+ * Story-t holds still while it scrolls by and the detour's own clock runs instead (the Engine maps
+ * the scroll to both, rig/detour.ts, from this spacer's share of the timeline). No copy of its own.
  */
 import { HOME_CHAPTERS } from '../story/copy';
 import { href } from '../lib/href';
@@ -67,6 +71,11 @@ import { href } from '../lib/href';
           )}
         </div>
       </section>
-    ))
+    )).flatMap((section, i) => (HOME_CHAPTERS[i]!.id === 'copilot' ? [section, <div class="detour" data-detour aria-hidden="true" />] : [section]))
   }
 </div>
+
+<style>
+  /* office detour: a chapter's height of scroll with nothing in it */
+  .detour { height: 120vh; }
+</style>
