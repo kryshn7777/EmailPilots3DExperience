@@ -88,10 +88,10 @@ const CAM_KEYS: Key[] = [
   { u: 0.32, p: [-2.45, 1.3, 1.85] },
   { u: 0.4, p: [-2.8, 1.12, 2.3] },
   { u: 0.47, p: [-2.95, 1.06, 2.5] },
-  { u: 0.55, p: [-2.6, 1.28, 2.05] },
-  { u: 0.6, p: [-2.1, 1.7, 1.55] },
-  { u: 0.64, p: [-2.25, 1.9, 1.25] },
-  { u: 0.66, p: [-2.3, 1.9, 0.95] },
+  { u: 0.55, p: [-2.6, 1.3, 2.2] },
+  { u: 0.6, p: [-2.45, 1.75, 2.95] },
+  { u: 0.635, p: [-2.45, 1.9, 2.1] },
+  { u: 0.66, p: [-2.4, 1.92, 1.2] },
 ];
 
 /** where it looks when it is not watching the dart */
@@ -106,7 +106,7 @@ const LOOK_KEYS: Key[] = [
 
 /** how much the camera watches the dart instead of the look keys, by u */
 function trackAt(u: number): number {
-  return 0.55 * (1 - smooth(u, 0.26, 0.36)) + 0.35 * smooth(u, 0.5, 0.56) * (1 - smooth(u, 0.6, 0.64)) + 0.5 * smooth(u, 0.6, 0.64);
+  return 0.75 * (1 - smooth(u, 0.26, 0.36)) + 0.35 * smooth(u, 0.5, 0.56) * (1 - smooth(u, 0.6, 0.64)) + 0.5 * smooth(u, 0.6, 0.64);
 }
 
 /** non-uniform cardinal spline through keyed points (Hermite, tangents from the neighbours) */
@@ -251,7 +251,7 @@ function outbound(scene: DetourScene, u: number, out: Vector3, dir: Vector3): nu
   const k = MathUtils.clamp((u - DETOUR.cutOut) / (1 - DETOUR.cutOut), 0, 1);
   const len = curve.getLength();
   const span = 1 - DETOUR.cutOut;
-  const a = MathUtils.clamp((110 * span) / len, 0.05, 2.5);
+  const a = MathUtils.clamp((55 * span) / len, 0.05, 2.5);
   const b = MathUtils.clamp((43 * span) / len, 0.05, 2.5);
   const k2 = k * k;
   const k3 = k2 * k;
@@ -309,13 +309,13 @@ export function detourPose(u: number, scene: DetourScene | null, aspect: number,
   // a held camera off the facade watches it burst out ...
   const n = scene.normal;
   const side = D.crossVectors(UP, n).normalize();
-  A.copy(scene.entry).addScaledVector(n, 6.5).addScaledVector(side, 2.6).addScaledVector(UP, -1.2);
-  B.copy(scene.entry).lerp(out.planePos, 0.7);
+  A.copy(scene.entry).addScaledVector(n, 8).addScaledVector(side, 3).addScaledVector(UP, -2.2);
+  B.copy(scene.entry).lerp(out.planePos, 0.45);
   // ... then chases it up, over and down onto the line
   const curve = scene.exit!;
   curve.getPointAt(Math.max(s - 0.05, 0), C);
   C.addScaledVector(UP, 1.6).addScaledVector(dirA, -1.5);
-  const chase = smooth(u, DETOUR.climb - 0.01, DETOUR.climb + 0.07);
+  const chase = smooth(u, DETOUR.climb, DETOUR.climb + 0.09);
   out.camPos.copy(A).lerp(C, chase);
   pB.copy(out.planePos).addScaledVector(dirA, 3);
   out.look.copy(B).lerp(pB, chase);

@@ -1321,8 +1321,12 @@ export class Engine {
     this.pinned.update(t, this.camera.position, this.idlePreset === null);
     // office detour: the dart's wake and the chapter title stay on the main line; in the office nothing else draws
     const detouring = this.rig.detour.weight > 0;
-    this.pinned.group.visible = !detouring;
     if (detouring) {
+      const keep = 1 - this.rig.detour.weight;
+      this.pinned.group.traverse((o) => {
+        const m = (o as Mesh).material as MeshBasicMaterial | undefined;
+        if (m && 'opacity' in m) m.opacity *= keep;
+      });
       this.trail.visible = false;
       this.airTrail.mesh.visible = false;
     }
