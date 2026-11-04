@@ -109,6 +109,70 @@ function oil(): CanvasTexture {
   }, 4242);
 }
 
+/** algae and moss collecting in a corner: clustered olive blotches, densest at the bottom-left */
+function moss(): CanvasTexture {
+  return canvasTexture(256, (ctx, rnd) => {
+    ctx.filter = 'blur(3px)';
+    for (let i = 0; i < 46; i++) {
+      const k = Math.pow(rnd(), 1.7);
+      const x = 30 + k * 150 + (rnd() - 0.5) * 50;
+      const y = 226 - k * 150 - (rnd() - 0.5) * 50;
+      const r = 6 + rnd() * 20;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const dark = rnd() < 0.5;
+      g.addColorStop(0, dark ? `rgba(46, 58, 28, ${0.45 + rnd() * 0.3})` : `rgba(78, 92, 44, ${0.3 + rnd() * 0.25})`);
+      g.addColorStop(1, 'rgba(60, 74, 34, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 256, 256);
+    }
+  }, 5151);
+}
+
+/** flaking paint: an irregular bare patch of grey primer with chips, edges lifted and dark */
+function peel(): CanvasTexture {
+  return canvasTexture(256, (ctx, rnd) => {
+    ctx.filter = 'blur(1.2px)';
+    for (let b = 0; b < 5; b++) {
+      const cx = 80 + rnd() * 96, cy = 60 + rnd() * 136;
+      ctx.beginPath();
+      const n = 9;
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const r = 18 + rnd() * 34;
+        const px = cx + Math.cos(a) * r * 0.8, py = cy + Math.sin(a) * r * 1.3;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(${108 + rnd() * 30}, ${100 + rnd() * 26}, ${88 + rnd() * 22}, ${0.55 + rnd() * 0.3})`;
+      ctx.fill();
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = 'rgba(28, 24, 20, 0.5)';
+      ctx.stroke();
+    }
+    for (let i = 0; i < 70; i++) {
+      ctx.fillStyle = `rgba(${200 + rnd() * 40}, ${196 + rnd() * 40}, ${186 + rnd() * 40}, ${0.4 + rnd() * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(60 + rnd() * 136, 40 + rnd() * 176, 1 + rnd() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, 6262);
+}
+
+/** two bands of rubber laid out of a garage: dark and broken, fading toward the street */
+function tyres(): CanvasTexture {
+  return canvasTexture(256, (ctx, rnd) => {
+    ctx.filter = 'blur(2px)';
+    for (const x0 of [92, 158]) {
+      for (let y = 0; y < 256; y += 4) {
+        const fade = Math.sin((y / 256) * Math.PI) * (0.4 + 0.6 * (1 - y / 256));
+        const sway = Math.sin(y * 0.03 + x0) * 5;
+        ctx.fillStyle = `rgba(14, 12, 11, ${fade * (0.12 + rnd() * 0.2)})`;
+        ctx.fillRect(x0 + sway - 9 + rnd() * 3, y, 18 - rnd() * 4, 5);
+      }
+    }
+  }, 7373);
+}
+
 interface Spec {
   texture: CanvasTexture;
   opacity: number;
@@ -125,6 +189,9 @@ export class HouseDecals {
     const streak = [0, 1, 2, 3].map((v) => ({ texture: streaks(v), opacity: 0.72 + v * 0.05, items: [] as Matrix4[] }));
     const foot: Spec = { texture: grime(), opacity: 0.72, items: [] };
     const drip: Spec = { texture: oil(), opacity: 0.55, items: [] };
+    const lichen: Spec = { texture: moss(), opacity: 0.85, items: [] };
+    const flake: Spec = { texture: peel(), opacity: 0.8, items: [] };
+    const rubber: Spec = { texture: tyres(), opacity: 0.7, items: [] };
 
     const tmpPos = new Vector3();
     const x = new Vector3();
@@ -147,6 +214,8 @@ export class HouseDecals {
       const list = anchors[lot.moduleId];
       if (!mod || mod.kind !== 'house' || !list) continue;
       const fit = Math.min(lot.w / mod.footprint[0], lot.d / mod.footprint[1], lot.h / (lot.rise ?? 1) / mod.height);
+      // every house its own upkeep: a scrubbed one is nearly clean, a neglected one stained, mossy, flaking
+      const dirt = rand();
       const c = Math.cos(lot.yaw);
       const s = Math.sin(lot.yaw);
       // Y rotation by `yaw`, as the house itself is placed
@@ -158,10 +227,26 @@ export class HouseDecals {
         const u = turn(ux, uz, new Vector3());
         if (kind === 'win') {
           // from just under the sill down the wall
-          const len = (0.8 + rand() * 0.9) * SCALE * fit;
-          const top = new Vector3(at.x, at.y - 0.1 * SCALE * fit - len / 2, at.z);
-          const v = Math.floor(rand() * 4);
-          streak[v]!.items.push(quad(top, u, n, w * fit * (1.15 + rand() * 0.3), len, 0.004));
+          if (rand() < 0.25 + 0.75 * dirt) {
+            const len = (0.6 + rand() * (0.5 + 1.2 * dirt)) * SCALE * fit;
+            const top = new Vector3(at.x, at.y - 0.1 * SCALE * fit - len / 2, at.z);
+            const v = Math.floor(rand() * 4);
+            streak[v]!.items.push(quad(top, u, n, w * fit * (1.1 + rand() * 0.4), len, 0.004));
+          }
+          const side = rand() < 0.5 ? -1 : 1;
+          if (dirt > 0.4 && rand() < dirt - 0.2) {
+            // algae in the lower corner of the sill
+            const m = (0.45 + rand() * 0.4) * SCALE * fit;
+            const p = new Vector3(at.x + u.x * side * w * fit * 0.38, at.y - m * 0.45, at.z + u.z * side * w * fit * 0.38);
+            lichen.items.push(quad(p, u.clone().multiplyScalar(-side), n, m * 1.6, m * 1.3, 0.005));
+          }
+          if (dirt > 0.55 && rand() < 0.4) {
+            // paint lifting off the wall beside the window
+            const m = (0.5 + rand() * 0.4) * SCALE * fit;
+            const off = w * fit * 0.5 + 0.28 * SCALE * fit;
+            const p = new Vector3(at.x + u.x * -side * off, at.y + h * fit * 0.45, at.z + u.z * -side * off);
+            flake.items.push(quad(p, u, n, m * 0.9, m * 1.5, 0.003));
+          }
         } else if (kind === 'gar') {
           const hgt = 0.7 * SCALE * fit;
           foot.items.push(quad(new Vector3(at.x, at.y + hgt / 2, at.z), u, n, w * fit * 1.04, hgt, -0.045 * SCALE * fit));
@@ -170,14 +255,21 @@ export class HouseDecals {
           const flat = new Matrix4().makeBasis(u.clone(), n.clone().multiplyScalar(-1), new Vector3().crossVectors(u, n.clone().multiplyScalar(-1)));
           flat.setPosition(at.x + n.x * ahead, 0.004, at.z + n.z * ahead);
           flat.multiply(scale.makeScale(2.4 * SCALE * fit * (0.9 + rand() * 0.3), 2.8 * SCALE * fit, 1));
-          drip.items.push(flat);
+          if (dirt > 0.3) drip.items.push(flat);
+          if (dirt > 0.2 && rand() < 0.8) {
+            const tyreAt = 3.4 * SCALE * fit;
+            const lay = new Matrix4().makeBasis(u.clone(), n.clone().multiplyScalar(-1), new Vector3().crossVectors(u, n.clone().multiplyScalar(-1)));
+            lay.setPosition(at.x + n.x * tyreAt, 0.0045, at.z + n.z * tyreAt);
+            lay.multiply(scale.makeScale(w * fit * 0.95, 6.4 * SCALE * fit, 1));
+            rubber.items.push(lay);
+          }
         }
       }
     }
 
     const geometry = new PlaneGeometry(1, 1);
     this.disposables.push(geometry);
-    for (const spec of [...streak, foot, drip]) {
+    for (const spec of [...streak, foot, drip, lichen, flake, rubber]) {
       if (!spec.items.length) {
         spec.texture.dispose();
         continue;

@@ -128,6 +128,13 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 
 **Weathering decals (HIGH tier).** On the houses the flight passes closest to (`rings.hero`), `actors/HouseDecals.ts` lays alpha-blended quads a few millimetres off the walls: rain streaks under every window sill, grime at the foot of each garage door and an oil stain on the drive. Where the windows and garages sit comes from the house DSL itself: `blender/make_anchors.py` rebuilds every home and writes `public/models/homes/anchors.json` (`[kind, x, y, z, nx, nz, ux, uz, w, h]` per row, in site units), and the decals place them with the same transform `KitCity` uses for the house. Rerun it whenever a house in `blender/bld/homes.py` changes.
 
+**Parallax and entropy (HIGH tier).** A tidy cell reads as a model, so the town is deliberately a little broken, and the broken parts are parallax-mapped so they hold depth as the camera moves:
+
+- *Parallax.* `materials/Lawns.ts` ray-marches the asphalt cracks (6 steps against a 5 cm groove depth, from the view ray in town units) and offsets the photo grain by its own height; `materials/Roofs.ts` offsets every roof course by its rise (the tab edges slide against the weathering) and the wall grain and stucco by theirs. The roof and wall frames come from screen-space derivatives (`rParaDir`), so no tangents are needed on instanced, rotated modules.
+- *Ground entropy.* Cracks in worn zones, squared repair patches with a sealed edge, oil and rubber stains, drifts of fallen leaves with single leaves up close, bare worn lawn and dead spots.
+- *House entropy.* Each house gets its own upkeep (`dirtK` in the wall shader, `dirt` in `HouseDecals.ts`): scrubbed ones stay clean; neglected ones get longer sill streaks, mildew at the foot of the wall, algae in sill corners, flaking paint beside windows, rubber and oil on the drive. Squared repainted patches sit a shade off the wall.
+- *Layout entropy.* `homeLots` nudges each house a few centimetres off its mark and a few tenths of a degree off true (a seventh visibly crooked) from a stream of its own, so no other house moves; `npm run bake:rings` after changing it.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens

@@ -251,6 +251,24 @@ float rLine(float x, float period, float w, float fw) {
   return 1.0 - smoothstep(w * 0.5, w * 0.5 + fw, d);
 }
 float rLum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+/**
+ * Parallax: how far (in uv units, uv in metres) the texel seen through a surface moves for each metre
+ * of depth below it, along the view ray. The surface's own frame comes from the screen-space derivatives
+ * of its position and uv, so it needs no tangents and works on instanced, rotated modules alike.
+ */
+vec2 rParaDir(vec2 uv, vec3 Nv) {
+  vec3 pos = -vViewPosition;
+  vec3 dp1 = dFdx(pos), dp2 = dFdy(pos);
+  vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, Nv), dp1perp = cross(Nv, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  float tt = dot(T, T), bb = dot(B, B);
+  if (tt < 1e-18 || bb < 1e-18) return vec2(0.0);
+  vec3 V = normalize(vViewPosition);
+  float vn = max(dot(V, Nv), 0.2);
+  return -vec2(dot(V, T) * inversesqrt(tt), dot(V, B) * inversesqrt(bb)) / vn;
+}
 // what the roof shader decided for this fragment, read again after the lighting inputs are set up
 float roofOn = 0.0;
 vec3 roofAlbedo = vec3(0.0);
@@ -304,6 +322,16 @@ const FRAG_COLOR = /* glsl */ `
       mossK = 0.4;
       rough = 0.85;
     } else {
+      #ifdef ROOF_FINE
+      if (style != 3) {
+        // parallax: every course climbs from its thick lower edge to the next course's, so the tab edges
+        // slide against the weathering as the camera moves (0.14 to 0.32 m courses, 2 cm deep)
+        float ch = style == 0 ? 0.142 : style == 1 ? 0.32 : style == 2 ? 0.18 : 0.25;
+        vec2 pdr = rParaDir(m, normalize((viewMatrix * vec4(wn, 0.0)).xyz));
+        m += pdr * fract(m.y / ch) * 0.02 * rVis(ch, fw);
+        fw = max(fwidth(m.x), fwidth(m.y));
+      }
+      #endif
       #ifdef ROOF_FINE
       if (style == 0) {
         // architectural shingle: tabs of 34 x 14 cm, half-staggered, each its own blend of granules
@@ -509,16 +537,39 @@ if (roofOn < 0.5) {
     vec2 w = vec2(pm.x + pm.z, pm.y);
     float px = max(fwidth(w.x), fwidth(w.y));
     vec2 lot = floor(vRoofL.xy * 4.0 + 0.5) * 0.25;
+    // every house its own upkeep: some scrubbed, some left to the weather
+    float dirtK = 0.3 + 1.5 * rHash(lot + 51.3);
     float grime = (1.0 - smoothstep(0.0, 0.5, w.y)) * (0.55 + 0.45 * rNoise(vec2(w.x * 2.3, 0.0) + lot));
-    diffuseColor.rgb *= 1.0 - 0.24 * grime;
+    diffuseColor.rgb *= 1.0 - 0.24 * grime * dirtK;
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.96, 0.92, 0.82), grime * 0.5);
     float streak = smoothstep(0.62, 0.92, rNoise(vec2(w.x * 3.1, w.y * 0.35) + lot * 2.0));
-    diffuseColor.rgb *= 1.0 - 0.07 * streak;
+    diffuseColor.rgb *= 1.0 - 0.07 * streak * dirtK;
+    // mildew creeping up the foot of the walls, in blotches rather than a line
+    float mildew = smoothstep(0.58, 0.86, rFbm(vec2(w.x * 1.3, w.y * 2.6) + lot * 1.9)) * (1.0 - smoothstep(0.1, 1.8, w.y)) * (dirtK - 0.5);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.74, 0.86, 0.7), clamp(mildew, 0.0, 1.0) * 0.7);
+    // a repainted or patched section here and there, squared off, a shade off the rest
+    vec2 pcell = floor(w / vec2(2.6, 2.2) + lot * 3.1);
+    float pk = rHash(pcell + 9.7);
+    if (pk < 0.1) {
+      vec2 pf = fract(w / vec2(2.6, 2.2) + lot * 3.1);
+      vec2 po = vec2(0.15 + 0.2 * rHash(pcell + 1.3), 0.15 + 0.25 * rHash(pcell + 2.9));
+      vec2 pe = vec2(0.45 + 0.4 * rHash(pcell + 4.1), 0.4 + 0.45 * rHash(pcell + 5.3));
+      float inP = step(po.x, pf.x) * step(po.y, pf.y) * step(pf.x, po.x + pe.x) * step(pf.y, po.y + pe.y);
+      diffuseColor.rgb *= mix(1.0, 0.9 + 0.22 * rHash(pcell + 6.1), inP);
+    }
     #ifdef WALL_PHOTO
     {
       // a photograph of dirty plaster tiled over the baked wall (a 1.3 m tile, two scales and a turn): the
       // fine grain and blotching the atlas cannot hold, as variation only, so the wall keeps its colour
-      vec2 dq = w / 1.3;
+      #ifdef ROOF_FINE
+      // parallax: the brighter the grain, the higher it stands; the seen texel slides with the view
+      vec2 pdw = rParaDir(w, normalize((viewMatrix * vec4(wn, 0.0)).xyz));
+      float hgt = dot(texture2D(uWallDetail, w / 1.3).rgb, vec3(0.3333));
+      vec2 wp = w + pdw * (1.0 - hgt) * 0.03;
+      #else
+      vec2 wp = w;
+      #endif
+      vec2 dq = wp / 1.3;
       vec3 p1 = texture2D(uWallDetail, dq).rgb;
       vec3 p2 = texture2D(uWallDetail, vec2(dq.y, -dq.x) * 0.43 + 0.21).rgb;
       diffuseColor.rgb *= mix(vec3(1.0), mix(p1, p2, 0.4) * 2.0, 0.55);
@@ -541,6 +592,10 @@ if (roofOn < 0.5) {
       float vis = 1.0 - smoothstep(0.012, 0.035, px);
       if (vis > 0.0) {
         vec2 q = w * 14.0;
+        {
+          vec2 pds = rParaDir(w, normalize((viewMatrix * vec4(wn, 0.0)).xyz));
+          q = (w + pds * (1.0 - rNoise(q)) * 0.012) * 14.0;
+        }
         float e = 0.3;
         float h0 = rNoise(q);
         wallGrad += vec2(rNoise(q + vec2(e, 0.0)) - h0, rNoise(q + vec2(0.0, e)) - h0) * 0.9 * vis * stucco;
