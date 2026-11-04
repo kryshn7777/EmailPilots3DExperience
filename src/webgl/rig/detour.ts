@@ -85,7 +85,9 @@ export function flareAt(u: number): number {
     return Math.exp(-(d / s) * (d / s));
   };
   if (u <= 0 || u >= 1) return 0;
-  return Math.max(bump(DETOUR.cutIn, 0.016, 0.022), bump(DETOUR.cutOut, 0.016, 0.022));
+  // the tails are cut off (a faint veil over the dark office read as fog)
+  const f = Math.max(bump(DETOUR.cutIn, 0.014, 0.016), bump(DETOUR.cutOut, 0.014, 0.016));
+  return Math.max(0, (f - 0.04) / 0.96);
 }
 
 /**

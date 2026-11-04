@@ -581,7 +581,7 @@ export class Office {
         const c = g.boundingBox!.getCenter(new Vector3());
         this.screenCentre.copy(c);
         if (this.stage) this.stage.screen.copy(c);
-        this.screenLight.position.set(c.x, c.y + 0.05, c.z - 0.28);
+        this.screenLight.position.set(c.x, c.y + 0.12, c.z - 0.34);
         this.group.add(screen);
       }
       requestCompile(this.group);
@@ -765,7 +765,7 @@ export class Office {
       this.screenMaterial.map = this.screenMaterial.emissiveMap = this.screens[want];
     }
     this.screenMaterial.emissiveIntensity = IDLE_GLOW + arrive * 0.5 + done * 0.35 + flash * 2.2;
-    this.screenLight.intensity = 0.6 + arrive * 1.6 + done * 1.0 + flash * 4;
+    this.screenLight.intensity = 0.45 + arrive * 0.8 + done * 0.35 + flash * 2.5;
 
     // the card, pinned to the screen
     this.screenWorld.copy(stage.screen).multiplyScalar(ROOM_K).add(stage.origin);

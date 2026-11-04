@@ -82,8 +82,8 @@ const PLANE_KEYS: Key[] = [
 
 /** the camera in the office */
 const CAM_KEYS: Key[] = [
-  { u: 0.08, p: [-1.25, 2.12, 0.32] },
-  { u: 0.16, p: [-1.15, 2.08, 0.5] },
+  { u: 0.08, p: [-1.45, 2.15, 0.12] },
+  { u: 0.16, p: [-1.35, 2.05, 0.4] },
   { u: 0.24, p: [-1.75, 1.66, 1.2] },
   { u: 0.32, p: [-2.45, 1.3, 1.85] },
   { u: 0.4, p: [-2.8, 1.12, 2.3] },
@@ -251,7 +251,7 @@ function outbound(scene: DetourScene, u: number, out: Vector3, dir: Vector3): nu
   const k = MathUtils.clamp((u - DETOUR.cutOut) / (1 - DETOUR.cutOut), 0, 1);
   const len = curve.getLength();
   const span = 1 - DETOUR.cutOut;
-  const a = MathUtils.clamp((40 * span) / len, 0.05, 2.5);
+  const a = MathUtils.clamp((110 * span) / len, 0.05, 2.5);
   const b = MathUtils.clamp((43 * span) / len, 0.05, 2.5);
   const k2 = k * k;
   const k3 = k2 * k;
