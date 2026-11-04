@@ -142,6 +142,16 @@ function shipPlace(t: number, out: Vector3): Vector3 {
   return out.set(Math.cos(a) * r, 0, Math.sin(a) * r);
 }
 
+// --- BatchFleet ---
+/** where a batch dart can land on the freighter (model metres, bow +x, y up): two container stacks and the forward bay's */
+export const SHIP_DECK_SPOTS: readonly (readonly [number, number, number])[] = [
+  [-21.8, 22.0, 0],
+  [29.9, 19.5, 0],
+  [55.6, 16.9, 0],
+];
+const SHIP_DECK_SCRATCH = new Vector3();
+// --- end BatchFleet ---
+
 /** extra scroll the sea holds before it starts letting go — see `reveal` */
 const SEA_FADE_DELAY = 0.012;
 /** seconds for the lamp to come full circle */
@@ -745,6 +755,22 @@ varying vec3 vBeamWorld;
     this.disposables.push(wakeGeometry, wakeMaterial);
     this.group.add(this.ship);
   }
+
+  // --- BatchFleet: where on the freighter a batch dart lands ---
+  /**
+   * World position of `spot` (the model's metres: bow +x, y up, see SHIP_DECK_SPOTS) on the freighter
+   * at story-t `t`: its place and heading on SHIP_TRACK, without the swell (pure in t).
+   */
+  shipDeckAt(t: number, spot: readonly [number, number, number], out: Vector3): Vector3 {
+    const ahead = shipPlace(t + 0.002, SHIP_DECK_SCRATCH);
+    shipPlace(t, out);
+    const h = Math.atan2(-(ahead.z - out.z), ahead.x - out.x);
+    const [x, y, z] = spot;
+    return out.add(this.group.position).add(SHIP_DECK_SCRATCH.set(
+      (x * Math.cos(h) + z * Math.sin(h)) * SHIP_SCALE, SHIP_Y + y * SHIP_SCALE, (-x * Math.sin(h) + z * Math.cos(h)) * SHIP_SCALE,
+    ));
+  }
+  // --- end BatchFleet ---
 
   /** Makes the sea reflect the sky the chapter is wearing, colour for colour. */
   /** world position of the lamp: where the dart is delivered */

@@ -78,6 +78,9 @@ import { Flock } from './actors/Flock';
 import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
 import { BatchSend } from './actors/BatchSend';
+// --- BatchFleet ---
+import { BatchFleet } from './actors/BatchFleet';
+// --- end BatchFleet ---
 import { liveLaptopScreen } from './actors/LaptopScreen';
 import { HERO_RELEASE, STAGE, launchPulse, planeScale } from './rig/launch';
 import { CameraRig } from './rig/CameraRig';
@@ -163,6 +166,9 @@ export class Engine {
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
   private batch: BatchSend;
+  // --- BatchFleet ---
+  private fleet: BatchFleet;
+  // --- end BatchFleet ---
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
   /** forked bolts that descend through the storm and the lighthouse's sky (none under reduced motion) */
@@ -340,6 +346,10 @@ export class Engine {
     this.traffic = new Traffic(this.path);
     this.batch = new BatchSend(this.path, { low: this.quality.tier === 'low', calm: this.options.reducedMotion });
     this.flock = new Flock(rand);
+    // --- BatchFleet ---
+    this.fleet = new BatchFleet(this.path, this.quality, this.beacon, this.city);
+    this.scene.add(this.fleet.group);
+    // --- end BatchFleet ---
 
     this.scene.add(
       this.plane.group,
@@ -1088,6 +1098,9 @@ export class Engine {
     }
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position, this.camera);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
+    // --- BatchFleet ---
+    this.fleet.update(this.idlePreset ? 1 : t, this.rooftops.sites, this.camera.aspect);
+    // --- end BatchFleet ---
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) {
@@ -1149,7 +1162,9 @@ export class Engine {
     this.camera.updateMatrixWorld();
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
-    this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
+    // --- BatchFleet: the card counts the whole batch (was this.batch.state(t)) ---
+    this.batchHud.update(this.fleet.state(t, this.batch.state(t), this.camera.aspect), this.camera, !this.idlePreset && !this.warming);
+    // --- end BatchFleet ---
     this.city.update(t, time, this.rig.planeWorldPos);
     this.copilot.update(
       this.rig.planeWorldPos,
@@ -1204,6 +1219,7 @@ export class Engine {
     return [
       this.plane.group, this.trail.line, this.airTrail.mesh, this.flock.group, this.launchString.line,
       this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
+      this.fleet.group, // BatchFleet
     ];
   }
 
@@ -1351,6 +1367,7 @@ export class Engine {
     this.beacon.dispose();
     this.wingPlanes.dispose();
     this.batch.dispose();
+    this.fleet.dispose(); // BatchFleet
     this.traffic.dispose();
     this.city.dispose();
     this.copilot.dispose();

@@ -1219,6 +1219,25 @@ export class Pedestrians {
     out.z += sz!;
   }
 
+  // --- BatchFleet: people standing with a phone, for the batch's phone deliveries ---
+  /**
+   * The people standing still and reading a phone (`mood: 'phone'`), in this crowd's frame: where the
+   * phone is (about chest high, a hand's length in front of them: 0.62 units up for a city figure)
+   * and which way they face. `any` widens it to everyone standing. Empty until the figures load.
+   */
+  phoneHolders(any = false): { x: number; y: number; z: number; yaw: number }[] {
+    if (!this.ready) return [];
+    const out: { x: number; y: number; z: number; yaw: number }[] = [];
+    for (const b of this.bodies) {
+      const v = this.variants[b.variant];
+      if (b.moving || !v || v.kind !== 'person' || (!any && b.pose[2] !== 2)) continue;
+      const reach = 0.1 * v.height * b.scale;
+      out.push({ x: b.x + Math.cos(b.yaw) * reach, y: 0.78 * v.height * b.scale, z: b.z - Math.sin(b.yaw) * reach, yaw: b.yaw });
+    }
+    return out;
+  }
+  // --- end BatchFleet ---
+
   dispose(): void {
     for (const d of this.disposables) d.dispose();
   }
