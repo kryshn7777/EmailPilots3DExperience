@@ -76,7 +76,7 @@ const REACH: Record<Kind, number> = {
   'barrel': MEDIUM, 'crate': MEDIUM, 'compost-bags': MEDIUM, 'planter': MEDIUM, 'stepladder': MEDIUM, 'stump': MEDIUM,
   'mailbox-post': MEDIUM, 'mailbox-brick': MEDIUM, 'mailbox-white': MEDIUM, 'utility-box': MEDIUM, 'dish': MEDIUM,
   'ladder': LARGE, 'car-cover': LARGE, 'hot-tub': LARGE, 'picnic': LARGE, 'firepit': LARGE, 'clothesline': LARGE,
-  'hoop': LARGE, 'slide': LARGE, 'kayak': LARGE, 'power-pole': 110,
+  'hoop': LARGE, 'slide': LARGE, 'kayak': LARGE, 'power-pole': 84,
 };
 /** what phones draw (lean meshes, about 60% of the reach): what reads from a phone at the flight's speed */
 const LOW_KINDS = new Set<Kind>([
@@ -319,14 +319,14 @@ export class YardClutter {
         } else if (roll < 0.5) {
           const p = spot(0.1, us, vs, o);
           if (p) put('scooter', p[0], p[1], spin(), between(0.9, 1.1), pick(BIKES), 0.1, { rx: Math.PI / 2 - 0.15 });
-        } else if (roll < 0.82) {
+        } else if (roll < 0.92) {
           const kind = pick(['ball', 'soccer-ball', 'soccer-ball', 'football']);
           const p = spot(0.04, us, vs, o);
           if (p) put(kind, p[0], p[1], spin(), between(0.9, 1.1), kind === 'ball' ? pick(['#ffffff', '#ffd0c8', '#c8e0ff']) : wear(R), 0.04,
             kind === 'football' ? { rz: Math.PI / 2 } : {});
         } else {
           const p = spot(0.07, us, vs, o);
-          if (p) put('toy-truck', p[0], p[1], spin(), between(0.9, 1.1), wear(R), 0.07, tilt(0.2));
+          if (p) put('toy-truck', p[0], p[1], spin(), between(0.6, 0.75), wear(R), 0.05, tilt(0.2));
         }
       }
       if (L.drive && chance(0.6)) {
@@ -456,7 +456,7 @@ export class YardClutter {
       if (p) put('slide', p[0], p[1], spin(), between(0.9, 1.05), pick(SLIDES), 0.3, tilt(0.02));
       for (let k = 0; k < Math.floor(R() * 3); k++) {
         const q = spot(0.05, [-2.8, 2.8], back);
-        if (q) put(pick(['ball', 'soccer-ball', 'toy-truck', 'football']), q[0], q[1], spin(), between(0.9, 1.1), wear(R), 0.05,
+        if (q) put(pick(['ball', 'soccer-ball', 'soccer-ball', 'football']), q[0], q[1], spin(), between(0.9, 1.1), wear(R), 0.05,
           tilt(0.1));
       }
       if (peopleNear && chance(0.45)) {
