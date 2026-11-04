@@ -1,0 +1,172 @@
+{
+  "file": "office-props.glb",
+  "units": "metres; Y up; each node faces +Z, origin at the floor-centre of its footprint",
+  "atlas": {
+    "color": [
+      2048,
+      2048
+    ],
+    "orm": [
+      2048,
+      2048
+    ],
+    "normal": [
+      2048,
+      2048
+    ]
+  },
+  "nodes": [
+    {
+      "name": "desk_pod",
+      "size": [
+        1.6,
+        1.201,
+        0.818
+      ],
+      "emissive": [
+        "led",
+        "screen"
+      ],
+      "tris": 3043
+    },
+    {
+      "name": "monitor_24",
+      "size": [
+        0.544,
+        0.443,
+        0.2
+      ],
+      "emissive": [
+        "led",
+        "screen"
+      ],
+      "tris": 356
+    },
+    {
+      "name": "chair_office",
+      "size": [
+        0.689,
+        1.158,
+        0.714
+      ],
+      "emissive": [],
+      "tris": 2365
+    },
+    {
+      "name": "rack_42u",
+      "size": [
+        1.07,
+        2.05,
+        1.381
+      ],
+      "emissive": [
+        "led"
+      ],
+      "tris": 12266
+    },
+    {
+      "name": "cable_tray",
+      "size": [
+        2.005,
+        0.121,
+        0.42
+      ],
+      "emissive": [],
+      "tris": 3883
+    },
+    {
+      "name": "it_bench",
+      "size": [
+        1.8,
+        1.8,
+        0.773
+      ],
+      "emissive": [
+        "led"
+      ],
+      "tris": 4050
+    },
+    {
+      "name": "desk_lamp",
+      "size": [
+        0.18,
+        0.42,
+        0.569
+      ],
+      "emissive": [
+        "bulb"
+      ],
+      "tris": 1224
+    },
+    {
+      "name": "ceiling_light_panel",
+      "size": [
+        0.595,
+        0.057,
+        0.595
+      ],
+      "emissive": [
+        "panel"
+      ],
+      "tris": 210
+    },
+    {
+      "name": "filing_cabinet",
+      "size": [
+        0.471,
+        1.38,
+        0.642
+      ],
+      "emissive": [],
+      "tris": 466
+    },
+    {
+      "name": "whiteboard",
+      "size": [
+        1.214,
+        0.957,
+        0.096
+      ],
+      "emissive": [],
+      "tris": 573,
+      "canvas": [
+        "board"
+      ]
+    },
+    {
+      "name": "printer",
+      "size": [
+        0.592,
+        1.136,
+        0.679
+      ],
+      "emissive": [
+        "led"
+      ],
+      "tris": 920
+    },
+    {
+      "name": "plant_pot",
+      "size": [
+        0.822,
+        1.446,
+        0.729
+      ],
+      "emissive": [],
+      "tris": 5228
+    },
+    {
+      "name": "coffee_station",
+      "size": [
+        1.22,
+        1.3,
+        0.641
+      ],
+      "emissive": [
+        "led"
+      ],
+      "tris": 2621
+    }
+  ],
+  "tris": 37205
+}
