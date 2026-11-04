@@ -1,4 +1,4 @@
-// Compresses the buildings', trees', biplane's, ship's and cars' GLBs in place (public/models/city-kit, public/models/homes, public/models/ship, public/models/cars,
+// Compresses the buildings', trees', biplane's, ship's, cars' and yard props' GLBs in place (public/models/city-kit, public/models/homes, public/models/ship, public/models/cars, public/models/yard-props,
 // public/models/biplane):
 // welds identical vertices, quantizes them (KHR_mesh_quantization) and packs the buffers with
 // meshopt (EXT_meshopt_compression), which KitCity decodes with three's MeshoptDecoder.
@@ -17,7 +17,8 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
-const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars'];
+const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars',
+  'public/models/yard-props'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
