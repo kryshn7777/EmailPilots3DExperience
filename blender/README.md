@@ -12,7 +12,8 @@ npm run build:ground                             # the repeating street/lawn cel
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
 python blender/make_cars.py && npm run compress:models   # the nine road vehicles (six family cars, three supercars): lean, mid and hero tiers and the hero maps
-python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
+python blender/fetch_humans.py && python blender/make_humans.py && npm run compress:models
+                                                 # the pedestrians (MakeHuman, CC0) and the dog (see People)
 python blender/fetch_city_props.py && python blender/make_city_props.py && npm run compress:models
                                                  # the night city's street and roof props, one shared atlas
                                                  # (Poly Haven CC0 scans + bld/city_props.py; --render DIR: a contact sheet)
@@ -226,30 +227,69 @@ paint, glass and close-up detail.
 
 ## People
 
-`make_people.py` writes `public/models/people/people.glb` (one mesh per variant, 461 KB in all)
-and its `manifest.json`; the figures are built in `bld/people.py`, the runtime is
-`src/webgl/actors/Pedestrians.ts` (where people go: `PedestrianPlans.ts`).
+The pedestrians are MakeHuman people. `fetch_humans.py` fetches MPFB2 (the MakeHuman add-on for
+Blender; its data, the base mesh, targets, rigs and weights, are CC0) and the MakeHuman system
+assets (CC0: skins, eyes, brows, lashes, hair, clothes, shoes) into `blender/cache/makehuman/`;
+`make_humans.py` builds ten people with them in headless Blender and writes
+`public/models/people/` (`humans.glb`, the atlas and `manifest.json`; sources and licences in
+`public/models/people/CREDITS.md`); `render_humans.py DIR` renders the evidence (the source against
+the shipped tiers, and a contact sheet). The runtime is `src/webgl/actors/Pedestrians.ts` (where
+people go: `PedestrianPlans.ts`).
 
-| variant | tris (with every option) | what |
+```sh
+python blender/fetch_humans.py
+python blender/make_humans.py            # ~5 min a person (Cycles bakes on the CPU); --only ethan,mei rebuilds some
+node scripts/compress-models.mjs         # meshopt (positions folded back to floats at load)
+python blender/render_humans.py /tmp/people
+```
+
+| person | who | wears |
 | --- | --- | --- |
-| `man-casual` | 1.92k (2.38k) | tee with short sleeves, jeans, sneakers; cap, backpack, cross-body bag, beard |
-| `man-jacket` | 1.89k (2.44k) | jacket over a shirt (open collar), trousers, shoes; beanie, bag, backpack, beard, scarf |
-| `man-coat` | 2.13k (2.59k) | knee-length coat with a stand-up collar and swinging tails; beanie, scarf, bag, beard |
-| `woman-dress` | 2.12k (2.57k) | blouse and A-line skirt (a dress when both take one colour), bare legs or tights, flats; ponytail, bun, long hair, bag, scarf |
-| `woman-casual` | 1.95k (2.59k) | three-quarter sleeves, trousers, sneakers; ponytail, bun, long hair, bag, backpack, beanie |
-| `woman-coat` | 2.16k (2.79k) | coat, tights, boots; ponytail, bun, long hair, beanie, scarf, bag |
-| `child` | 1.98k (2.35k) | about eight: bigger head, tee and shorts; cap, backpack, ponytail |
-| `jogger` | 1.98k (2.26k) | lean build, tee, running shorts, sneakers; cap, ponytail |
-| `dog` | 0.99k | a medium dog: two-part legs, floppy ears, collar, tail |
+| `ethan` | man, 29, light skin, athletic | field jacket over a striped shirt, jeans, brown leather shoes |
+| `marcus` | man, 52, dark skin, heavier | suit, black shoes |
+| `mei` | woman, 24, East Asian, slight | tee, jeans, white sneakers, bob |
+| `claire` | woman, 41, light skin | blouse and pencil skirt, boots, long hair |
+| `kwame` | man, 23, dark skin, tall | tee, jeans, sneakers, afro |
+| `rosa` | woman, 67, olive skin, heavier, short | blouse and skirt, flats, grey bob |
+| `hiro` | man, 71, East Asian, slight | plaid shirt, jeans, leather shoes, grey hair |
+| `amara` | woman, 32, dark skin | tee, jeans, boots, braid |
+| `omar` | man, 44, mixed, heavier | field jacket, jeans, shoes |
+| `sophie` | woman, 19, fair and freckled, red hair | sports top and leggings, sneakers, ponytail (the joggers) |
 
-A figure is closed tubes lofted round a skeleton (torso through superellipse sections, limbs along
-their bones with knee, calf and forearm bulges, mitten hands with a thumb, a head shaped ring by
-ring with a nose, ears, eyes and brows, a hair shell, lofted shoes with a sole band), in metres,
-facing +x, exported at `SCALE`. The parts only overlap, never join, so a limb turns about its joint
-without tearing. Clothes are mostly regions of those surfaces (a sleeve is the top of the arm tube,
-a little looser, ending in a hem: two rings at one height, so the hem is a lip and the colour edge
-is crisp); skirts and coat tails are open lofts hanging from the waist. Hats, bags, backpacks,
-scarves, beards and the longer hair styles are options: always in the mesh, drawn per person.
+How a person is made (`bld/humans.py`):
+
+- **Body.** MPFB's `HumanService.create_human` with the macro targets (sex, age, weight, muscle,
+  height, proportions, ethnicity mix) plus a few face targets of the person's own (nose, chin,
+  cheekbones, brows, lips, ears). Eyes, eyebrows, eyelashes, hair, clothes and shoes are MakeHuman
+  proxies, fitted by MPFB (each proxy vertex is bound to three base-mesh vertices) and they delete
+  the skin they cover.
+- **Pose.** MPFB's game-engine rig puts the arms down from the A pose (palms in, fingers loosely
+  curled); the armature is applied and the rig dropped. Its weights become the shader rig's one bone
+  and weight a vertex (`rig_attrs`: the deepest bone b holding at least 15% of the vertex, at
+  S(b) / S(parent), S being the weight of a bone and everything below it; the neck is shared
+  between head and chest, the hands and fingers go with the forearm).
+- **Materials (the bake source).** Principled materials over the MakeHuman UVs: the MakeHuman
+  diffuse, normal and AO maps, plus a procedural layer: skin pores and fine bumps, blotches and a
+  warm flush, freckles (`sophie`), cloth weave and wear, varied roughness; glossy eyes; alpha-cut
+  hair, brows and lashes.
+- **Tiers.** The source (29k-35k triangles) is collapse-decimated to the **hero** mesh (19k; within
+  6 units of the camera on HIGH, at most six a person) and again to the **lean** one (2.6k; everyone
+  else, and all of them on phones), the lean one losing the lashes. Both keep the `atlas` UVs.
+- **Atlas.** A second UV map, `atlas`: MakeHuman's islands at an even texel density, the face
+  enlarged x2.6, hands x1.6, eyes x3, packed into the person's 1024 tile of a 4096 x 3072 atlas.
+  Cycles bakes from the source UVs onto it on the same mesh (no rays between meshes): albedo,
+  alpha, roughness, occlusion (irradiance under a white sky, two bounces, hair letting light
+  through) and tangent normals. Tinted regions are stored normalised to a mean of 0.5, so the
+  runtime's per-person colour times two is the colour and every crowd member has their own
+  skin tone (near the person's own), hair colour and clothes; eyes keep their own colour.
+  `atlas-color.webp` (RGB + alpha), `atlas-orm.webp` (R occlusion, G roughness),
+  `atlas-normal.webp`; `*-low.webp` are a quarter size, for phones (which skip the normal map).
+
+Sizes after meshopt: `humans.glb` (lean + dog) 285 KB, `humans-hero.glb` 1.3 MB (HIGH only); the
+atlas 2.6 MB colour, 1.1 MB ORM, 0.9 MB normal (HIGH), 0.6 MB in all at a quarter (LOW). At the
+canyon's street-level view (t 0.7, `?probe`) the city crowd draws 158 people in 13 draws and 542k
+triangles on HIGH (8 of them hero; the lofted figures were 6 draws, 389k) and 68 in 9 draws and
+177k on LOW (175k before).
 
 Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
 
@@ -258,13 +298,15 @@ Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
 | 0 | `bone * 16 + region`. Bones (`B_*`): root (pelvis), chest, head, upper arm and forearm each side, thigh, shin and foot each side, skirt, bag (the dog uses the limb slots for its legs, and tail). Regions (`R_*`): skin, hair, top, bottom, shoes, accessory, under (a shirt under a jacket, tights) take per-instance colours; dark (soles, eyes) and light (sneaker soles) are fixed |
 | 1 | option: 0 is always drawn, k only when bit k-1 of the instance's option mask is set (`options` in the manifest is the bit order) |
 | 2 | weight x 255: how much of its own bone's turn the vertex takes (half at a knee or elbow ring so the joint bends; a skirt hem takes some of its side's thigh swing) |
-| 3 | occlusion x 255: ambient occlusion baked by casting rays against the body |
+| 3 | occlusion x 255: ambient occlusion baked by casting rays against the body (255 for the MakeHuman people, whose occlusion is in the atlas) |
 
-Normals are signed bytes (`KHR_mesh_quantization`); positions stay floats. The manifest carries each
+Normals are signed bytes (`KHR_mesh_quantization`), the people's atlas UVs 16-bit (14 after meshopt). The manifest carries each
 variant's rig in glTF frame and site units: a pivot per bone, thigh and shin length, the heel and
 toe from the ankle, and the right palm (where a leash is held).
 
-`Pedestrians.ts` draws one `InstancedMesh` per variant and poses every vertex in the shader, turning
+`Pedestrians.ts` draws one `InstancedMesh` per variant and tier (the hero tier only while someone of
+that person is near the camera, with hysteresis; whoever it draws is folded to a point in the lean
+mesh) and poses every vertex in the shader, turning
 it about its joint and every joint above it (no skinning data). The legs are solved: the stance
 foot's ankle slides back under the hip at a constant speed, a two-bone solve gives the thigh angle
 for the knee's flex, the foot rolls heel, flat, toe, and the pelvis drops until the lower foot is
@@ -291,7 +333,8 @@ bld/
   hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
   bark.py           periodic procedural bark strips and their normal maps
   cars.py           road vehicles: the lean lofted shells (`build`) and the close-up models (`build_hi`)
-  people.py         pedestrians and a dog: lofted figures, clothing regions, options, the rig attribute
+  people.py         the dog (and the former lofted pedestrians): figures, regions, options, the rig attribute
+  humans.py         the MakeHuman pedestrians: MPFB build, pose, rig attributes, atlas UVs, bakes, tiers
   lighthouse.py, lh_geo.py, lh_tex.py   the lighthouse, its builders and its maps
   archetypes.py     the eight towers and four blocks
   model.py          the low/high pair, UV assignment, bake proxies, the hero mesh and its glass

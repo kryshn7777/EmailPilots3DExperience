@@ -1,5 +1,5 @@
-// Compresses the buildings', trees', biplane's, ship's, cars', props' and office GLBs in place (public/models/city-kit, homes, ship, cars,
-// biplane, city-props, yard-props, office):
+// Compresses the buildings', trees', biplane's, ship's, cars', props', office and people GLBs in place (public/models/city-kit, homes, ship,
+// cars, biplane, airliner, city-props, yard-props, office, people):
 // welds identical vertices, quantizes them (KHR_mesh_quantization) and packs the buffers with
 // meshopt (EXT_meshopt_compression), which KitCity decodes with three's MeshoptDecoder.
 //
@@ -18,7 +18,7 @@ import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
 const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars',
-  'public/models/city-props', 'public/models/yard-props', 'public/models/office'];
+  'public/models/city-props', 'public/models/yard-props', 'public/models/office', 'public/models/people'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
@@ -41,9 +41,11 @@ for (const dir of DIRS) {
     // the cars' clear-coated paint mirrors the street, so its normals keep 12 bits (16-bit storage):
     // the default 8 bits band the reflections on a smooth body
     // the office props sample one 2048 px atlas: their UVs keep 14 bits (12 can shift a texel) and
-    // their normals and tangents 10, for the smooth plastics and the baked normal map
+    // their normals and tangents 10, for the smooth plastics and the baked normal map; the people's atlas
+    // (4096) keeps 14 bits too (a quarter texel) and their normals 10
     const extra = dir.endsWith('/cars') ? { quantizeNormal: 12 }
-      : dir.endsWith('/office') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
+      : dir.endsWith('/office') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
+      : dir.endsWith('/people') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
     await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high', ...extra }));
     await io.write(path, doc);
     const size1 = statSync(path).size;
