@@ -23,6 +23,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { glowTexture } from '../bake/CanvasTextures';
+import { lampField } from '../materials/Streets';
 import type { Tier } from '../quality';
 import { LAMP_CASTER_LAYER } from '../layers';
 
@@ -58,6 +59,12 @@ function rod(a: Vector3, b: Vector3, r: number): BufferGeometry {
  * whole district costs three draw calls and a halo layer. The lamps dim with the
  * daylight: lit under the window at night, cold glass by the morning.
  */
+/** where a lamp's head hangs (x, z in the lamps' group) and how high: for surfaces that light themselves from it */
+export function lampHead(lamp: Lamp, scale: number): [number, number] {
+  return [lamp.x + Math.sin(lamp.yaw) * REACH * scale, lamp.z + Math.cos(lamp.yaw) * REACH * scale];
+}
+export const lampHeadY = (scale: number): number => (HEAD_Y - 0.02) * scale;
+
 export class Streetlights {
   readonly group = new Group();
   private lens: MeshBasicMaterial;
@@ -69,6 +76,7 @@ export class Streetlights {
    * furniture, the posts themselves), the rest plain point lights
    */
   private pool: (PointLight | SpotLight)[] = [];
+  private gain = 1;
   private spots: { x: number; z: number }[] = [];
   private reach = 0;
   private scale = 1;
@@ -80,8 +88,13 @@ export class Streetlights {
     return this.spots;
   }
 
-  constructor(lamps: Lamp[], tier: Tier, scale = 1) {
+  /**
+   * `soft`: lamps lit physically, not as a disc: inverse-square falloff and a spot that spreads to the horizon
+   * with no edge, so the pool under a head is bright at the centre with a long tail (the night city's streets).
+   */
+  constructor(lamps: Lamp[], tier: Tier, scale = 1, soft = false) {
     this.scale = scale;
+    this.gain = soft ? 2.4 : 1;
     const parts: BufferGeometry[] = [];
     parts.push(new CylinderGeometry(0.06, 0.075, 0.12, 8).translate(0, 0.06, 0));
     parts.push(new CylinderGeometry(0.024, 0.04, POLE, 8).translate(0, POLE / 2 + 0.1, 0));
@@ -144,7 +157,7 @@ export class Streetlights {
         if (i < SHADOW_SPOTS) {
           // a downlight with a shadow: the cars, people and posts under the nearest lamps throw
           // shadows across the road that swing as they pass, the way a real streetlight's do
-          const spot = new SpotLight('#ffbd78', this.reach * 1.6, 9 * scale, Math.PI * 0.36, 0.65, 1.5);
+          const spot = new SpotLight('#ffbd78', this.reach * 1.6 * this.gain, 9 * scale, soft ? Math.PI * 0.5 : Math.PI * 0.36, soft ? 1 : 0.65, soft ? 2 : 1.5);
           spot.castShadow = true;
           spot.shadow.mapSize.set(512, 512);
           spot.shadow.bias = -0.0008;
@@ -157,7 +170,7 @@ export class Streetlights {
           this.pool.push(spot);
           continue;
         }
-        const light = new PointLight('#ffbd78', this.reach, 9 * scale, 1.5);
+        const light = new PointLight('#ffbd78', this.reach * this.gain, 9 * scale, soft ? 2 : 1.5);
         this.pool.push(light);
         this.group.add(light);
       }
@@ -239,9 +252,10 @@ export class Streetlights {
 
   /** 0 in full daylight, 1 at night: the lenses, halos and cones follow it */
   setLevel(level: number): void {
+    lampField.level.value = level;
     for (const l of this.pool) {
       const spot = (l as SpotLight).isSpotLight;
-      l.intensity = this.reach * level * (spot ? 1.6 : 1);
+      l.intensity = this.reach * this.gain * level * (spot ? 1.6 : 1);
       // a lamp that is out casts nothing: its shadow map stops being redrawn (switching the shadow
       // off instead would change every lit material's program)
       if (spot) {

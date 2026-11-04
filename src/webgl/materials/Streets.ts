@@ -1,5 +1,5 @@
 import type { MeshStandardMaterial, Texture, WebGLProgramParametersWithUniforms } from 'three';
-import type { Vector3 } from 'three';
+import { Vector2, Vector3, Vector4 } from 'three';
 import { METRES_PER_UNIT, NOISE } from './glsl';
 
 /**
@@ -15,6 +15,23 @@ import { METRES_PER_UNIT, NOISE } from './glsl';
  * Phones keep the stains, oil and puddles (a few noise calls); HIGH adds the cracks, grain and relief.
  * `origin` is the city group's position: the canyon road runs along x with its centre line at z = 0.
  */
+/**
+ * The canyon's streetlamps as the road sees them: head positions (x, z in the city group), laid out in
+ * columns on a regular pitch, two to a column (one a side), so a pixel only has to ask the three nearest
+ * columns. City.ts fills it; Streetlights.setLevel dims it with the lamps.
+ */
+const MAX_LAMPS = 32;
+export const lampField = {
+  level: { value: 1 },
+  heads: { value: Array.from({ length: MAX_LAMPS }, () => new Vector2(1e5, 1e5)) },
+  /** x of the first column, pitch, columns, head height (city units) */
+  info: { value: new Vector4(0, 6.4, 0, 1.4) },
+};
+export function setLampField(heads: [number, number][], x0: number, pitch: number, headY: number): void {
+  heads.slice(0, MAX_LAMPS).forEach(([x, z], i) => lampField.heads.value[i]!.set(x, z));
+  lampField.info.value.set(x0, pitch, Math.floor(Math.min(heads.length, MAX_LAMPS) / 2), headY);
+}
+
 export interface StreetOptions {
   kind: 'road' | 'paving';
   origin: Vector3;
@@ -22,6 +39,8 @@ export interface StreetOptions {
   /** photographs of asphalt / pavement, variation about their mean (public/models/homes/detail-*.webp) */
   asphalt?: Texture;
   concrete?: Texture;
+  /** light the surface from the streetlamps in `lampField` (strength; the lamps' colour is warm sodium) */
+  lamps?: number;
 }
 
 export function applyStreets(material: MeshStandardMaterial, o: StreetOptions): void {
@@ -33,18 +52,58 @@ export function applyStreets(material: MeshStandardMaterial, o: StreetOptions): 
     previous.call(material, shader, renderer);
     shader.uniforms.uSOrigin = { value: o.origin };
     if (photo) shader.uniforms.uSPhoto = { value: road ? o.asphalt : o.concrete };
+    if (o.lamps) {
+      shader.uniforms.uLamps = lampField.heads;
+      shader.uniforms.uLampInfo = lampField.info;
+      shader.uniforms.uLampLevel = lampField.level;
+      shader.uniforms.uLampK = { value: o.lamps };
+    }
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uSOrigin;\nvarying vec3 vSW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSW = (modelMatrix * vec4(position, 1.0)).xyz - uSOrigin;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', /* glsl */ `#include <common>
         varying vec3 vSW;
+        uniform vec3 uSOrigin;
         ${photo ? 'uniform sampler2D uSPhoto;' : ''}
         ${NOISE}
         float streetWet = 0.0;
         float streetOil = 0.0;
         float streetBump = 0.0;
-        float streetMask = 0.0;`)
+        float streetMask = 0.0;
+        ${o.lamps ? /* glsl */ `
+        uniform vec2 uLamps[${MAX_LAMPS}];
+        uniform vec4 uLampInfo;
+        uniform float uLampLevel;
+        uniform float uLampK;
+        /**
+         * Light from the streetlamps on this surface: each head a downlight (cos^2 cone) with inverse-square
+         * falloff, a diffuse pool on the albedo and, on wet or polished stretches, a glossy streak toward
+         * the camera that lengthens as the roughness drops. Only the three nearest columns are asked.
+         */
+        vec3 streetLamps(vec3 P, vec3 N, vec3 V, vec3 albedo, float rough) {
+          vec3 sum = vec3(0.0);
+          float col = floor((P.x - uLampInfo.x) / uLampInfo.y);
+          float shin = clamp(2.0 / (rough * rough + 1e-4) - 2.0, 3.0, 500.0);
+          float norm = (shin + 2.0) / 25.0;
+          for (int ci = -1; ci <= 1; ci++) {
+            float cc = col + float(ci);
+            if (cc < 0.0 || cc >= uLampInfo.z) continue;
+            for (int sd = 0; sd < 2; sd++) {
+              vec2 hp = uLamps[int(cc) * 2 + sd];
+              vec3 L = vec3(hp.x, uLampInfo.w, hp.y) - P;
+              float d2 = dot(L, L);
+              vec3 Ln = L * inversesqrt(d2);
+              float ndl = max(dot(N, Ln), 0.0);
+              float cone = Ln.y * Ln.y;
+              float I = uLampK * cone / (d2 + 0.3);
+              vec3 H = normalize(Ln + V);
+              float spec = pow(max(dot(N, H), 0.0), shin) * norm * 0.06;
+              sum += (albedo * ndl + vec3(min(spec, 4.0)) * ndl) * I;
+            }
+          }
+          return sum * vec3(1.0, 0.74, 0.44) * uLampLevel;
+        }` : ''}`)
       .replace('#include <map_fragment>', /* glsl */ `#include <map_fragment>
         {
           vec2 pm = vSW.xz * ${M};
@@ -154,6 +213,14 @@ export function applyStreets(material: MeshStandardMaterial, o: StreetOptions): 
           c *= 1.0 - 0.45 * streetWet;
           diffuseColor.rgb = c;
         }`)
+      .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
+        ${o.lamps ? /* glsl */ `
+        {
+          vec3 Pw = vSW;
+          vec3 Vw2 = normalize(cameraPosition - (vSW + uSOrigin));
+          vec3 Nw = inverseTransformDirection(normal, viewMatrix);
+          totalEmissiveRadiance += streetLamps(Pw, Nw, Vw2, diffuseColor.rgb, roughnessFactor);
+        }` : ''}`)
       .replace('#include <roughnessmap_fragment>', /* glsl */ `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor * (1.0 - 0.3 * streetOil), 0.035, streetWet);`)
       .replace('#include <normal_fragment_maps>', /* glsl */ `#include <normal_fragment_maps>

@@ -32,14 +32,14 @@ import {
 import { neonSignTexture, roadTexture } from '../bake/CanvasTextures';
 import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
-import { Streetlights, type Lamp } from './Streetlights';
+import { Streetlights, lampHead, lampHeadY, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footprint } from './CityStreet';
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
 import { pavingMaps } from '../bake/RoomTextures';
-import { applyStreets } from '../materials/Streets';
+import { applyStreets, setLampField } from '../materials/Streets';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -115,7 +115,7 @@ export class City {
     };
     const streetMaps = high ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : {};
     const origin = this.group.position;
-    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, ...streetMaps });
+    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, lamps: high ? 3 : 8, ...streetMaps });
     // 260x200, not 140x100: the district is 97 x 39 now and the old sheet's
     // edge cut across the frame in the upper corners of the dive
     const ground = new Mesh(new PlaneGeometry(260, 200), groundMaterial);
@@ -221,21 +221,12 @@ export class City {
         lampList.push({ x: x + rand() * 0.6, z, yaw: z < 0 ? 0 : Math.PI });
       }
     }
-    this.streetlights = new Streetlights(lampList, quality.tier, 0.85);
+    this.streetlights = new Streetlights(lampList, quality.tier, 0.85, true);
     this.group.add(this.streetlights.group);
-    const poolMaterial = new MeshBasicMaterial({
-      map: glowTexture(), color: '#ffb468', transparent: true, opacity: quality.tier === 'high' ? 0.1 : 0.2, blending: AdditiveBlending,
-      depthWrite: false, toneMapped: false,
-    });
-    const poolGeometry = new PlaneGeometry(2.3, 2.3);
-    poolGeometry.rotateX(-Math.PI / 2);
-    const pools = new InstancedMesh(poolGeometry, poolMaterial, lampList.length);
-    lampList.forEach((l, i) => {
-      pools.setMatrixAt(i, new Matrix4().compose(p.set(l.x, 0.03, l.z * 0.55), q, s));
-    });
-    pools.frustumCulled = false;
-    this.group.add(pools);
-    this.disposables.push(poolMaterial, poolGeometry, pools, this.streetlights, poleMaterial);
+    // the pools of light on the road are the road's own (materials/Streets.ts): each lamp a downlight with
+    // inverse-square falloff and a glossy streak on the wet asphalt, not a painted disc
+    setLampField(lampList.map((l) => lampHead(l, 0.85)), -30, 6.4, lampHeadY(0.85));
+    this.disposables.push(this.streetlights, poleMaterial);
 
     // neon signs on walls facing the canyon — on the ACTUAL kit walls
     const NEON = ['#ff5f8f', '#5fd0ff', '#ffd05f', '#8fff9f', '#c88fff'];
@@ -363,7 +354,7 @@ export class City {
       return t;
     };
     const asphalt = high ? loadDetail('detail-asphalt.webp') : undefined;
-    for (const m of [roadMat, junctionMat]) applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, ...(asphalt ? { asphalt } : {}) });
+    for (const m of [roadMat, junctionMat]) applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, lamps: high ? 3 : 9, ...(asphalt ? { asphalt } : {}) });
     this.disposables.push(roadMat, road, junctionMat);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
