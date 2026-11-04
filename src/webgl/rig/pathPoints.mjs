@@ -71,9 +71,15 @@ export const PATH_POINTS = [
   // CH8 city dive — the canyon runs world z 0..2 (group z offset 1); the old
   // z −4 leg flew straight through the north building row
   [176, 10, 1],
-  [184, 5, 0.4],
-  [192, 2.2, 1.6],
-  [200, 2.0, 1.0],
+  // the dive: down into the street (lamp arms reach 0.5 out from z -2.05 and 2.05, cars and people stand on the
+  // road below y 0.8), then a run along it at about lamp height, between the lamps, through the traffic and the
+  // crowd, for some sixteen units before the pull-up into the copilot climb
+  [180, 4, 0.8],
+  [185, 1.35, 0.4],
+  [191, 1.1, 1.1],
+  [197, 1.15, 0.7],
+  [202, 1.4, 0.5],
+  [205.5, 3.6, 0],
   // CH9 copilot climb into the starfield
   [210, 10, -2],
   [220, 20, 0],
@@ -92,7 +98,7 @@ export const PATH_POINTS = [
 ];
 
 /** First control-point index of each chapter's zone (matches the blocks). */
-export const CH_START_INDEX = [0, 3, 6, 14, 17, 22, 27, 30, 34, 37];
+export const CH_START_INDEX = [0, 3, 6, 14, 17, 22, 27, 30, 37, 40];
 
 /**
  * Where the lighthouse stands, as the anchor Beacon hangs it from (the island sits at

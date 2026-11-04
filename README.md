@@ -185,6 +185,8 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 
 **IT office props:** the night office level's furniture and kit are generated (`blender/make_it_office.py`, see "IT office props" in blender/README.md): thirteen props in `public/models/office/office-props.glb`, each a root node named in `manifest.json` (size in metres, the emissive materials the engine drives, triangle counts), all on one baked 2048 px atlas. Every prop is modelled procedurally and built twice, a high-poly twin with real bevels, procedural PBR materials and wear, and the lean mesh that ships with the twin baked onto it. No downloaded model is used; the survey is in `public/models/office/CREDITS.md`.
 
+**Street pass through the city.** The flight now runs at street level down the canyon road, as it does through the town: the dive (`pathPoints.mjs`, six points in the city zone) drops to about lamp height at x 185, keeps 1.1-1.4 units over the lanes for some sixteen units, between the lamps (their arms reach 0.5 out from z -2.05 and 2.05), through the traffic and the crowd, then pulls up into the copilot climb. The city zone has more points, so `CH_START_INDEX` moved for the last two chapters and `npm run bake:rings` was rerun. The detour's tower is still picked at runtime.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## City life (the night city's clutter)
