@@ -6,8 +6,9 @@
 
 Writes public/models/people/:
 
-    humans.glb        per person a hero mesh (`<id>-hero`, ~19k triangles) and a lean one (`<id>`,
-                      ~2.4k), and the dog (`dog`, from bld/people.py). Every vertex: POSITION, byte
+    humans.glb        per person a lean mesh (`<id>`, 2.6k triangles), and the dog
+    humans-hero.glb   per person a hero mesh (`<id>-hero`, 19k; loaded on HIGH only)
+                      (the dog (`dog`, from bld/people.py). Every vertex: POSITION, byte
                       NORMAL, TEXCOORD_0 (the shared atlas) and _RIG (bone * 16 + region, option,
                       weight * 255, occlusion * 255), the attribute the shader rig reads.
     atlas-color.webp  4096 x 3072, a 1024 tile a person: albedo (tinted regions normalised to a
@@ -235,6 +236,21 @@ def make_person(spec, tile, size):
     return meshes, entry
 
 
+def fit_height(meshes, e, cm):
+    """Scales a person (both meshes and the rig) about the feet to `cm` tall (MakeHuman's macro height
+    runs tall: its 0.78 is 2.17 m)."""
+    f = cm / 100 * SCALE / e['height']
+    if abs(f - 1) < 1e-4:
+        return
+    for k in (e['mesh'], e['hero']):
+        meshes[k]['pos'] = (meshes[k]['pos'] * f).astype(np.float32)
+    e['pivots'] = [[round(c * f, 5) for c in p] for p in e['pivots']]
+    e['legs'] = [round(c * f, 5) for c in e['legs']]
+    e['foot'] = [round(c * f, 5) for c in e['foot']]
+    e['hand'] = [round(c * f, 5) for c in e['hand']]
+    e['height'] = round(e['height'] * f, 4)
+
+
 def compose_atlas(entries, size):
     """The tiles into the atlases: tinted regions normalised to a mean of 0.5 (linear)."""
     from PIL import Image
@@ -292,6 +308,9 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     meshes, entries = {}, []
     todo = [(i, p) for i, p in enumerate(H.PEOPLE) if not only or p['id'] in only.split(',')]
+    if '--reexport' in sys.argv:
+        todo = []
+        only = 'none'
     cache = os.path.join(WORK, 'meshes.npz')
     old = {}
     if only and os.path.exists(cache):
@@ -309,12 +328,18 @@ def main():
                 for k in (e['mesh'], e['hero']):
                     meshes[k] = old[k]
     entries.sort(key=lambda e: e['tile'])
-    np.savez_compressed(cache, meshes=np.array(meshes, dtype=object), entries=json.dumps(entries))
+    import copy
+    np.savez_compressed(cache, meshes=np.array(copy.deepcopy(meshes), dtype=object), entries=json.dumps(entries))
+    cms = {p['id']: p['cm'] for p in H.PEOPLE}
+    for e in entries:
+        fit_height(meshes, e, cms[e['id']])
     files = compose_atlas(entries, size)
     dm, de = dog_arrays()
     meshes['dog'] = dm
-    write_glb(os.path.join(OUT, 'humans.glb'), meshes)
-    manifest = dict(scale=SCALE, options=people.OPTIONS, regions=REGIONS, glb='humans.glb',
+    heroes = {e['hero'] for e in entries}
+    write_glb(os.path.join(OUT, 'humans.glb'), {k: v for k, v in meshes.items() if k not in heroes})
+    write_glb(os.path.join(OUT, 'humans-hero.glb'), {k: v for k, v in meshes.items() if k in heroes})
+    manifest = dict(scale=SCALE, options=people.OPTIONS, regions=REGIONS, glb='humans.glb', glbHero='humans-hero.glb',
                     atlas=dict(grid=[COLS, ROWS], color=files['atlas-color'], orm=files['atlas-orm'],
                                normal=files['atlas-normal'], low=dict(color='atlas-color-low.webp',
                                                                        orm='atlas-orm-low.webp',

@@ -80,65 +80,66 @@ def _ge_map(name):
 # ---- the people ------------------------------------------------------------------------------------
 # age in years (MakeHuman's 0..1: 25 years at 0.5, 90 at 1); race = (asian, caucasian, african);
 # wear = MakeHuman clothes, each with the region of each of its pieces (largest piece first;
-# missing entries: the last one repeats); face = extra targets (name: weight) for a face of its own.
+# missing entries: the last one repeats); cm = standing height (MakeHuman's own runs tall, the
+# figure is scaled to it); face = extra targets (name: weight) for a face of its own.
 # role / mix steer the runtime's palettes and how common each person is in the town (day) and the
 # night city; skin / hair: the tints a crowd draws them in (near the person's own).
 PEOPLE = [
-    dict(id='ethan', sex=1.0, age=29, race=(0.05, 0.9, 0.05), weight=0.5, muscle=0.6, height=0.6, prop=0.7,
+    dict(id='ethan', cm=182, sex=1.0, age=29, race=(0.05, 0.9, 0.05), weight=0.5, muscle=0.6, height=0.6, prop=0.7,
          skin='young_caucasian_male', hair='short02', brows='eyebrow001', lashes='eyelashes01', eyes='bluegreen',
          wear=[('male_casualsuit05', [R_TOP, R_BOTTOM, R_UNDER, R_UNDER])], shoes='shoes01',
          face={'nose/nose-scale-vert-incr': 0.3, 'chin/chin-prominent-incr': 0.4, 'head/head-square': 0.3},
          role='jacket', mix=dict(day=1.6, night=2.6), build='man',
          skins=['#e9bfa0', '#e3b08e', '#d9a07c'], hairs=['#3b291c', '#4f3524', '#2a1c14', '#6a4a2e']),
-    dict(id='marcus', sex=1.0, age=52, race=(0.0, 0.1, 0.9), weight=0.68, muscle=0.55, height=0.55, prop=0.5,
+    dict(id='marcus', cm=179, sex=1.0, age=52, race=(0.0, 0.1, 0.9), weight=0.68, muscle=0.55, height=0.55, prop=0.5,
          skin='middleage_african_male', hair='short04', brows='eyebrow004', lashes='eyelashes02', eyes='brown',
          wear=[('male_elegantsuit01', [R_TOP, R_BOTTOM])], shoes='shoes02',
          face={'nose/nose-scale-horiz-incr': 0.35, 'mouth/mouth-scale-horiz-incr': 0.3, 'eyebrows/eyebrows-trans-down': 0.3},
          role='suit', mix=dict(day=0.5, night=2.4), build='man',
          skins=['#6e4329', '#5b3624', '#7a4b2f'], hairs=['#1b1512', '#3a3632', '#8f8a84']),
-    dict(id='mei', sex=0.0, age=24, race=(0.92, 0.08, 0.0), weight=0.38, muscle=0.4, height=0.42, prop=0.7,
+    dict(id='mei', cm=161, sex=0.0, age=24, race=(0.92, 0.08, 0.0), weight=0.38, muscle=0.4, height=0.42, prop=0.7,
          skin='young_asian_female', hair='bob01', brows='eyebrow010', lashes='eyelashes03', eyes='brown',
          wear=[('female_casualsuit01', [R_TOP, R_BOTTOM])], shoes='shoes05',
          face={'chin/chin-height-decr': 0.2, 'nose/nose-scale-depth-decr': 0.2},
          role='casual', mix=dict(day=2.6, night=1.4), build='woman',
          skins=['#ecc9aa', '#e2b893', '#f0d2b8'], hairs=['#121212', '#1b1512', '#2a1c14']),
-    dict(id='claire', sex=0.0, age=41, race=(0.0, 1.0, 0.0), weight=0.5, muscle=0.45, height=0.55, prop=0.65,
+    dict(id='claire', cm=168, sex=0.0, age=41, race=(0.0, 1.0, 0.0), weight=0.5, muscle=0.45, height=0.55, prop=0.65,
          skin='middleage_caucasian_female', hair='long01', brows='eyebrow002', lashes='eyelashes04', eyes='blue',
          wear=[('female_elegantsuit01', [R_TOP, R_BOTTOM])], shoes='shoes03',
          face={'nose/nose-hump-incr': 0.3, 'cheek/l-cheek-bones-incr': 0.3, 'cheek/r-cheek-bones-incr': 0.3},
          role='dress', mix=dict(day=1.8, night=2.4), build='woman',
          skins=['#f1d2bd', '#eac3a6', '#f6dccb'], hairs=['#8c6a43', '#b8925c', '#6a4a2e', '#d6bb83']),
-    dict(id='kwame', sex=1.0, age=23, race=(0.0, 0.0, 1.0), weight=0.4, muscle=0.62, height=0.78, prop=0.8,
+    dict(id='kwame', cm=188, sex=1.0, age=23, race=(0.0, 0.0, 1.0), weight=0.4, muscle=0.62, height=0.78, prop=0.8,
          skin='young_african_male', hair='afro01', brows='eyebrow005', lashes='eyelashes01', eyes='brown',
          wear=[('male_casualsuit06', [R_TOP, R_BOTTOM])], shoes='shoes06',
          face={'nose/nose-flaring-incr': 0.3, 'mouth/mouth-lowerlip-volume-incr': 0.3},
          role='casual', mix=dict(day=2.2, night=1.4), build='man',
          skins=['#553222', '#4a2c1e', '#61392a'], hairs=['#121212', '#1b1512']),
-    dict(id='rosa', sex=0.0, age=67, race=(0.05, 0.75, 0.2), weight=0.72, muscle=0.3, height=0.3, prop=0.35,
+    dict(id='rosa', cm=157, sex=0.0, age=67, race=(0.05, 0.75, 0.2), weight=0.72, muscle=0.3, height=0.3, prop=0.35,
          skin='old_caucasian_female', hair='bob02', brows='eyebrow007', lashes='eyelashes02', eyes='brownlight',
          wear=[('female_elegantsuit01', [R_TOP, R_BOTTOM])], shoes='shoes02',
          face={'nose/nose-scale-vert-incr': 0.2, 'chin/chin-width-incr': 0.3},
          role='coat', mix=dict(day=1.2, night=1.6), build='woman',
          skins=['#e0b394', '#d6a583', '#e8c1a5'], hairs=['#c9c5bf', '#8f8a84', '#e3dfd8', '#b5aca3']),
-    dict(id='hiro', sex=1.0, age=71, race=(0.95, 0.05, 0.0), weight=0.42, muscle=0.35, height=0.38, prop=0.45,
-         skin='old_asian_male', hair='short01', brows='eyebrow008', lashes='eyelashes01', eyes='brown',
+    dict(id='hiro', cm=166, sex=1.0, age=71, race=(0.95, 0.05, 0.0), weight=0.42, muscle=0.35, height=0.38, prop=0.45,
+         skin='old_asian_male', hair='short04', brows='eyebrow008', lashes='eyelashes01', eyes='brown',
          wear=[('male_casualsuit03', [R_TOP, R_BOTTOM])], shoes='shoes01',
          face={'ears/r-ear-scale-incr': 0.3, 'ears/l-ear-scale-incr': 0.3, 'nose/nose-scale-depth-incr': 0.2},
          role='jacket', mix=dict(day=1.2, night=1.2), build='man',
          skins=['#e3bb95', '#d6aa83', '#eac7a4'], hairs=['#c9c5bf', '#8f8a84', '#3a3632']),
-    dict(id='amara', sex=0.0, age=32, race=(0.0, 0.1, 0.9), weight=0.52, muscle=0.5, height=0.62, prop=0.75,
+    dict(id='amara', cm=172, sex=0.0, age=32, race=(0.0, 0.1, 0.9), weight=0.52, muscle=0.5, height=0.62, prop=0.75,
          skin='young_african_female', hair='braid01', brows='eyebrow011', lashes='eyelashes04', eyes='brown',
          wear=[('female_casualsuit01', [R_TOP, R_BOTTOM])], shoes='shoes03',
          face={'mouth/mouth-upperlip-volume-incr': 0.3, 'nose/nose-scale-horiz-incr': 0.2},
          role='casual', mix=dict(day=2.2, night=1.6), build='woman',
          skins=['#7a4b2f', '#6e4329', '#8a5838'], hairs=['#121212', '#1b1512', '#2a1c14']),
-    dict(id='omar', sex=1.0, age=44, race=(0.3, 0.55, 0.15), weight=0.62, muscle=0.6, height=0.5, prop=0.55,
+    dict(id='omar', cm=176, sex=1.0, age=44, race=(0.3, 0.55, 0.15), weight=0.62, muscle=0.6, height=0.5, prop=0.55,
          skin='middleage_caucasian_male', hair='short03', brows='eyebrow003', lashes='eyelashes02', eyes='brown',
          wear=[('male_casualsuit05', [R_TOP, R_BOTTOM, R_UNDER, R_UNDER])], shoes='shoes04',
          face={'nose/nose-hump-incr': 0.5, 'eyebrows/eyebrows-angle-down': 0.3, 'chin/chin-prominent-incr': 0.2},
          role='coat', mix=dict(day=1.2, night=2.4), build='man',
          skins=['#c9946e', '#bd8862', '#d29a72'], hairs=['#1b1512', '#2a1c14', '#3a3632']),
-    dict(id='sophie', sex=0.0, age=19, race=(0.0, 1.0, 0.0), weight=0.38, muscle=0.55, height=0.5, prop=0.6,
+    dict(id='sophie', cm=167, sex=0.0, age=19, race=(0.0, 1.0, 0.0), weight=0.38, muscle=0.55, height=0.5, prop=0.6,
          skin='young_caucasian_female', hair='ponytail01', brows='eyebrow012', lashes='eyelashes03', eyes='green',
          wear=[('female_sportsuit01', [R_TOP, R_BOTTOM])], shoes='shoes05', freckles=True,
          face={'nose/nose-scale-vert-decr': 0.2, 'chin/chin-height-decr': 0.2},
@@ -353,10 +354,10 @@ def source_material(name, kind, src_dir, spec, mh=None):
             col = mf.outputs['Result']
     if kind in ('cloth', 'shoes'):
         # wear: lighter, flatter patches where the cloth rubs, a little dirt toward the hems
-        n1 = N.new('ShaderNodeTexNoise'); n1.inputs['Scale'].default_value = 7.0; n1.inputs['Detail'].default_value = 6
+        n1 = N.new('ShaderNodeTexNoise'); n1.inputs['Scale'].default_value = 16.0; n1.inputs['Detail'].default_value = 8
         L.new(obj.outputs['Object'], n1.inputs['Vector'])
-        mr = N.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = 0.5; mr.inputs['From Max'].default_value = 0.75
-        mr.inputs['To Max'].default_value = 0.18
+        mr = N.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = 0.55; mr.inputs['From Max'].default_value = 0.8
+        mr.inputs['To Max'].default_value = 0.07
         L.new(n1.outputs['Fac'], mr.inputs['Value'])
         mw = N.new('ShaderNodeMix'); mw.data_type = 'RGBA'; mw.blend_type = 'SCREEN'
         L.new(mr.outputs['Result'], mw.inputs['Factor'])

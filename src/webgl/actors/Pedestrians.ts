@@ -67,8 +67,9 @@ interface Variant {
 interface Manifest {
   options: string[];
   variants: Variant[];
-  /** the GLB (default people.glb) and, for textured people, the shared atlas */
+  /** the GLB (default people.glb), the hero tier's (HIGH only) and, for textured people, the shared atlas */
   glb?: string;
+  glbHero?: string;
   atlas?: { color: string; orm: string; normal: string; low: { color: string; orm: string; normal: string } };
 }
 
@@ -681,13 +682,14 @@ export class Pedestrians {
     this.variants = manifest.variants;
     const high = this.quality.tier === 'high';
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    const [gltf, atlas] = await Promise.all([
+    const [gltf, heroGltf, atlas] = await Promise.all([
       loader.loadAsync(asset(`/models/people/${manifest.glb ?? 'people.glb'}`)),
+      high && manifest.glbHero ? loader.loadAsync(asset(`/models/people/${manifest.glbHero}`)) : Promise.resolve(null),
       manifest.atlas ? this.loadAtlas(manifest.atlas, high) : Promise.resolve(null),
     ]);
     const geos = new Map<string, BufferGeometry>();
-    gltf.scene.updateMatrixWorld(true);
-    gltf.scene.traverse((o) => {
+    for (const g of heroGltf ? [gltf, heroGltf] : [gltf]) g.scene.updateMatrixWorld(true);
+    for (const g of heroGltf ? [gltf, heroGltf] : [gltf]) g.scene.traverse((o) => {
       const m = o as Mesh;
       if (!m.isMesh) return;
       // meshopt's quantised positions come with a node transform that undoes them: fold it into
@@ -1033,7 +1035,8 @@ export class Pedestrians {
 
   /**
    * The hero tier: the people within HERO_IN of the camera (until they are past HERO_OUT, so nobody
-   * flickers between the two at the edge), nearest first and at most HERO_CAP a person, are drawn by
+   * flickers between the two at the edge), the nearest HERO_TOTAL of them from at most HERO_KINDS
+   * base people (HERO_CAP a person), are drawn by
    * their variant's hero mesh, and their lean instance is folded away. The camera is the one that
    * drew the crowd last frame.
    */
@@ -1041,39 +1044,34 @@ export class Pedestrians {
     if (!this.heroes.some(Boolean)) return;
     this.group.updateWorldMatrix(true, false);
     const eye = this.eyeLocal.copy(this.uniforms.uEye.value).applyMatrix4(this.inv.copy(this.group.matrixWorld).invert());
+    // who is near enough, over every person, nearest first; then at most HERO_TOTAL of them, in at
+    // most HERO_KINDS hero meshes (each one a draw)
     const near: { b: Body; d: number }[] = [];
+    for (const b of this.bodies) {
+      if (!this.heroes[b.variant]) continue;
+      const d = Math.hypot(b.x - eye.x, b.z - eye.z, Math.max(0, eye.y - 0.5 * this.k));
+      if (d < (b.hero ? HERO_OUT : HERO_IN)) near.push({ b, d });
+    }
+    near.sort((p, q) => p.d - q.d);
+    const chosen = new Set<Body>();
+    const kinds = new Set<number>();
+    for (const { b } of near) {
+      if (chosen.size >= HERO_TOTAL) break;
+      if (!kinds.has(b.variant) && kinds.size >= HERO_KINDS) continue;
+      kinds.add(b.variant);
+      chosen.add(b);
+    }
+    for (const b of this.bodies) {
+      const want = chosen.has(b);
+      if (b.hero === want) continue;
+      b.hero = want;
+      this.leanDirty[b.variant] = true;
+      if (!b.moving) this.write(b);
+    }
     this.heroes.forEach((h, vi) => {
       if (!h) return;
-      near.length = 0;
-      for (const b of this.bodies) {
-        if (b.variant !== vi) continue;
-        const d = Math.hypot(b.x - eye.x, b.z - eye.z, Math.max(0, eye.y - 0.5 * this.k));
-        if (d < (b.hero ? HERO_OUT : HERO_IN)) near.push({ b, d });
-        else if (b.hero) {
-          b.hero = false;
-          this.leanDirty[vi] = true;
-          if (!b.moving) this.write(b);
-        }
-      }
-      near.sort((p, q) => p.d - q.d);
-      for (let i = h.cap; i < near.length; i++) {
-        const b = near[i]!.b;
-        if (b.hero) {
-          b.hero = false;
-          this.leanDirty[vi] = true;
-          if (!b.moving) this.write(b);
-        }
-      }
       h.bodies.length = 0;
-      for (let i = 0; i < Math.min(h.cap, near.length); i++) {
-        const b = near[i]!.b;
-        if (!b.hero) {
-          b.hero = true;
-          this.leanDirty[vi] = true;
-          if (!b.moving) this.write(b);
-        }
-        h.bodies.push(b);
-      }
+      for (const { b } of near) if (b.variant === vi && b.hero && h.bodies.length < h.cap) h.bodies.push(b);
       const [gait, pose, col0, col1] = h.attrs as [InstancedBufferAttribute, InstancedBufferAttribute, InstancedBufferAttribute, InstancedBufferAttribute];
       h.bodies.forEach((b, i) => {
         const s = b.scale * b.fade;
@@ -1424,7 +1422,9 @@ const IDENTITY = new Matrix4();
 /** the hero tier: in within this distance of the camera, out past the other; at most this many a person */
 const HERO_IN = 6;
 const HERO_OUT = 7.5;
-const HERO_CAP = 6;
+const HERO_CAP = 8;
+const HERO_TOTAL = 8;
+const HERO_KINDS = 4;
 
 function wrapAngle(a: number): number {
   return a - Math.PI * 2 * Math.round(a / (Math.PI * 2));

@@ -144,10 +144,25 @@ def sheet(ids, out_dir, samples):
     look(cam, (9.0, 0, 1.15), (0, 0, 0.95), 40)
     sc.render.filepath = os.path.join(out_dir, 'sheet-hero.png')
     bpy.ops.render.render(write_still=True)
-    sc.render.resolution_x, sc.render.resolution_y = 2400, 420
-    look(cam, (6.0, 0, 1.6), (0, 0, 1.55), 70)
-    sc.render.filepath = os.path.join(out_dir, 'sheet-faces.png')
-    bpy.ops.render.render(write_still=True)
+    # the faces: each head on its own, three-quarter front, then side by side
+    from PIL import Image
+    sc.render.resolution_x, sc.render.resolution_y = 420, 520
+    tiles = []
+    for o in objs:
+        for p in objs:
+            p.hide_render = p is not o
+        top = max((o.matrix_world @ v.co).z for v in o.data.vertices)
+        c = o.matrix_world.translation
+        at = (c.x, c.y, top - 0.13)
+        look(cam, (c.x + 2.6, c.y - 0.9, top - 0.1), at, 150)
+        path = os.path.join(out_dir, f'face-{o.name}.png')
+        sc.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        tiles.append(Image.open(path))
+    sheet_img = Image.new('RGB', (420 * len(tiles), 520))
+    for i, t in enumerate(tiles):
+        sheet_img.paste(t.convert('RGB'), (420 * i, 0))
+    sheet_img.save(os.path.join(out_dir, 'sheet-faces.png'))
 
 
 def main():
