@@ -90,6 +90,16 @@ of `mid`), lean beyond; the night city keeps a wide `near` for its neon and bill
 swaps only the lots inside `hero` (12 units, ~70 lots) to the hero towers. Phones always get
 the lean module.
 
+### Window-cell grid
+
+Both shipped city tiers carry a second UV set, `Grid` (glTF `TEXCOORD_1`, three's `uv1`, left as
+floats by the compressor), for the facade shader's interior rooms: on a wall slot's faces (cu, cv) =
+(distance along the wall / bay width, storeys above the wall's base), so whole numbers are the pier
+lines and floor slabs the generators used (`facade.wall_grid`); every other face is (-1, -1). A
+shopfront storey is one band of its own (its bays, cv 0..1) under the facade (cv from 1 up), so the
+lean walls are split at the top of it; louvres take one 5 m post bay by their whole height, a
+mansard one dormer bay by its whole slope.
+
 ### Window glass
 
 Every window pane of a hero building is also exported as a second mesh, `glass`, a quad 4 mm
