@@ -441,7 +441,7 @@ export class BatchFleet {
       // a phone in view and near enough to read the person; if no one with a phone is, the nearest
       // few people standing in view (a dart landing 50 units down the canyon is a speck)
       const cam = this.modelCamera(d.land, aspect).position.clone();
-      const near = (list: { at: Vector3; view: number }[]): typeof list =>
+      const near = <T extends { at: Vector3; view: number }>(list: T[]): T[] =>
         list.filter((o) => o.view < IN_VIEW && o.at.distanceTo(cam) < 25);
       let options = near(optionsFor(holders));
       if (!options.length) {
