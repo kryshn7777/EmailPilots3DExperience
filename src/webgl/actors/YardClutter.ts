@@ -78,10 +78,11 @@ const REACH: Record<Kind, number> = {
   'ladder': LARGE, 'car-cover': LARGE, 'hot-tub': LARGE, 'picnic': LARGE, 'firepit': LARGE, 'clothesline': LARGE,
   'hoop': LARGE, 'slide': LARGE, 'kayak': LARGE, 'power-pole': 84,
 };
-/** what phones draw (lean meshes, about 60% of the reach): what reads from a phone at the flight's speed */
+/** what phones draw (lean meshes, 85% of the reach): what reads from a phone at the flight's speed */
 const LOW_KINDS = new Set<Kind>([
   'mailbox-post', 'mailbox-brick', 'mailbox-white', 'leaf-bag', 'pumpkin', 'bike', 'kid-bike', 'car-cover', 'hoop',
   'clothesline', 'hot-tub', 'picnic', 'trash-can', 'kettle-grill', 'gas-grill', 'wheelbarrow', 'slide', 'kayak',
+  'mower', 'utility-box', 'firepit', 'trash-bag', 'scooter', 'stump', 'rocker', 'bench',
 ]);
 /** the HIGH tier swaps to the lean mesh beyond this share of a kind's reach */
 const LEAN_AT = 0.42;
@@ -151,10 +152,12 @@ export class YardClutter {
     const high = ctx.tier === 'high';
     for (const y of yards) {
       // phones get what the flight passes closest
-      if (!high && !ctx.near(y.lot.x, y.lot.z, 26)) continue;
+      if (!high && !ctx.near(y.lot.x, y.lot.z, 40)) continue;
       this.dress(y);
     }
     if (high) this.planPoles();
+    // a person is ~2.4k triangles: the yards get a few dozen of them on HIGH, a handful on phones
+    this.stands.splice(high ? 36 : 4);
   }
 
   // ---- placement --------------------------------------------------------------------------------------
@@ -868,7 +871,7 @@ export class YardClutter {
       if (!it.hung && (it.rx || it.rz)) y -= lowest(geoms.get(high ? it.kind : `${it.kind}-lean`) ?? geoms.get(it.kind)!, q) * it.s;
       mesh.setMatrixAt(inst, m4.compose(p.set(it.x, y, it.z), q, sc.setScalar(it.s)));
       mesh.setColorAt(inst, color.set(it.tint));
-      const reach = (REACH[it.kind] ?? MEDIUM) * (high ? 1 : 0.6);
+      const reach = (REACH[it.kind] ?? MEDIUM) * (high ? 1 : 0.85);
       this.slots.push({ full: id.full, lean: id.lean, x: it.x, z: it.z, reach2: reach * reach, lean2: (reach * LEAN_AT) ** 2, visible: true, isLean: !high });
     }
     mesh.castShadow = high;
