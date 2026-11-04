@@ -33,6 +33,8 @@ export interface Footprint {
   /** half extents on the ground, after the module's quarter turn */
   hx: number;
   hz: number;
+  /** its height, when known */
+  h?: number;
 }
 
 /** the canyon road is 4.6 wide; a building face stands no nearer than 2.75 to its centre line */
@@ -190,8 +192,14 @@ export class CityStreet {
    * leaf cards, see City `buildTrees`), so this only decides where; `s` is a size factor.
    */
   readonly trees: { x: number; z: number; yaw: number; s: number }[] = [];
+  /** everything stood on the street here, as circles (for CityLife's scatter, which must not stand in them) */
+  readonly occupied: { x: number; z: number; r: number }[] = [];
+  /** the hydrant and bin spots; with `realProps` CityLife stands its scanned models there instead of these primitives */
+  readonly hydrants: { x: number; z: number }[] = [];
+  readonly bins: { x: number; z: number }[] = [];
+  readonly shelters: { x: number; z: number; yaw: number }[] = [];
 
-  constructor(footprints: Footprint[], quality: Quality) {
+  constructor(footprints: Footprint[], quality: Quality, opts: { realProps?: boolean } = {}) {
     const rand = mulberry32(8855);
     const own = <T extends { dispose(): void }>(x: T): T => { this.disposables.push(x); return x; };
     const high = quality.tier === 'high';
@@ -325,6 +333,19 @@ export class CityStreet {
       add('hydrant', x, (rand() < 0.5 ? 1 : -1) * (ROAD_HALF + 0.18), 0, 1);
     }
 
+    // ---- what stands where, for whoever dresses the street after us ---------------------------------
+    const radius: Record<string, number> = {
+      tree: 0.33, bench: 0.32, planter: 0.27, bollard: 0.05, bin: 0.09, hydrant: 0.08, kiosk: 0.46, shelter: 0.6,
+      cafeTable: 0.26, chair: 0.15,
+    };
+    for (const [kind, list] of Object.entries(place)) {
+      for (const it of list) this.occupied.push({ x: it.x, z: it.z, r: radius[kind] ?? 0.2 });
+    }
+    this.hydrants.push(...place.hydrant!.map((h) => ({ x: h.x, z: h.z })));
+    this.bins.push(...place.bin!.map((b) => ({ x: b.x, z: b.z })));
+    this.shelters.push(...place.shelter!.map((b) => ({ x: b.x, z: b.z, yaw: b.yaw })));
+    if (opts.realProps) { place.hydrant = []; place.bin = []; }
+
     // ---- prop geometry -----------------------------------------------------------------------
     this.trees.push(...place.tree!);
     // a grate of iron in the paving at the foot of every street tree
@@ -455,6 +476,7 @@ export class CityStreet {
       sigPlace.push({ x: sx - CROSS_HALF - 0.5, z: -(ROAD_HALF + 0.12), yaw: 0 });
       sigPlace.push({ x: sx + CROSS_HALF + 0.5, z: ROAD_HALF + 0.12, yaw: Math.PI });
     }
+    for (const sp of sigPlace) this.occupied.push({ x: sp.x, z: sp.z, r: 0.08 });
     const sigMesh = new InstancedMesh(own(kinds.signal!.clone()), material, sigPlace.length);
     sigPlace.forEach((s, i) => {
       q.setFromAxisAngle(Y, s.yaw);
@@ -502,6 +524,7 @@ export class CityStreet {
     vents.forEach((v, i) => holes.setMatrixAt(i, m4.compose(p.set(v.x, 0, v.z), q.identity(), sc.set(1, 1, 1))));
     holes.frustumCulled = false;
     this.group.add(holes);
+    for (const v of vents) this.occupied.push({ x: v.x, z: v.z, r: 0.14 });
     own(holes);
     const PUFFS = high ? 16 : 8;
     const steamPos = new Float32Array(vents.length * PUFFS * 3);

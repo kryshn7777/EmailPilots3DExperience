@@ -119,6 +119,22 @@ SPECS['taxi'] = dict(SPECS['sedan'], sign=True)
 # the manifest lists the family cars first, then the exotics
 SPECS = {k: SPECS[k] for k in ('sedan', 'hatch', 'suv', 'pickup', 'van', 'taxi', 'supercar', 'gt', 'hyper')}
 
+# Resolution of the round parts of the close-up model: segments round each wheel, and a factor
+# on every other cylinder's (lamps, pipes, nuts). make_cars.py raises both for the hero tier
+# and further still for the high-poly bake source; the defaults are the old close-up model's.
+WHEEL_N = 24
+CYL_RES = 1.0
+# Resolution of the close-up body skin: `SKIN_DX` adds a cross-section at least every that many
+# metres (None: only where the profile needs one, the old close-up model), `SKIN_SUB` splits each
+# of the 24 segments round a section into that many along a Catmull-Rom curve through the ring.
+# The ring is an analytic function of x, so more sections are exact, not smoothed.
+SKIN_DX = None
+SKIN_SUB = 1
+# how much the hero's flanks curve (see `_Body.ring`) and how round its nose and tail are in
+# plan, over the old close-up model's (0: as it was)
+SIDE_CURVE = 0.0
+PLAN_ROUND = 0.0
+
 # the hypercar's wing: chord from x0 to x1, span to +-y, height of the blade
 WING = dict(x0=-1.80, x1=-2.16, y=0.86, z=1.10)
 
@@ -558,6 +574,7 @@ class _Hi:
         """Cylinder or cone from `p0` to `p1`."""
         p0, p1 = Vector(p0), Vector(p1)
         r1 = r0 if r1 is None else r1
+        n = max(n, int(round(n * CYL_RES)))
         ax = (p1 - p0).normalized()
         ref = Vector((0, 0, 1)) if abs(ax.z) < 0.9 else Vector((1, 0, 0))
         u = ax.cross(ref).normalized()
@@ -600,7 +617,7 @@ class _Body:
         self.tumble = (lambda x: _interp(tum, x)) if isinstance(tum, list) else (lambda x: tum)
         self.arch_r = self.wr * s.get('archk', 1.27)
         self.arch_cap = self.belt - s.get('archcap', 0.14)
-        self.pinch, self.pinch_d = e.get('pinch', (0.20, 0.5))
+        self.pinch, self.pinch_d = e.get('pinch', (0.20 + 0.10 * PLAN_ROUND, 0.5 + 0.12 * PLAN_ROUND))
         self.ramp = e.get('ramp', 0.13)
         self.fender = e.get('fender', (0.0, 0.0))
         self.waist = e.get('waist', 0.0)
@@ -681,10 +698,13 @@ class _Body:
         r[0] = (0.0, zu)
         r[1] = (w - (0.22 + 0.24 * a), zu)
         r[2] = (w - (0.045 + 0.415 * a), _lerp(zu + 0.05, ah, a))
-        r[3] = (w * 0.99, ah)
-        r[4] = (w, ah + (zf - ah) * 0.42)
-        r[5] = (w * 0.996, ah + (zf - ah) * 0.80)
-        r[6] = (w * 0.972, zf)
+        # the flank: the rocker tucked under, the fullest line at the door's waist, the shoulder
+        # rolling over into the tumblehome (SIDE_CURVE: 0 the old slab sides, 1 the hero's)
+        k = SIDE_CURVE
+        r[3] = (w * (0.99 - 0.025 * k), ah)
+        r[4] = (w, ah + (zf - ah) * (0.42 + 0.04 * k))
+        r[5] = (w * (0.996 - 0.006 * k), ah + (zf - ah) * 0.80)
+        r[6] = (w * (0.972 - 0.012 * k), zf)
         c = 0.0
         if bed:
             rim = zt
@@ -773,6 +793,14 @@ def _sections(B):
     if B.bed:
         xs.add(round(B.bed[1] - 0.006, 3))
         xs.add(round(B.bed[1], 3))
+    if SKIN_DX:
+        # uniform sections in between, clear of the ones the profile asked for (those keep their x)
+        feats = sorted(xs)
+        n = int((B.nose - B.tail) / SKIN_DX) + 1
+        for k in range(1, n):
+            x = B.tail + (B.nose - B.tail) * k / n
+            if min(abs(x - f) for f in feats) > SKIN_DX * 0.45:
+                xs.add(round(x, 4))
     xs = sorted((x for x in xs if B.tail - 1e-6 <= x <= B.nose + 1e-6), reverse=True)
     out = []
     for x in xs:
@@ -817,10 +845,26 @@ def _skin(B, h):
     B.xs = xs
     infos = [B.ring(x) for x in xs]
     rings = []
+    sub = max(int(SKIN_SUB), 1)
     for info in infos:
         p = info['pts']
-        rings.append(p + [Vector((q.x, -q.y, q.z)) for q in p[11:0:-1]])      # 24 points around
-    S, J = len(xs), 24
+        ring = p + [Vector((q.x, -q.y, q.z)) for q in p[11:0:-1]]      # 24 points around
+        if sub > 1:
+            # a Catmull-Rom curve through the ring (uniform, so coincident points stay put)
+            dense = []
+            for j in range(24):
+                p0, p1, p2, p3 = (ring[(j + d) % 24] for d in (-1, 0, 1, 2))
+                for k in range(sub):
+                    t = k / sub
+                    t2, t3 = t * t, t * t * t
+                    dense.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+                                        + (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+            for i, q in enumerate(dense):
+                # the left half (rows 0 to 12) never crosses the centre line, nor the right half
+                q.y = max(q.y, 0.0) if i <= 12 * sub else min(q.y, 0.0)
+            ring = dense
+        rings.append(ring)
+    S, J = len(xs), 24 * sub
     # a scratch copy of the whole closed surface, for vertex normals
     tmp = bmesh.new()
     tv = [[tmp.verts.new(p) for p in r] for r in rings]
@@ -835,7 +879,7 @@ def _skin(B, h):
     tmp.normal_update()
     # the winding must make the left flank face +y; test one flank cell and flip everything if not
     mid = S // 2
-    flip = tf[mid, 5].normal.y < 0
+    flip = tf[mid, 5 * sub].normal.y < 0
     if flip:
         for f in tf.values():
             f.normal_flip()
@@ -856,7 +900,7 @@ def _skin(B, h):
     for si in range(S - 1):
         xm = (xs[si] + xs[si + 1]) / 2
         for j in range(J):
-            kinds[si, j] = _cell_part(B, infos[si], infos[si + 1], xm, j)
+            kinds[si, j] = _cell_part(B, infos[si], infos[si + 1], xm, j // sub)
 
     def quad(vs, flipped):
         return vs[::-1] if flipped else vs
@@ -929,7 +973,7 @@ def _wheel(B, h):
     r_out, tw = B.wr, B.tw
     sw = tw * e['asp']
     r_rim = r_out - sw
-    N = 24
+    N = WHEEL_N
     bm = h.bm['wheel']
     rimc = HC[e.get('rimc', 'alloy')]
     rim_cls = K_GLOSS if e.get('rimc') == 'graphite' else K_ALLOY
@@ -1057,7 +1101,7 @@ def _wheel(B, h):
         # a pressed steel dish with round vents (a van's), or a plastic wheel cover with radial slots
         col, cls = (HC['steel'], K_PLASTIC) if style == 'steel' else (HC['cover'], K_PLASTIC)
         dish = [(r_hub + 0.004, yface(r_hub) + 0.004), (rm, yface(rm) - 0.004), (r_s + 0.012, .405 * tw)]
-        faces = spin(dish, n=16)
+        faces = spin(dish, n=max(16, N * 2 // 3))
         face_out(faces, axial=(0, 1))
         h.tint('wheel', [f for f, _, _ in faces], col, cls)
         for k in range(count):
@@ -1845,6 +1889,7 @@ def _aero(B, h):
 
 def _torus(h, part, c, a, b, R, r, colour, cls, n=14, m=6):
     """A ring of radius `R` and tube radius `r`, in the plane spanned by unit vectors a and b through `c`."""
+    n, m = int(round(n * CYL_RES)), int(round(m * min(CYL_RES, 1.5)))
     nrm = a.cross(b)
     loops = []
     for k in range(n):
@@ -1863,7 +1908,10 @@ def _interior(B, h, skin):
     belt = B.belt
     # the shell: a coarse inward-facing copy of the cabin skin
     xs = [x for x in skin['xs'] if xe - 1e-6 <= x <= xc + 1e-6]
-    pick = xs[::3]
+    pick = [xs[0]]
+    for x in xs[1:]:
+        if pick[-1] - x >= 0.11:
+            pick.append(x)
     if pick[-1] != xs[-1]:
         pick.append(xs[-1])
 

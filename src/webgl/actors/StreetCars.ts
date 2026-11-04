@@ -21,10 +21,13 @@ import {
   Points,
   PointsMaterial,
   Quaternion,
+  TextureLoader,
   Vector3,
 } from 'three';
 import type { Material, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { dequantized } from './KitCity';
 import { HOME_CELL, HOME_CELLS } from '../bake/cityGen.mjs';
 import { glowTexture, softShadowTexture } from '../bake/CanvasTextures';
 import { asset } from '../asset';
@@ -36,8 +39,15 @@ interface CarType {
   id: string;
   /** the lean model: used far away and on the LOW tier */
   file: string;
-  /** the close-up model (paint, detail, glass and one wheel), HIGH tier only */
+  /** the hero model for cars near the camera (paint, detail, glass and one wheel), HIGH tier only */
   hi?: string;
+  /** the mid model, the same four meshes at a lower resolution, for cars between the hero and lean ranges (HIGH) */
+  mid?: string;
+  /**
+   * the hero paint's baked maps: `paint` packs occlusion, road grime and curvature in R, G and B;
+   * `normal` holds the high-poly skin's tangent-space normals (blender/bld/car_bake.py)
+   */
+  maps?: { paint: string; normal: string };
   length: number;
   width: number;
   /** a supercar: painted from EXOTIC_PAINTS with a glossier clearcoat, dealt out at about one car in seven */
@@ -61,8 +71,8 @@ interface Car {
   odo: number;
   /** brake-light level, 0 to 1 */
   brake: number;
-  /** drawn as the close-up model (kept so the swap has hysteresis) */
-  near: boolean;
+  /** drawn as a close-up model (kept so the swaps have hysteresis): 0 lean, 1 mid, 2 hero */
+  near: 0 | 1 | 2;
 }
 
 interface Driver extends Car {
@@ -95,7 +105,7 @@ export interface CarOptions {
   scale?: number;
 }
 
-/** One set of instanced meshes for a vehicle type: the lean tier, or the close-up one. */
+/** One set of instanced meshes for a vehicle type: the lean tier, or one of the close-up ones (mid, hero). */
 interface Tier {
   paint: InstancedMesh;
   detail: InstancedMesh;
@@ -106,14 +116,20 @@ interface Tier {
   count: number;
 }
 
+/**
+ * Family-car paints in about the shares real traffic has them: mostly whites, silvers, greys and
+ * blacks, then deep reds, blues and greens, a bronze and a champagne, all toned down (nothing
+ * saturated, as everywhere in the town).
+ */
 const PAINTS = [
-  '#d8d8d4', '#cfd2d6', '#a9afb7', '#6f757e', '#1a1c21', '#23262d', '#8a1f26', '#a8281f',
-  '#24467a', '#2f5d92', '#3c5b46', '#d3b13f', '#6c4b33', '#e9e4d6',
+  '#d9d9d5', '#e6e4dc', '#d2d3d1', '#c1c4c8', '#a4a9ae', '#8d9298', '#6a6f76', '#4a4e54', '#3a3d42',
+  '#1b1d21', '#15171a', '#24272c', '#5c2024', '#6e2a27', '#2a3a57', '#3b5571', '#33463b', '#5f5244',
+  '#8a8172',
 ];
-const TAXI_PAINT = '#e6b422';
-/** the exotics' own palette: rosso, arancio, lime, giallo, deep blue, white, black, purple, gunmetal, racing green */
+const TAXI_PAINT = '#d2a42e';
+/** the exotics' own palette, deep rather than loud: rosso, arancio, giallo, verde, blu, white, black, viola, gunmetal, racing green */
 const EXOTIC_PAINTS = [
-  '#b3121c', '#e8611a', '#86c21d', '#f2c419', '#1b3f9a', '#eef0f0', '#0e0f12', '#5b2a86', '#4a4f57', '#13452f',
+  '#8e1b20', '#b0502a', '#bf9631', '#5d7438', '#23386a', '#e8e9e7', '#0e0f12', '#45324f', '#4a4f57', '#1c3b2e',
 ];
 /**
  * How common each vehicle type is on the street; the rest default to 1. The exotics'
@@ -132,9 +148,14 @@ const X0 = -12;
 const X1 = 150;
 const LANE_OFFSET = 0.55; // from the street's centre line; matches the tyre-polished lines in make_ground.py
 const FADE = 7;           // units over which a car grows in and out at a lane's ends
-/** a car is drawn as the close-up model inside HI_IN of the camera and goes back to the lean one past HI_OUT */
+/**
+ * a car is drawn as a close-up model inside HI_IN of the camera and goes back to the lean one past HI_OUT;
+ * inside HERO_IN (out to HERO_OUT) that close-up model is the hero, between there and HI_IN the mid one
+ */
 const HI_IN = 28;
 const HI_OUT = 33;
+const HERO_IN = 12;
+const HERO_OUT = 15;
 
 /**
  * Material class of each `detail` vertex, packed in the alpha of its colour by
@@ -148,6 +169,41 @@ const float KR[16] = float[16](0.55, 0.10, 0.90, 0.30, 0.95, 0.12, 0.20, 0.50, 0
 const float KM[16] = float[16](0.0, 1.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0);
 const float KE[16] = float[16](0.0, 0.0, 0.0, 0.0, 0.0, 1.6, 0.35, 0.0, 0.0, 1.2, 0.0, 0.0, 0.0, 2.6, 0.0, 0.0);
 `;
+
+/**
+ * The hero paint of one vehicle type: the shared clear-coated paint with that type's baked maps.
+ * The packed map's R (occlusion) is the material's `aoMap`, which dims the sky and reflections it
+ * shades; the shader also lets it dim the direct light a little (the bounce a crease never gets)
+ * and lays road film over the paint by its G (grime), which roughens the paint and thins the coat.
+ */
+function heroPaint(base: MeshPhysicalMaterial, packed: Texture, normal: Texture): MeshPhysicalMaterial {
+  const mat = base.clone();
+  mat.aoMap = packed;
+  mat.aoMapIntensity = 1;
+  mat.normalMap = normal;          // the GLB carries MikkTSpace tangents, so no flip
+  mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 carPk = texture2D( aoMap, vAoMapUv ).rgb;
+        diffuseColor.rgb *= mix( 0.74, 1.0, carPk.r );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.15, 0.125, 0.09 ), carPk.g * 0.5 );`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        '#include <roughnessmap_fragment>\nroughnessFactor = mix( roughnessFactor, 0.8, carPk.g * 0.55 );',
+      )
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+        material.clearcoat *= 1.0 - 0.65 * carPk.g;
+        material.clearcoatRoughness = mix( material.clearcoatRoughness, 0.4, carPk.g );`,
+      );
+  };
+  mat.customProgramCacheKey = () => 'street-cars-hero-paint';
+  return mat;
+}
 
 /** A standard material whose roughness, metalness and emission come from each vertex's material class. */
 function classMaterial(): MeshStandardMaterial {
@@ -181,12 +237,15 @@ function classMaterial(): MeshStandardMaterial {
  * cars and three exotics (a mid-engine supercar, a front-engine GT, a winged
  * hypercar), which take a palette and a glossier clearcoat of their own.
  *
- * Each type exists twice. The lean model (1.4 to 1.6k triangles) is what everything
- * more than HI_IN units from the camera is drawn with, and all there is on the LOW
- * tier. The close-up model (HIGH only: a glasshouse with its interior, lamps, plates,
- * mirrors, multi-spoke rims over ventilated discs, 10 to 13k triangles counting its
- * wheels) has its four wheels as one more instanced mesh, which
- * is what lets them turn with the distance rolled. Every frame the cars are
+ * Each type exists twice. The lean model (1.4 to 1.6k triangles, its occlusion and
+ * road grime baked into vertex colours) is what everything more than HI_IN units from
+ * the camera is drawn with, and all there is on the LOW tier. The hero model (HIGH
+ * only: a finely lofted body with a baked occlusion, grime and normal map from its
+ * high-poly twin, a glasshouse with its interior, lamps, plates, mirrors, multi-spoke
+ * rims over ventilated discs, 22 to 26k triangles counting its wheels) is drawn inside
+ * HERO_IN; between there and HI_IN a mid model with the same parts at the old close-up
+ * resolution (10 to 13k, occlusion baked per vertex) stands in. Both have their four
+ * wheels as one more instanced mesh, which is what lets them turn with the distance rolled. Every frame the cars are
  * partitioned between the two sets by distance to the camera, so the cost follows
  * the handful of cars the camera is actually near. Headlights and tail lights are
  * glow sprites (tail lights flare while a car brakes), and the headlights throw a
@@ -199,6 +258,7 @@ export class StreetCars {
   private types: CarType[] = [];
   private lo: Tier[] = [];
   private hi: (Tier | undefined)[] = [];
+  private mid: (Tier | undefined)[] = [];
   private counts: number[] = [];
   private cars: Car[] = [];
   private lanes: Lane[] = [];
@@ -254,19 +314,20 @@ export class StreetCars {
     )) as { types: CarType[] };
     this.types = manifest.types;
     const rand = mulberry32(88211);
-    const loader = new GLTFLoader();
-    // the paint is one physical material (clearcoat) for both tiers on HIGH, so the swap does not change its look;
-    // the exotics' is glossier (a deeper, sharper clearcoat). Each type is one draw either way.
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    // the paint is a physical material (clearcoat) on HIGH, the same for both tiers but for the hero's baked
+    // maps, so the swap does not change its look; the exotics' is glossier (a deeper, sharper clearcoat).
+    // The lean bodies carry their occlusion and grime as vertex colours. Each type is one draw either way.
     const paintMat = high
       ? new MeshPhysicalMaterial({
-        color: '#ffffff', metalness: 0.12, roughness: 0.42, clearcoat: 0.9, clearcoatRoughness: 0.12,
+        color: '#ffffff', metalness: 0.12, roughness: 0.42, clearcoat: 0.9, clearcoatRoughness: 0.12, vertexColors: true,
       })
-      : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.55, roughness: 0.33 });
+      : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.55, roughness: 0.33, vertexColors: true });
     const exoticPaintMat = high
       ? new MeshPhysicalMaterial({
-        color: '#ffffff', metalness: 0.45, roughness: 0.24, clearcoat: 1, clearcoatRoughness: 0.03,
+        color: '#ffffff', metalness: 0.45, roughness: 0.24, clearcoat: 1, clearcoatRoughness: 0.03, vertexColors: true,
       })
-      : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.5, roughness: 0.24 });
+      : new MeshStandardMaterial({ color: '#ffffff', metalness: 0.5, roughness: 0.24, vertexColors: true });
     const detailMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 });
     const hiDetailMat = classMaterial();
     // tinted glass: what it lets through is dimmed by its opacity, what it reflects is added on top
@@ -314,7 +375,7 @@ export class StreetCars {
     const traffic = dealer(TRAFFIC);
     const parking = dealer(PARKED);
     const car = (type: number, x: number, z: number, yaw: number): Car => ({
-      idx: this.cars.length, type, tint: paintFor(type), x, z, yaw, scale: 1, odo: rand() * 40, brake: 0, near: false,
+      idx: this.cars.length, type, tint: paintFor(type), x, z, yaw, scale: 1, odo: rand() * 40, brake: 0, near: 0,
     });
     const k0 = this.k;
     const addLane = (
@@ -348,21 +409,40 @@ export class StreetCars {
     this.counts = this.types.map(() => 0);
     for (const c of this.cars) this.counts[c.type]!++;
 
-    const geometries = (file: string): Promise<Record<string, Mesh>> => new Promise((res, rej) => {
+    // the GLBs are quantized and meshopt-packed (scripts/compress-models.mjs): float copies with each node's
+    // dequantizing transform baked in
+    const geometries = (file: string): Promise<Record<string, BufferGeometry>> => new Promise((res, rej) => {
       loader.load(asset(`/models/cars/${file}`), (g) => {
-        const out: Record<string, Mesh> = {};
+        const out: Record<string, BufferGeometry> = {};
+        g.scene.updateMatrixWorld(true);
         g.scene.traverse((o) => {
           const mesh = o as Mesh;
           if (!mesh.isMesh) return;
-          for (const part of ['paint', 'detail', 'glass', 'wheel']) if (mesh.name.startsWith(part)) out[part] = mesh;
+          for (const part of ['paint', 'detail', 'glass', 'wheel']) {
+            if (mesh.name.startsWith(part)) out[part] = dequantized(mesh.geometry).applyMatrix4(mesh.matrixWorld);
+          }
+          mesh.geometry.dispose();
         });
         res(out);
       }, undefined, rej);
     });
-    const loaded = await Promise.all(this.types.map(async (t) => ({
-      lo: await geometries(t.file),
-      hi: high && t.hi ? await geometries(t.hi) : undefined,
-    })));
+    const textures = new TextureLoader();
+    const map = (file: string): Promise<Texture> => textures.loadAsync(asset(`/models/cars/${file}`)).then((t) => {
+      t.flipY = false;               // glTF's UV convention
+      t.anisotropy = 4;
+      this.disposables.push(t);
+      return t;
+    });
+    const loaded = await Promise.all(this.types.map(async (t) => {
+      const hero = high && t.hi;
+      const [lo, hi, mid, maps] = await Promise.all([
+        geometries(t.file),
+        hero ? geometries(t.hi!) : undefined,
+        hero && t.mid ? geometries(t.mid) : undefined,
+        hero && t.maps ? Promise.all([map(t.maps.paint), map(t.maps.normal)]) : undefined,
+      ]);
+      return { lo, hi, mid, maps };
+    }));
 
     // On HIGH the cars cast into the sun's shadow map and take its shadows (their own and the
     // houses' and trees'), on top of the soft contact quads, and cast into the streetlights'
@@ -380,29 +460,51 @@ export class StreetCars {
       this.disposables.push(inst, geo);
       return inst;
     };
-    const tier = (parts: Record<string, Mesh>, detail: Material, cap: number, close: boolean, exotic: boolean): Tier => {
-      const paint = instance(parts.paint!.geometry, exotic ? exoticPaintMat : paintMat, cap);
-      const det = instance(parts.detail!.geometry, detail, cap);
+    const tier = (
+      id: string, parts: Record<string, BufferGeometry>, paintM: Material, detail: Material, cap: number,
+      close: false | 'mid' | 'hero',
+    ): Tier => {
+      const paint = instance(parts.paint!, paintM, cap);
+      const det = instance(parts.detail!, detail, cap);
+      const band = typeof close === 'string' ? close : 'lean';
+      paint.name = `car-${id}-${band}-paint`;
+      det.name = `car-${id}-${band}-detail`;
       det.instanceMatrix = paint.instanceMatrix;       // one pose, drawn by every mesh of the set
       const t: Tier = { paint, detail: det, count: 0 };
       if (close) {
-        const glass = instance(parts.glass!.geometry, glassMat, cap, false);
+        const glass = instance(parts.glass!, glassMat, cap, false);
         glass.instanceMatrix = paint.instanceMatrix;
         glass.renderOrder = 1;
-        const wheels = instance(parts.wheel!.geometry, hiDetailMat, cap * 4);
+        const wheels = instance(parts.wheel!, hiDetailMat, cap * 4);
         const brake = new InstancedBufferAttribute(new Float32Array(Math.max(cap, 1)), 1);
         brake.setUsage(DynamicDrawUsage);
         det.geometry.setAttribute('aBrake', brake);
+        glass.name = `car-${id}-${band}-glass`;
+        wheels.name = `car-${id}-${band}-wheels`;
         Object.assign(t, { glass, wheels, brake });
       }
       return t;
     };
     loaded.forEach((l, ti) => {
       const cap = this.counts[ti]!;
-      const exotic = !!this.types[ti]!.exotic;
-      this.lo[ti] = tier(l.lo, detailMat, cap, false, exotic);
-      if (l.hi) this.hi[ti] = tier(l.hi, hiDetailMat, cap, true, exotic);
+      const base = this.types[ti]!.exotic ? exoticPaintMat : paintMat;
+      const id = this.types[ti]!.id;
+      this.lo[ti] = tier(id, l.lo, base, detailMat, cap, false);
+      if (l.hi) {
+        // the hero paint: that type's baked maps on the shared paint (a vertex-coloured lean paint without them)
+        let hero: Material = base;
+        if (l.maps && (base as MeshPhysicalMaterial).isMeshPhysicalMaterial) {
+          const m = heroPaint(base as MeshPhysicalMaterial, l.maps[0], l.maps[1]);
+          m.vertexColors = false;
+          this.disposables.push(m);
+          this.reflective.push(m);
+          hero = m;
+        }
+        this.hi[ti] = tier(id, l.hi, hero, hiDetailMat, cap, 'hero');
+      }
+      if (l.mid) this.mid[ti] = tier(id, l.mid, base, hiDetailMat, cap, 'mid');
     });
+    if (this.envMap !== undefined) this.setEnvMap(this.envMap);
 
     // contact shadows and headlight pools under moving cars; lights above them
     const flat = new PlaneGeometry(1, 1);
@@ -529,6 +631,7 @@ export class StreetCars {
     }
     for (const t of this.lo) t.count = 0;
     for (const t of this.hi) if (t) t.count = 0;
+    for (const t of this.mid) if (t) t.count = 0;
 
     const headAttr = this.heads.geometry.attributes.position!;
     const tailAttr = this.tails.geometry.attributes.position!;
@@ -543,13 +646,17 @@ export class StreetCars {
       let tier = this.lo[car.type]!;
       const close = hiOn ? this.hi[car.type] : undefined;
       if (close) {
+        const mid = this.mid[car.type];
         const dx = x - this.o.x;
         const dy = 0.2 - this.o.y;
         const dz = z - this.o.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
         const r = car.near ? HI_OUT : HI_IN;
-        car.near = dx * dx + dy * dy + dz * dz < r * r;
-        if (car.near) tier = close;
-      } else car.near = false;
+        const rh = car.near === 2 ? HERO_OUT : HERO_IN;
+        car.near = d2 < rh * rh || (!mid && d2 < r * r) ? 2 : d2 < r * r ? 1 : 0;
+        if (car.near === 2) tier = close;
+        else if (car.near === 1) tier = mid!;
+      } else car.near = 0;
 
       const k = tier.count++;
       this.q.setFromAxisAngle(this.Y, yaw);
@@ -611,6 +718,7 @@ export class StreetCars {
     };
     for (const t of this.lo) flush(t);
     for (const t of this.hi) if (t) flush(t);
+    for (const t of this.mid) if (t) flush(t);
     headAttr.needsUpdate = true;
     tailAttr.needsUpdate = true;
     flareAttr.needsUpdate = true;
@@ -642,8 +750,9 @@ export class StreetCars {
   }
 
   /**
-   * The materials that reflect the surroundings: the family and exotic paints, the glass and
-   * the close-up detail (chrome, alloy, lamp lenses). Empty until the models have loaded.
+   * The materials that reflect the surroundings: the family and exotic paints (and each type's
+   * hero paint), the glass and the close-up detail (chrome, alloy, lamp lenses). Empty until the
+   * models have loaded.
    */
   materials(): MeshStandardMaterial[] {
     return this.reflective;

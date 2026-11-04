@@ -47,7 +47,12 @@ const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
         <button class="btn btn--ghost" type="button" data-replay>Replay the flight</button>
       </div>
       <ul class="landing__proof">
-        {INTRO.proof.map((p) => <li>{p}</li>)}
+        {INTRO.proof.map((p) => (
+          <li>
+            {/outlook/i.test(p) && <img class="landing__mark" src={href('/images/outlook.svg')} alt="" width="14" height="13" />}
+            {p}
+          </li>
+        ))}
       </ul>
       <p class="pricing-card__note">{DOWNLOAD.requirements}</p>
     </header>
@@ -123,7 +128,7 @@ const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
 
     <section class="landing__section" aria-labelledby="landing-flight">
       <p class="page__kicker">The full flight, in brief</p>
-      <h2 id="landing-flight">Ten stops, one send.</h2>
+      <h2 id="landing-flight">Ten stops and a detour, one send.</h2>
       <div class="landing__grid">
         {
           HOME_CHAPTERS.map((c) => (

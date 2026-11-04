@@ -11,8 +11,12 @@ npm run compress:models                          # weld + quantize + meshopt the
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
-python blender/make_cars.py                      # the nine road vehicles (six family cars, three supercars), lean and close-up
-python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
+python blender/make_cars.py && npm run compress:models   # the nine road vehicles (six family cars, three supercars): lean, mid and hero tiers and the hero maps
+python blender/fetch_humans.py && python blender/make_humans.py && npm run compress:models
+                                                 # the pedestrians (MakeHuman, CC0) and the dog (see People)
+python blender/fetch_city_props.py && python blender/make_city_props.py && npm run compress:models
+                                                 # the night city's street and roof props, one shared atlas
+                                                 # (Poly Haven CC0 scans + bld/city_props.py; --render DIR: a contact sheet)
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
 python blender/make_airliner.py                  # the landing chapter's A320neo-class jet, both tiers, and its livery maps
@@ -20,6 +24,8 @@ python blender/make_airliner.py                  # the landing chapter's A320neo
 python blender/make_biplane.py && npm run compress:models   # the storm chapter's banner-tow biplane and its fabric normal map
 python blender/make_ship.py && npm run compress:models      # the lighthouse chapter's 181 m container ship, in metres (ship.glb, and ship-lo.glb for phones)
                                                  # (--render DIR: Cycles previews, VIEWS=side,bridge,... picks them)
+python blender/make_it_office.py && npm run compress:models # the night IT office's 13 props in one GLB on one baked atlas (see "IT office props")
+                                                 # (--render DIR: Cycles high-poly vs shipped comparisons; --debug DIR: the maps as PNGs)
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
@@ -90,6 +96,16 @@ of `mid`), lean beyond; the night city keeps a wide `near` for its neon and bill
 swaps only the lots inside `hero` (12 units, ~70 lots) to the hero towers. Phones always get
 the lean module.
 
+### Window-cell grid
+
+Both shipped city tiers carry a second UV set, `Grid` (glTF `TEXCOORD_1`, three's `uv1`, left as
+floats by the compressor), for the facade shader's interior rooms: on a wall slot's faces (cu, cv) =
+(distance along the wall / bay width, storeys above the wall's base), so whole numbers are the pier
+lines and floor slabs the generators used (`facade.wall_grid`); every other face is (-1, -1). A
+shopfront storey is one band of its own (its bays, cv 0..1) under the facade (cv from 1 up), so the
+lean walls are split at the top of it; louvres take one 5 m post bay by their whole height, a
+mansard one dormer bay by its whole slope.
+
 ### Window glass
 
 Every window pane of a hero building is also exported as a second mesh, `glass`, a quad 4 mm
@@ -110,7 +126,7 @@ chapter's sun.
 
 | script | writes | notes |
 | --- | --- | --- |
-| `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each twice: `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets` and `exotic`; the runtime is `StreetCars.ts`. 3.6 MB for all eighteen files |
+| `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each in three shipped tiers built from one description (see below): `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris) for distance and the LOW tier; `<type>-mid.glb` (10 to 13k) and `<type>-hi.glb`, the hero (21 to 25k), with its maps `<type>-paint.webp` and `<type>-paint-n.webp`. `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets`, `exotic`, `maps` and the tiers' triangle counts; the runtime is `StreetCars.ts`. 3.5 MB for all 45 files (meshopt-packed by `compress:models`, normals at 12 bits); `CREDITS.md` records the survey of downloadable cars (none used) |
 | `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
 | `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
 | `make_airliner.py` | `public/models/airliner/` | an A320neo-class jet lofted in metres and scaled to 7.4 units (`bld/airliner.py`): `airliner.glb` (~38k tris, HIGH) and `airliner-low.glb` (~12k, LOW, no fan blades or panel lines), one mesh per material plus each wheel and fan on its own and Empties for the lights and fan axes; `livery.webp` / `livery-low.webp`, an atlas painted with PIL (the fuselage unrolled in the top half, the fin projected side-on in the bottom) and `glow.webp`, the lit cabin windows. Runtime: `Airliner.ts` |
@@ -118,13 +134,41 @@ chapter's sun.
 The lighthouse is modelled in the units of the old procedural tower (lantern centre at
 z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, tooltip) hold.
 
-## Cars (close-up tier)
+## Cars (close-up tiers)
 
 The lean cars are cheap on purpose. The camera sails 8 to 30 units over the streets, though,
-where a car is 100 to 200 px long, so `StreetCars.ts` swaps every car inside 28 units of the
-camera (33 on the way back, so it never flickers) to the model from `build_hi`. HIGH only.
+where a car is 100 to 200 px long, and sometimes drops to street level beside them, so on HIGH
+`StreetCars.ts` swaps every car inside 28 units of the camera (33 on the way back, so it never
+flickers) to a close-up model: the **hero** inside 12 units (15 on the way back), the **mid**
+between. All three tiers come from one description, in four builds (`bld/car_bake.py`):
 
-| type | tris, lean / close-up | what |
+| build | body skin | wheels, round parts | ships | tris with wheels |
+| --- | --- | --- | --- | --- |
+| high-poly | a section every 1.5 cm, 96 points round (each of the ring's 24 spans split in four along a Catmull-Rom curve) | 64 segments, 2.5x | never: the bake source (`--hp DIR` writes it out) | 63 to 78k |
+| hero `-hi` | a section every 4.5 cm, 48 points round; UV set and MikkTSpace tangents | 32, 1.6x | HIGH, inside 12 units | 21 to 25k |
+| mid `-mid` | the old close-up loft (24 points, 60 to 75 sections) | 24, 1x | HIGH, 12 to 28 units | 10 to 13k |
+| lean | the lofted shell from `build` | boxes | everywhere else, and all of LOW | 1.4 to 1.6k |
+
+The ring is an analytic function of x, so more sections are exact rather than smoothed, and
+everything fitted to the skin (lamps, plates, seals, glass) stays on it. The flanks of the
+close-up tiers curve more than the old model's (the rocker tucks under, the shoulder rolls into
+the tumblehome: `SIDE_CURVE`).
+
+Baked, with Cycles (glass hidden, so light reaches the cabin through the windows; the four
+wheels placed and a road under the car as occluders):
+
+| what | where | how |
+| --- | --- | --- |
+| occlusion, grime, curvature | hero `paint`: `<type>-paint.webp`, 1024 px, R/G/B | AO (0.5 m) into the body's UV set; road film from height (heaviest on the sills, lower doors and bumpers), cavities and two octaves of noise; convex curvature from pointiness |
+| normals | hero `paint`: `<type>-paint-n.webp`, 1024 px | tangent space, the high-poly skin projected onto the hero's |
+| occlusion | every tier's `detail` and `wheel` (multiplied into the vertex colour; alpha, the material class, untouched), the mid and lean `paint` (new vertex colours, with the grime tint low on the body) | per-vertex AO; the wheel on its own (it turns) at 12 cm |
+
+`StreetCars.ts` gives each type's hero paint its own copy of the clear-coated paint with these
+maps: R is the `aoMap` (dims sky and reflections, and the direct light a little), G lays a road
+film over the paint that roughens it and thins the clearcoat. The other tiers' paint reads the
+vertex colours. Draw calls per type are unchanged (paint, detail, glass, wheels per close tier).
+
+| type | tris, lean / old close-up (now the mid tier) | what |
 | --- | --- | --- |
 | `sedan`, `taxi` | 1.47k / 10.8k, 9.9k | four-door saloon, twin-spoke rims, chrome window frames; the taxi adds the roof sign, checks and plastic wheel covers |
 | `hatch` | 1.42k / 10.5k | five-door hatch: roof spoiler with a brake light, rear wiper, five broad spokes |
@@ -143,14 +187,14 @@ wheels, `pinch` rounds the nose and tail off harder in plan, and `intake` presse
 the flank that deepens from the door to its back wall. The wing, snorkel, flank scoops and
 gills also exist as a few boxes in the lean model, so the silhouette holds across the swap.
 
-Four meshes per `<type>-hi.glb` (10 to 13k tris counting the four wheels):
+Four meshes per `<type>-hi.glb` and `<type>-mid.glb`:
 
 | mesh | what |
 | --- | --- |
-| `paint` | the body skin (a 24-point ring lofted along 60 to 75 sections, wheel arches cut into the flanks), mirror housings (and the exotics' stalks), the hatchbacks' roof spoiler, the hypercar's snorkel and fin, van roof ribs, pickup tailgate: tinted per instance, `MeshPhysicalMaterial` with clearcoat (a glossier one for the exotics) |
+| `paint` | the body skin (lofted as above, wheel arches cut into the flanks), mirror housings (and the exotics' stalks), the hatchbacks' roof spoiler, the hypercar's snorkel and fin, van roof ribs, pickup tailgate: tinted per instance, `MeshPhysicalMaterial` with clearcoat (a glossier one for the exotics) |
 | `glass` | one sheet per window, inset 1.6 cm from the skin, drawn tinted and see-through so the interior shows (a black rubber seal lines each opening) |
 | `detail` | interior (headlined shell, dash, wheel, seats, bolstered buckets in the exotics, console), lamps with bezels, lenses and LED running-light strips, grille slats, intakes, fog lamps, plates, badges and the model's name in chrome letters, exhaust tips, calipers (curved round the disc, painted), door and bumper shut lines, gloss-black pillars between the side windows, window frames and beltline, mirror stalks and repeaters, fuel flap, tow-eye covers, hood, frunk and deck lines, wipers, rear wiper, shark-fin antenna, taxi sign and checks, roof rails, van door rail and aerial, pickup bed ribs, liner and hitch; on the exotics the carbon splitter, skirts, diffuser and strakes, engine louvres, wing, canards and canopy |
-| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z, 24 segments round: tyre (bulged sidewall with a ring of raised lettering, squared shoulder, two ribs either side of a groove, a sipe across the shoulder rib every segment; 30 to 35-series on the exotics), rim lip and barrel with one of eight face designs on a concave dish (broad `star` or `six` spokes, thin `multi` spokes, `twin` pairs, `y` forks, twisted `blade`s, a pressed `steel` dish, a plastic `cover`), five lug nuts or a centre-lock nut, hub cap, a ventilated disc (vanes between its plates; drilled carbon-ceramic on the exotics) |
+| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z, 24 (mid) or 32 (hero) segments round: tyre (bulged sidewall with a ring of raised lettering, squared shoulder, two ribs either side of a groove, a sipe across the shoulder rib every segment; 30 to 35-series on the exotics), rim lip and barrel with one of eight face designs on a concave dish (broad `star` or `six` spokes, thin `multi` spokes, `twin` pairs, `y` forks, twisted `blade`s, a pressed `steel` dish, a plastic `cover`), five lug nuts or a centre-lock nut, hub cap, a ventilated disc (vanes between its plates; drilled carbon-ceramic on the exotics) |
 
 The runtime instances `wheel` four times per car (`wheelOffsets` in the manifest, the right-hand
 pair turned half way round) and sets each instance's rotation from the distance the car has
@@ -171,8 +215,10 @@ is how the corner lamps, window frames, louvres, gills and skirts follow the bod
 builds reuse `SPECS` for the envelope, so the lean and close-up cars of a type have the same
 size and silhouette.
 
-`StreetCars.ts` paints the exotics from a palette of their own (rosso, arancio, lime, giallo,
-deep blue, white, black, purple, gunmetal, racing green) and deals them out at about one car in
+`StreetCars.ts` paints the family cars in about the shares real traffic has (mostly whites,
+silvers, greys and blacks, then deep reds, blues, greens, a bronze and a champagne, all toned
+down, nothing saturated) and the exotics from a deeper palette of their own (rosso, arancio,
+giallo, verde, blu, white, black, viola, gunmetal, racing green), dealt out at about one car in
 seven, in traffic and parked alike: `TRAFFIC` and `PARKED` weight every type, and the exotics'
 share of the weights is handed out by a running tally rather than drawn, so every street has
 its few. On HIGH every car mesh but the glass casts into and takes the sun's shadow map (and
@@ -181,30 +227,69 @@ paint, glass and close-up detail.
 
 ## People
 
-`make_people.py` writes `public/models/people/people.glb` (one mesh per variant, 461 KB in all)
-and its `manifest.json`; the figures are built in `bld/people.py`, the runtime is
-`src/webgl/actors/Pedestrians.ts` (where people go: `PedestrianPlans.ts`).
+The pedestrians are MakeHuman people. `fetch_humans.py` fetches MPFB2 (the MakeHuman add-on for
+Blender; its data, the base mesh, targets, rigs and weights, are CC0) and the MakeHuman system
+assets (CC0: skins, eyes, brows, lashes, hair, clothes, shoes) into `blender/cache/makehuman/`;
+`make_humans.py` builds ten people with them in headless Blender and writes
+`public/models/people/` (`humans.glb`, the atlas and `manifest.json`; sources and licences in
+`public/models/people/CREDITS.md`); `render_humans.py DIR` renders the evidence (the source against
+the shipped tiers, and a contact sheet). The runtime is `src/webgl/actors/Pedestrians.ts` (where
+people go: `PedestrianPlans.ts`).
 
-| variant | tris (with every option) | what |
+```sh
+python blender/fetch_humans.py
+python blender/make_humans.py            # ~5 min a person (Cycles bakes on the CPU); --only ethan,mei rebuilds some
+node scripts/compress-models.mjs         # meshopt (positions folded back to floats at load)
+python blender/render_humans.py /tmp/people
+```
+
+| person | who | wears |
 | --- | --- | --- |
-| `man-casual` | 1.92k (2.38k) | tee with short sleeves, jeans, sneakers; cap, backpack, cross-body bag, beard |
-| `man-jacket` | 1.89k (2.44k) | jacket over a shirt (open collar), trousers, shoes; beanie, bag, backpack, beard, scarf |
-| `man-coat` | 2.13k (2.59k) | knee-length coat with a stand-up collar and swinging tails; beanie, scarf, bag, beard |
-| `woman-dress` | 2.12k (2.57k) | blouse and A-line skirt (a dress when both take one colour), bare legs or tights, flats; ponytail, bun, long hair, bag, scarf |
-| `woman-casual` | 1.95k (2.59k) | three-quarter sleeves, trousers, sneakers; ponytail, bun, long hair, bag, backpack, beanie |
-| `woman-coat` | 2.16k (2.79k) | coat, tights, boots; ponytail, bun, long hair, beanie, scarf, bag |
-| `child` | 1.98k (2.35k) | about eight: bigger head, tee and shorts; cap, backpack, ponytail |
-| `jogger` | 1.98k (2.26k) | lean build, tee, running shorts, sneakers; cap, ponytail |
-| `dog` | 0.99k | a medium dog: two-part legs, floppy ears, collar, tail |
+| `ethan` | man, 29, light skin, athletic | field jacket over a striped shirt, jeans, brown leather shoes |
+| `marcus` | man, 52, dark skin, heavier | suit, black shoes |
+| `mei` | woman, 24, East Asian, slight | tee, jeans, white sneakers, bob |
+| `claire` | woman, 41, light skin | blouse and pencil skirt, boots, long hair |
+| `kwame` | man, 23, dark skin, tall | tee, jeans, sneakers, afro |
+| `rosa` | woman, 67, olive skin, heavier, short | blouse and skirt, flats, grey bob |
+| `hiro` | man, 71, East Asian, slight | plaid shirt, jeans, leather shoes, grey hair |
+| `amara` | woman, 32, dark skin | tee, jeans, boots, braid |
+| `omar` | man, 44, mixed, heavier | field jacket, jeans, shoes |
+| `sophie` | woman, 19, fair and freckled, red hair | sports top and leggings, sneakers, ponytail (the joggers) |
 
-A figure is closed tubes lofted round a skeleton (torso through superellipse sections, limbs along
-their bones with knee, calf and forearm bulges, mitten hands with a thumb, a head shaped ring by
-ring with a nose, ears, eyes and brows, a hair shell, lofted shoes with a sole band), in metres,
-facing +x, exported at `SCALE`. The parts only overlap, never join, so a limb turns about its joint
-without tearing. Clothes are mostly regions of those surfaces (a sleeve is the top of the arm tube,
-a little looser, ending in a hem: two rings at one height, so the hem is a lip and the colour edge
-is crisp); skirts and coat tails are open lofts hanging from the waist. Hats, bags, backpacks,
-scarves, beards and the longer hair styles are options: always in the mesh, drawn per person.
+How a person is made (`bld/humans.py`):
+
+- **Body.** MPFB's `HumanService.create_human` with the macro targets (sex, age, weight, muscle,
+  height, proportions, ethnicity mix) plus a few face targets of the person's own (nose, chin,
+  cheekbones, brows, lips, ears). Eyes, eyebrows, eyelashes, hair, clothes and shoes are MakeHuman
+  proxies, fitted by MPFB (each proxy vertex is bound to three base-mesh vertices) and they delete
+  the skin they cover.
+- **Pose.** MPFB's game-engine rig puts the arms down from the A pose (palms in, fingers loosely
+  curled); the armature is applied and the rig dropped. Its weights become the shader rig's one bone
+  and weight a vertex (`rig_attrs`: the deepest bone b holding at least 15% of the vertex, at
+  S(b) / S(parent), S being the weight of a bone and everything below it; the neck is shared
+  between head and chest, the hands and fingers go with the forearm).
+- **Materials (the bake source).** Principled materials over the MakeHuman UVs: the MakeHuman
+  diffuse, normal and AO maps, plus a procedural layer: skin pores and fine bumps, blotches and a
+  warm flush, freckles (`sophie`), cloth weave and wear, varied roughness; glossy eyes; alpha-cut
+  hair, brows and lashes.
+- **Tiers.** The source (29k-35k triangles) is collapse-decimated to the **hero** mesh (19k; within
+  6 units of the camera on HIGH, at most six a person) and again to the **lean** one (2.6k; everyone
+  else, and all of them on phones), the lean one losing the lashes. Both keep the `atlas` UVs.
+- **Atlas.** A second UV map, `atlas`: MakeHuman's islands at an even texel density, the face
+  enlarged x2.6, hands x1.6, eyes x3, packed into the person's 1024 tile of a 4096 x 3072 atlas.
+  Cycles bakes from the source UVs onto it on the same mesh (no rays between meshes): albedo,
+  alpha, roughness, occlusion (irradiance under a white sky, two bounces, hair letting light
+  through) and tangent normals. Tinted regions are stored normalised to a mean of 0.5, so the
+  runtime's per-person colour times two is the colour and every crowd member has their own
+  skin tone (near the person's own), hair colour and clothes; eyes keep their own colour.
+  `atlas-color.webp` (RGB + alpha), `atlas-orm.webp` (R occlusion, G roughness),
+  `atlas-normal.webp`; `*-low.webp` are a quarter size, for phones (which skip the normal map).
+
+Sizes after meshopt: `humans.glb` (lean + dog) 285 KB, `humans-hero.glb` 1.3 MB (HIGH only); the
+atlas 2.6 MB colour, 1.1 MB ORM, 0.9 MB normal (HIGH), 0.6 MB in all at a quarter (LOW). At the
+canyon's street-level view (t 0.7, `?probe`) the city crowd draws 158 people in 13 draws and 542k
+triangles on HIGH (8 of them hero; the lofted figures were 6 draws, 389k) and 68 in 9 draws and
+177k on LOW (175k before).
 
 Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
 
@@ -213,13 +298,15 @@ Each vertex carries one packed attribute, `_RIG` (4 unsigned bytes):
 | 0 | `bone * 16 + region`. Bones (`B_*`): root (pelvis), chest, head, upper arm and forearm each side, thigh, shin and foot each side, skirt, bag (the dog uses the limb slots for its legs, and tail). Regions (`R_*`): skin, hair, top, bottom, shoes, accessory, under (a shirt under a jacket, tights) take per-instance colours; dark (soles, eyes) and light (sneaker soles) are fixed |
 | 1 | option: 0 is always drawn, k only when bit k-1 of the instance's option mask is set (`options` in the manifest is the bit order) |
 | 2 | weight x 255: how much of its own bone's turn the vertex takes (half at a knee or elbow ring so the joint bends; a skirt hem takes some of its side's thigh swing) |
-| 3 | occlusion x 255: ambient occlusion baked by casting rays against the body |
+| 3 | occlusion x 255: ambient occlusion baked by casting rays against the body (255 for the MakeHuman people, whose occlusion is in the atlas) |
 
-Normals are signed bytes (`KHR_mesh_quantization`); positions stay floats. The manifest carries each
+Normals are signed bytes (`KHR_mesh_quantization`), the people's atlas UVs 16-bit (14 after meshopt). The manifest carries each
 variant's rig in glTF frame and site units: a pivot per bone, thigh and shin length, the heel and
 toe from the ankle, and the right palm (where a leash is held).
 
-`Pedestrians.ts` draws one `InstancedMesh` per variant and poses every vertex in the shader, turning
+`Pedestrians.ts` draws one `InstancedMesh` per variant and tier (the hero tier only while someone of
+that person is near the camera, with hysteresis; whoever it draws is folded to a point in the lean
+mesh) and poses every vertex in the shader, turning
 it about its joint and every joint above it (no skinning data). The legs are solved: the stance
 foot's ankle slides back under the hip at a constant speed, a two-bone solve gives the thigh angle
 for the knee's flex, the foot rolls heel, flat, toe, and the pelvis drops until the lower foot is
@@ -246,7 +333,8 @@ bld/
   hero_trees.py     branching trunks and leaf cards  foliage.py  Cycles-rendered leaf cards
   bark.py           periodic procedural bark strips and their normal maps
   cars.py           road vehicles: the lean lofted shells (`build`) and the close-up models (`build_hi`)
-  people.py         pedestrians and a dog: lofted figures, clothing regions, options, the rig attribute
+  people.py         the dog (and the former lofted pedestrians): figures, regions, options, the rig attribute
+  humans.py         the MakeHuman pedestrians: MPFB build, pose, rig attributes, atlas UVs, bakes, tiers
   lighthouse.py, lh_geo.py, lh_tex.py   the lighthouse, its builders and its maps
   archetypes.py     the eight towers and four blocks
   model.py          the low/high pair, UV assignment, bake proxies, the hero mesh and its glass
@@ -265,6 +353,57 @@ job. The only lit pass is the occlusion one.
 Faces that share a texture slot (opposite walls of a tower) are identical by
 construction, and the bake uses one representative per slot with every face on its
 own vertices, so the cage extrudes straight out of each face.
+
+## IT office props
+
+`make_it_office.py` builds the night office level's props into `public/models/office/`:
+`office-props.glb` (one root node per prop, an identity-transform group named for it with the mesh
+on a child `<name>_mesh`, so the meshopt dequantization transform never moves the origin) and
+`manifest.json` (`{ file, nodes: [{ name, size: [w, h, d], emissive: [...], tris, canvas? }] }`).
+Units are metres, Y up, each prop faces +Z with its origin at the floor-centre of its footprint (the
+ceiling panel's at the centre of its lit face; the whiteboard's at the bottom of its marker tray,
+its back against the wall).
+
+| node | what | lean tris | high-poly tris |
+| --- | --- | --- | --- |
+| `desk_pod` | 1.6 m oak sit desk on a white frame, perforated modesty panel, cable tray and power strip, felt privacy screen, a 24-inch monitor on a gas arm, keyboard (every key), mouse on a pad, mug, notebook and pen, papers, sticky notes, a dock | 3.0k | 27k |
+| `monitor_24` | 6.5 mm bezels, 18 mm chin, power LED, rounded back housing, VESA plate, tilting neck on an oval foot | 0.4k | 2.5k |
+| `chair_office` | five-star polished base, twin-wheel casters, gas lift, tilt mechanism and levers, waterfall fabric seat, curved mesh back with a ribbed shell, lumbar pad, height-adjustable arms | 2.4k | 26k |
+| `rack_42u` | 800 x 1000 mm cabinet, double perforated front doors swung open, perforated rear door, 19-inch rails, finger ducts; UPSs, servers (drive caddies, vents, control panels), a 4U storage shelf, KVM, firewall, two 48-port switches, three 24-port patch panels, D-ring managers, blanking panels; colour-coded patch leads with boots, uplinks and velcro-tied bundles in the ducts | 12.3k | 123k |
+| `cable_tray` | 2 m zinc wire-mesh tray, two strut trapezes with rod stubs, three cable bundles (each cable modelled in the twin) in velcro ties | 3.9k | 103k |
+| `it_bench` | 1.8 m steel bench, lower shelf, riser with pegboard (tools), shelf and power strip; ESD mat with ground cord, a laptop lid-down with its bottom off (board, fan, heat pipe, battery, RAM, SSD), a multimeter with probes and leads, 3.5- and 2.5-inch drives, screwdriver stand, label printer, parts organiser, magnetic bowl, screws, cable coil, mug; a wall-mounted patch panel with leads to a desktop switch; boxes, a cable reel, a PC tower | 4.1k | 61k |
+| `desk_lamp` | weighted base, sprung parallel arms, shade (white inside) round an emissive `bulb` | 1.2k | 15k |
+| `ceiling_light_panel` | 600 x 600 edge-lit panel: frame, emissive `panel` diffuser (UV 0..1), tray, driver | 0.2k | 2k |
+| `filing_cabinet` | four-drawer steel cabinet, pulls, label holders, lock, a folder and papers on top | 0.5k | 4k |
+| `whiteboard` | 1.2 x 0.9 m board, aluminium frame and corner caps, marker tray with markers and an eraser; the face is its own material `board` (UV 0..1) for the engine to draw on | 0.6k | 4k |
+| `printer` | floor-standing MFP: cabinet on casters, four paper drawers, output bay with prints, scanner and document feeder, tilted touch panel (`led`, lcd tint) | 0.9k | 4k |
+| `plant_pot` | fiddle-leaf fig in a tapered planter, mulch, three stems, 42 two-sided leaves | 5.2k | 41k |
+| `coffee_station` | base unit (doors, drawers, oak top), bean-to-cup machine (display, spouts, drip tray, cup), kettle, jars, mugs, paper cups, a sugar tray | 2.6k | 19k |
+
+37.2k triangles for one of each; 1.9 MB after `compress:models` (positions, 10-bit normals and
+tangents, 14-bit UVs, meshopt). Materials: `office` (the atlas: `office-color` sRGB, `office-orm`
+occlusion/roughness/metalness and `office-normal`, 2048 px WebP, 333 + 398 + 559 KB), `led` (samples
+the colour atlas's palette cells for base and emission: one LED tint per cell, so blinking is one
+material), and the plain `screen`, `bulb`, `panel`, `board`.
+
+**How it is built.** `bld/office.py` describes each prop once; `build(name, hi)` builds the
+high-poly twin (three-segment rounded bevels, 24 to 64 sides, every small detail as geometry:
+keycaps, RJ45 jacks, drive caddies, vents, screws, sticky notes, mouse pad, cables lying flat) or the
+lean mesh (chamfers or none, 6 to 20 sides, anything within a few millimetres of a surface left to the
+maps). `bld/office_mats.py` gives the twin procedural PBR materials (powder-coat orange peel, plastic
+grain, fabric weave and mesh, oak grain, brushed metal, perforated steel, paper, leaf veins) with wear
+evaluated on the twin itself: chipped and rubbed convex edges from a ray-traced curvature mask (Bevel
+node against the true normal), grime in creases (AO node), dust on up-facing surfaces, smudged
+roughness. `bld/office_bake.py` triangulates the lean meshes, deletes faces nobody can see (buried in
+a closed part, pressed against another, flat on the floor), unwraps them all into one atlas (a part's
+share scales with its weight squared: equipment fronts and keyboards high, carcass sides low), and
+bakes each twin onto its lean mesh: normals, bounce-aware occlusion under a white sky over a white
+floor (and the wall or ceiling it backs onto), albedo and roughness/metalness. Occlusion goes to the
+ORM map's R, and 28% of it into the albedo; empty texels are filled by push-pull. `scripts/office-pack.mjs`
+nests the nodes and attaches the maps. A full build takes 15 to 25 minutes on four cores.
+
+`--render DIR` (or `--compare GLB --render DIR` for an existing build) renders the twins and the
+shipped GLB (re-imported) under the same lights and cameras, side by side as `compare-<view>.png`.
 
 ## What is baked, and what deliberately is not
 

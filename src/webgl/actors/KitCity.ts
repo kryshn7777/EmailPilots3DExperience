@@ -29,6 +29,7 @@ import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { asset } from '../asset';
 import { requestCompile } from '../warm';
 import { applyRoofs, roofAttributes } from '../materials/Roofs';
+import { applyFacades } from '../materials/Facades';
 
 export interface KitLot {
   x: number; z: number; w: number; d: number; h: number;
@@ -152,6 +153,11 @@ export interface KitOptions {
   roofs?: boolean;
   /** a photographed plaster, as variation about its mean, tiled over the houses' baked walls (HIGH; see materials/Roofs.ts) */
   wallDetail?: Texture;
+  /**
+   * Weather the towers and blocks (materials/Facades.ts): upkeep per building, grime, rain streaks, and with
+   * a photographed concrete a parallax grain (HIGH). The night canyon wants it.
+   */
+  facades?: { wall?: Texture };
 }
 
 /**
@@ -419,7 +425,7 @@ export class KitCity {
     lots: KitLot[],
     rings: KitRingSet,
     manifest: KitManifest,
-    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false, wallDetail }: KitOptions = {},
+    { tier = 'high', glow = 1, cloudEnv = false, shadows = false, roofs = false, wallDetail, facades }: KitOptions = {},
     private color = new Color(),
   ) {
     const modules = manifest.modules;
@@ -503,14 +509,16 @@ export class KitCity {
     // houses whose roofs the town dresses: one table of the modules' roofing colours, indexed per vertex
     const roofBases = [...new Set(modules.filter((m) => m.kind === 'house' && m.roof).map((m) => m.roof!))];
     const dressed = (mod: KitModule): boolean => roofs && mod.kind === 'house' && !!mod.roof;
+    const weathered = (mod: KitModule): boolean => !!facades && (mod.kind === 'tower' || mod.kind === 'block');
     const materialFor = (mod: KitModule): MeshStandardMaterial => {
       const sheet = mod.sheet ?? 'main';
-      const key = dressed(mod) ? `${sheet}:roofs` : sheet;
+      const key = dressed(mod) ? `${sheet}:roofs` : weathered(mod) ? `${sheet}:facades` : sheet;
       let m = materials.get(key);
       if (!m) {
         m = this.kitMaterial(manifest, sheet, tier, glow, cloudEnv);
         if (m.emissiveMap) this.glowing.push({ m, base: m.emissiveIntensity });
         if (dressed(mod)) applyRoofs(m, roofBases, tier === 'high', wallDetail);
+        if (weathered(mod)) applyFacades(m, tier === 'high', facades!.wall);
         materials.set(key, m);
       }
       return m;

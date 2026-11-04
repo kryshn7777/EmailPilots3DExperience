@@ -35,6 +35,8 @@ import { TownLight } from './TownLight';
 import { StreetFurniture } from './StreetFurniture';
 import { Pedestrians } from './Pedestrians';
 import { townCrowd } from './PedestrianPlans';
+import { YardClutter } from './YardClutter';
+import type { Stand } from './Pedestrians';
 import { mulberry32 } from '../util';
 import type { FenceRun } from '../bake/cityGen.mjs';
 import { asset } from '../asset';
@@ -103,6 +105,7 @@ export class Rooftops {
   private townLight: TownLight | null = null;
   private furniture: StreetFurniture | null = null;
   private people: Pedestrians | null = null;
+  private clutter: YardClutter | null = null;
   private lamps: Streetlights | null = null;
   private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
@@ -271,6 +274,7 @@ export class Rooftops {
     if (eye) {
       this.kitCity?.updateTrees(eye, camera);
       this.yards?.updatePlants(eye);
+      this.clutter?.update(eye);
     }
     this.lamps?.setLevel(night);
     if (focus) this.lamps?.follow(focus);
@@ -323,11 +327,15 @@ export class Rooftops {
       trees: (lots as KitLot[]).filter((l) => kinds.get(l.moduleId) === 'tree' && !l.forest).map(site),
     };
     this.buildShadows(lots as KitLot[], kinds, quality.tier === 'high');
-    // weathering decals on the houses the flight passes close to (HIGH; blender/make_anchors.py)
+    // weathering decals on the houses the flight passes close to (HIGH; blender/make_anchors.py); the
+    // yard clutter hangs its dishes and leans its ladders on the same walls
+    const anchors: Promise<DecalAnchors | null> = quality.tier === 'high'
+      ? fetch(asset('/models/homes/anchors.json')).then((r) => r.json() as Promise<DecalAnchors>).catch(() => null)
+      : Promise.resolve(null);
     if (quality.tier === 'high') {
-      void fetch(asset('/models/homes/anchors.json'))
-        .then((r) => r.json() as Promise<DecalAnchors>)
+      void anchors
         .then((anchors) => {
+          if (!anchors) return;
           const decals = new HouseDecals(lots as KitLot[], manifest.modules, rings.hero ?? rings.near, anchors);
           decals.group.position.y = ROOFTOP_BASE_Y;
           this.group.add(decals.group);
@@ -335,8 +343,10 @@ export class Rooftops {
         })
         .catch(() => undefined);
     }
-    this.buildCars(lots as KitLot[], kinds, quality);
+    const spots = this.buildCars(lots as KitLot[], kinds, quality);
     this.buildFurniture(quality);
+    this.buildClutter(lots as KitLot[], kinds, quality, manifest, anchors);
+    this.buildPeople(lots as KitLot[], kinds, spots, quality, this.clutter?.stands ?? []);
     // the wet-night look: lamps doubled in the road, puddles that mirror the sky, window light on the
     // lawns (HIGH tier)
     if (quality.tier === 'high' && this.lamps && this.sites) {
@@ -355,7 +365,7 @@ export class Rooftops {
    * Traffic on every street, plus a car in the front yard of about half the houses
    * the flight passes over (the ones far from it would be invisible, and cost).
    */
-  private buildCars(lots: KitLot[], kinds: Map<string, string>, quality: Quality): void {
+  private buildCars(lots: KitLot[], kinds: Map<string, string>, quality: Quality): { x: number; z: number; yaw: number }[] {
     const rand = mulberry32(5521);
     const path = this.pathSamples();
     const reach = quality.tier === 'high' ? 70 : 40;
@@ -382,7 +392,6 @@ export class Rooftops {
     if (ReflectionProbe.current) this.cars.setEnvMap(ReflectionProbe.current.texture);
     this.cars.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.cars.group);
-    this.buildPeople(lots, kinds, spots, quality);
 
     // Yard details for every house the flight passes over: beds, patios, pools,
     // sheds, play sets, lights. Each lot draws its own mix (see Yards.ts).
@@ -417,6 +426,43 @@ export class Rooftops {
       this.pools.group.position.y = ROOFTOP_BASE_Y;
       this.group.add(this.pools.group);
     }
+    return spots;
+  }
+
+  /**
+   * What the households leave about: bikes, toys, bags, grills, laundry, ladders, poles and lines (see
+   * YardClutter). Placed now, so the people in the yards can join the crowd; drawn once the models stream in.
+   */
+  private buildClutter(lots: KitLot[], kinds: Map<string, string>, quality: Quality, manifest: KitManifest,
+    anchors: Promise<DecalAnchors | null>): void {
+    // `?noclutter` leaves it out, for an A/B
+    if (!this.yards || new URLSearchParams(location.search).has('noclutter')) return;
+    const path = this.pathSamples();
+    const near = (x: number, z: number, reach: number): boolean => {
+      for (const c of path) if ((c.x - x) ** 2 + (c.y - ROOFTOP_BASE_Y) ** 2 + (c.z - z) ** 2 < reach * reach) return true;
+      return false;
+    };
+    const kerb = [...(this.furniture?.spots ?? [])];
+    for (const lot of lots) if (lot.street) kerb.push({ x: lot.x, z: lot.z, r: Math.max(lot.w, lot.d) * 0.18 + 0.08 });
+    const { w, d } = HOME_CELL;
+    for (let iz = HOME_CELLS.z[0]; iz < HOME_CELLS.z[1]; iz++) {
+      for (let ix = HOME_CELLS.x[0]; ix < HOME_CELLS.x[1]; ix++) {
+        for (const [lx, lz] of LAMPS) kerb.push({ x: ix * w + lx, z: iz * d + lz, r: 0.12 });
+      }
+    }
+    const trees = lots.filter((l) => kinds.get(l.moduleId) === 'tree' && !l.forest)
+      .map((l) => ({ x: l.x, z: l.z, r: Math.max(l.w, l.d) * 0.42 + 0.12 }));
+    this.clutter = new YardClutter(this.yards.lots, {
+      tier: quality.tier, kerb, fences: fenceRuns(), trees, near,
+      lowPath: path.filter((c) => c.y - ROOFTOP_BASE_Y < 5).map((c) => ({ x: c.x, z: c.z })),
+    });
+    this.clutter.group.position.y = ROOFTOP_BASE_Y;
+    this.group.add(this.clutter.group);
+    const yards = this.yards;
+    void this.clutter.load(manifest, anchors, () => {
+      // the real mailboxes and grills stand where Yards put its stand-ins
+      if (quality.tier === 'high') yards.hideKinds(['mailbox', 'bbq']);
+    }).catch((e: unknown) => console.error('yard clutter', e));
   }
 
   /** Hydrants, stop signs, bins out for collection, bus shelters: the street's own furniture. */
@@ -438,8 +484,9 @@ export class Rooftops {
    * People on the sidewalks near the flight (thickest on the street it flies down), up and down
    * front walks, on porches and by their cars (see PedestrianPlans.townCrowd).
    */
-  private buildPeople(lots: KitLot[], kinds: Map<string, string>, spots: { x: number; z: number; yaw: number }[], quality: Quality): void {
-    this.people = new Pedestrians(quality, townCrowd(lots, kinds, spots, this.pathSamples(), quality));
+  private buildPeople(lots: KitLot[], kinds: Map<string, string>, spots: { x: number; z: number; yaw: number }[], quality: Quality,
+    yardStands: Stand[]): void {
+    this.people = new Pedestrians(quality, townCrowd(lots, kinds, spots, this.pathSamples(), quality, yardStands));
     this.people.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.people.group);
   }
@@ -452,6 +499,7 @@ export class Rooftops {
     this.cars?.dispose();
     this.people?.dispose();
     this.yards?.dispose();
+    this.clutter?.dispose();
     this.pools?.dispose();
     this.townLight?.dispose();
     this.furniture?.dispose();

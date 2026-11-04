@@ -96,6 +96,9 @@ import { ScrollDirector } from './scroll/ScrollDirector';
 import { UNLIT, detectQuality, gpuRendererString } from './quality';
 import { asset } from './asset';
 import { mulberry32 } from './util';
+// office detour (rig/detour.ts)
+import { Office, OFFICE_GRADE } from './actors/Office';
+import { MAX_U_RATE, T_S, detourMap, detourStart, insideAt, progressOf } from './rig/detour';
 
 interface EngineOptions {
   reducedMotion: boolean;
@@ -196,14 +199,26 @@ export class Engine {
   private delivered = 0;
   private director: ScrollDirector | null = null;
 
+  // --- office detour (rig/detour.ts, actors/Office.ts) ---
+  private office: Office;
+  /** raw scroll progress (ScrollDirector), and the damped value the frame renders; story-t is derived from it */
+  private scrollP = 0;
+  private renderP = 0;
+  /** the detour's share of the scroll (0 on pages without the spacer), and its clock this frame */
+  private detourW = 0;
+  private detourU = 0;
+  /** the camera is in the office: everything else is hidden */
+  private inside = false;
+  // --- end office detour ---
+
   private fog: Fog;
-  private scrollT = 0;
   /**
-   * What the frame actually renders: scrollT chased with a frame-rate-
+   * What the frame actually renders: the scroll chased with a frame-rate-
    * independent damp. Wheel detents, scrollbar drags, PageDown, and anchor
    * jumps all arrive as steps — the camera glides through them instead of
    * snapping, and seam beats still fire because renderT passes through
-   * every value on the way.
+   * every value on the way. (The damp runs on scroll progress, renderP; this
+   * is the story-t mapped from it, rig/detour.ts.)
    */
   private renderT = 0;
   private prevT = 0;
@@ -340,6 +355,7 @@ export class Engine {
     this.traffic = new Traffic(this.path);
     this.batch = new BatchSend(this.path, { low: this.quality.tier === 'low', calm: this.options.reducedMotion });
     this.flock = new Flock(rand);
+    this.office = new Office(this.path, this.city, this.quality);
 
     this.scene.add(
       this.plane.group,
@@ -373,6 +389,9 @@ export class Engine {
       this.landing.group,
       this.burst.points,
       this.confetti.points,
+      this.office.group,
+      this.office.flare,
+      this.office.shards,
     );
     if (this.clouds.volume) this.scene.add(this.clouds.volume);
 
@@ -481,7 +500,8 @@ export class Engine {
   setRoute(path: string): void {
     const clean = path.replace(/\/+$/, '') || '/';
     this.idlePreset = ROUTE_PRESETS[clean] ?? null;
-    const t = this.idlePreset ? this.idlePreset.t : this.scrollT;
+    this.measureDetour();
+    const t = this.idlePreset ? this.idlePreset.t : detourMap(this.scrollP, this.detourW).t;
     // jumping t across chapters must not fire seam beats or drag the trail
     this.prevT = t;
     this.trail.reset();
@@ -499,17 +519,34 @@ export class Engine {
 
   refreshAfterSwap(): void {
     this.director?.refresh();
+    this.measureDetour();
+  }
+
+  /**
+   * office detour: the detour's share of the scroll, its spacer's height over the timeline's length
+   * (the same end ScrollDirector measures). 0 where the page has no spacer: the mapping is the identity.
+   */
+  private measureDetour(): void {
+    const stage = document.getElementById('experience');
+    const spacer = stage?.querySelector<HTMLElement>('[data-detour]');
+    if (!stage || !spacer) {
+      this.detourW = 0;
+      return;
+    }
+    const end = stage.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
+    this.detourW = end > 1 ? MathUtils.clamp(spacer.offsetHeight / end, 0, 0.5) : 0;
   }
 
   start(): void {
     this.director = new ScrollDirector({
       reducedMotion: this.options.reducedMotion,
-      onProgress: (t) => {
-        this.scrollT = t;
+      onProgress: (p) => {
+        this.scrollP = p;
         if (this.options.reducedMotion) this.renderFrame();
       },
     });
 
+    this.measureDetour();
     // first paint compiles the opening chapter synchronously and gives the
     // preloader a real frame to reveal
     this.renderFrame();
@@ -571,19 +608,23 @@ export class Engine {
     if (this.envProbe) this.envProbe.texture.needsPMREMUpdate = true;
     const seen = new Set<string>();
     const shown = new Set<Object3D>();
-    const states: number[] = [];
+    const states: { t: number; inside: boolean }[] = [];
     for (let t = 0; t <= 1; t += 0.0025) {
       this.applyVisibility(t);
       for (const o of scene.children) if (o.visible) shown.add(o);
       const key = scene.children.map((o) => (o.visible ? 1 : 0)).join('');
       if (seen.has(key)) continue;
       seen.add(key);
-      states.push(t);
+      states.push({ t, inside: false });
     }
-    for (const t of states) {
+    // office detour: the office itself is one more state, linked ahead of the cut into it
+    states.push({ t: T_S, inside: true });
+    this.applyVisibility(T_S, true);
+    for (const o of scene.children) if (o.visible) shown.add(o);
+    for (const { t, inside } of states) {
       if (this.disposed) return;
       // the sub-step below is synchronous end to end, so no frame can interleave with the borrowed state
-      this.applyVisibility(t);
+      this.applyVisibility(t, inside);
       const planeShown = plane.group.visible;
       const trailShown = trail.visible;
       plane.group.visible = t > 0.01;
@@ -599,7 +640,7 @@ export class Engine {
         scene.children = all;
         plane.group.visible = planeShown;
         trail.visible = trailShown;
-        this.applyVisibility(this.renderT);
+        this.applyVisibility(this.renderT, this.inside);
       }
       try {
         await linked;
@@ -614,13 +655,80 @@ export class Engine {
       renderer.setRenderTarget(null);
       await linked.catch(() => undefined);
     }
+    if (!this.disposed) this.warmOffice();
   }
+
+  // --- office detour ---
+  /**
+   * The office ahead of the cut: the view out of its window baked from the tower (when the city has
+   * streamed in, under T_S's grade and visibility), then one off-screen draw of the office state so
+   * its textures, buffers and the lamp's shadow map exist before the first frame inside.
+   */
+  private warmOffice(): void {
+    const { office, renderer, scene } = this;
+    office.refineTarget();
+    const bake = office.backdropCameraIfStale();
+    try {
+      if (bake) {
+        this.applyGrade(T_S);
+        this.applyVisibility(T_S, false);
+        this.city.update(T_S, (performance.now() - this.startTime) / 1000, this.rig.planeWorldPos);
+        const hidden = this.probeHidden.map((o) => [o, o.visible] as const);
+        for (const [o] of hidden) o.visible = false;
+        this.sky.followCamera(bake.position);
+        office.bakeBackdrop(renderer, scene, bake);
+        // and the tower close up, with the city's detail drawn toward the entry, as the dart flies in
+        if (office.entry) {
+          this.city.update(T_S, (performance.now() - this.startTime) / 1000, office.entry);
+          office.warmApproach(renderer, scene, this.composer.inputBuffer);
+        }
+        for (const [o, v] of hidden) o.visible = v;
+      }
+      this.applyVisibility(T_S, true);
+      office.warmRender(renderer, scene, this.composer.inputBuffer);
+    } finally {
+      this.applyVisibility(this.renderT, this.inside);
+      this.sky.followCamera(this.camera.position);
+      this.applyGrade(this.renderT);
+      if (this.inside) this.applyOfficeGrade();
+    }
+  }
+
+  /** the office's grade over the chapter's (applied while the camera is inside) */
+  private applyOfficeGrade(): void {
+    const g = OFFICE_GRADE;
+    this.fog.color.set(g.fogColor);
+    this.fog.near = g.fogNear;
+    this.fog.far = g.fogFar;
+    this.renderer.setClearColor(this.fog.color);
+    this.scene.environmentIntensity = g.envIntensity;
+    this.rayBoost = g.rays;
+    this.sunLevel = 0;
+    this.cinema?.look(g.filmic, g.exposure, g.sat, [1, 1, 1]);
+    if (this.bloomFx) {
+      this.bloomFx.intensity = g.bloom;
+      this.bloomFx.luminanceMaterial.threshold = g.bloomThreshold;
+    }
+    if (this.ssgi) this.ssgi.intensity = g.bounce;
+    if (this.ssr) this.ssr.wet = g.wet;
+    if (this.volume) this.volume.intensity = 0;
+    fogHeight.value.x = 0;
+    fogSun.value.w = 0;
+    this.sun.color.set(g.sunColor);
+    this.sun.intensity = g.sunIntensity;
+    this.sunDirWorld.set(...g.sunDir).normalize();
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirWorld, 60);
+    this.hemi.color.set(g.hemiSky);
+    this.hemi.groundColor.set(g.hemiGround);
+    this.hemi.intensity = g.hemiIntensity;
+  }
+  // --- end office detour ---
 
   /**
    * Which chapter groups exist at story time `t`. One place, so the frame and the shader warm-up
    * (warmSeams) agree on what is in view, and so on how many lights are.
    */
-  private applyVisibility(t: number): void {
+  private applyVisibility(t: number, inside = false): void {
     // Chapter actors only exist near their window. "Fully fogged" is NOT
     // invisible — fog-colored silhouettes still read against the brighter
     // sky gradient — so distant chapters are hidden outright.
@@ -671,7 +779,20 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
+    // office detour: in the office nothing else exists (its own lights are the only ones counted)
+    this.office.group.visible = inside;
+    if (inside) this.isolateOffice();
   }
+
+  /** office detour: hide every top-level object but the office, the dart and the scene's two lights */
+  private isolateOffice(): void {
+    const keep = (this.officeKeep ??= new Set<Object3D>([
+      this.office.group, this.office.flare, this.plane.group, this.sun, this.sun.target, this.hemi,
+    ]));
+    for (const o of this.scene.children) if (!keep.has(o)) o.visible = false;
+  }
+
+  private officeKeep: Set<Object3D> | null = null;
 
   private warming = true;
   private frameNo = 0;
@@ -904,13 +1025,15 @@ export class Engine {
     this.lastTime = now;
     this.govern(rawMs, now);
     const time = (now - this.startTime) / 1000;
-    const target = this.idlePreset ? this.idlePreset.t : this.scrollT;
+    // office detour: the spring runs on scroll PROGRESS; story-t and the detour clock come from it
+    const W = this.detourW;
+    const target = this.idlePreset ? progressOf(this.idlePreset.t, W) : this.scrollP;
     // mass-spring scrub: the world has WEIGHT — it leans into motion,
     // carries momentum, and settles with a breath of overshoot (ζ≈0.85).
     // A plain exponential chase tracked fine but felt weightless.
-    const err = Math.abs(target - this.renderT);
+    const err = Math.abs(target - this.renderP);
     if (this.options.reducedMotion) {
-      this.renderT = target;
+      this.renderP = target;
       this.scrubVel = 0;
     } else {
       // Softer and less damped than before: K 170/C 25 sat at ζ≈0.96, which
@@ -919,14 +1042,31 @@ export class Engine {
       // momentum a few frames beyond the scroll instead of being pinned to it.
       const K = 120; // stiffness: response ≈ quarter of a second
       const C = 17.5; // damping: ζ≈0.80 — weight, with a breath of overshoot
-      this.scrubVel += (target - this.renderT) * K * dt;
+      this.scrubVel += (target - this.renderP) * K * dt;
       this.scrubVel *= Math.exp(-C * dt);
-      this.renderT = MathUtils.clamp(this.renderT + this.scrubVel * dt, 0, 1);
+      let next = MathUtils.clamp(this.renderP + this.scrubVel * dt, 0, 1);
+      // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
+      // always play under their flare (keyed on u) instead of being stepped over between two frames
+      if (W > 0 && !this.idlePreset) {
+        const ps = detourStart(W);
+        const lo = Math.min(this.renderP, next);
+        const hi = Math.max(this.renderP, next);
+        const cap = MAX_U_RATE * W * dt;
+        if (hi > ps && lo < ps + W && hi - lo > cap) {
+          next = this.renderP + Math.sign(next - this.renderP) * cap;
+          this.scrubVel = (next - this.renderP) / Math.max(dt, 1e-4);
+        }
+      }
+      this.renderP = next;
     }
     if (err < 0.0004 && Math.abs(this.scrubVel) < 0.004) {
-      this.renderT = target;
+      this.renderP = target;
       this.scrubVel = 0;
     }
+    const mapped = detourMap(this.renderP, W);
+    this.renderT = this.idlePreset ? this.idlePreset.t : mapped.t;
+    this.detourU = this.idlePreset ? 0 : mapped.u;
+    this.inside = mapped.active && !this.idlePreset && insideAt(this.detourU) && !!this.office.scene?.exit;
 
     // speed blur: fast scrubbing streaks the frame along the flight line,
     // easing off as the world catches up (never under reduced motion)
@@ -958,6 +1098,7 @@ export class Engine {
 
     // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
     this.rig.jolt = this.idlePreset ? 0 : Math.max(this.storm.flash, this.lightning.flash);
+    this.office.pose(this.detourU, this.rig, this.camera.aspect);
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -972,7 +1113,9 @@ export class Engine {
     this.delivered = 1 - intoLamp;
     // small beside the laptop, full size once the flight opens up over the town
     const size = this.idlePreset ? 1 : planeScale(t) * (0.45 + 0.55 * heroOpen);
-    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp * size, 1e-4));
+    // (office detour: the dart is smaller in the office)
+    const detourSize = MathUtils.lerp(1, this.office.planeScale, this.rig.detour.weight);
+    this.plane.group.scale.setScalar(Math.max((1 - absorbed) * intoLamp * size * detourSize, 1e-4));
     if (intoLamp < 0.02) this.plane.group.visible = false;
     this.launchString.update(this.idlePreset ? 1 : t, this.path);
     this.plane.flex(time, t > CONTRAIL_FROM || this.idlePreset ? 1 : 0);
@@ -1035,7 +1178,7 @@ export class Engine {
       this.sunScreenDir.set(this.tmpV.x, this.tmpV.y).normalize();
     }
 
-    this.applyVisibility(t);
+    this.applyVisibility(t, this.inside);
     const nearDesk = t < DESK_UNTIL;
     /**
      * Climb-out: the deck closes underneath you.
@@ -1086,6 +1229,7 @@ export class Engine {
       this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
       this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
     }
+    if (this.inside) this.applyOfficeGrade();
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position, this.camera);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
@@ -1149,11 +1293,13 @@ export class Engine {
     this.camera.updateMatrixWorld();
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
+    this.office.update(this.detourU, this.inside, this.camera, !this.idlePreset && !this.warming);
     this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
-    this.city.update(t, time, this.rig.planeWorldPos);
+    this.city.update(t, time, this.rig.planeWorldPos, this.camera.position);
+    const onLine = this.rig.detour.weight > 0; // office detour: the copilot holds the main line
     this.copilot.update(
-      this.rig.planeWorldPos,
-      this.plane.group.quaternion,
+      onLine ? this.rig.detour.mainPlanePos : this.rig.planeWorldPos,
+      onLine ? this.rig.detour.mainPlaneQuat : this.plane.group.quaternion,
       this.rig.currentSide,
       t,
       time,
@@ -1178,6 +1324,18 @@ export class Engine {
     const refresh = this.options.reducedMotion || (this.frameNo++ & 1) === 0;
     if (this.sun.castShadow) this.sun.shadow.needsUpdate = refresh;
     this.pinned.update(t, this.camera.position, this.idlePreset === null);
+    // office detour: the dart's wake and the chapter title stay on the main line; in the office nothing else draws
+    const detouring = this.rig.detour.weight > 0;
+    if (detouring) {
+      const keep = 1 - this.rig.detour.weight;
+      this.pinned.group.traverse((o) => {
+        const m = (o as Mesh).material as MeshBasicMaterial | undefined;
+        if (m && 'opacity' in m) m.opacity *= keep;
+      });
+      this.trail.visible = false;
+      this.airTrail.mesh.visible = false;
+    }
+    if (this.inside) this.isolateOffice();
     this.beacon.renderReflection(this.renderer, this.scene, this.camera);
     this.depthNormals?.invalidate();
     this.composer.render();
@@ -1185,7 +1343,7 @@ export class Engine {
     // rain-soaked lighthouse.
     // It draws after the frame, when every light that just came into view has its shadow map (the
     // probe's own renders do not redraw them).
-    const ground = t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
+    const ground = this.inside ? null : t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
       : t > 0.46 && t < 0.6 ? this.beacon.group.position.y + 1.5 : null;
     if (refresh) this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
 
@@ -1195,6 +1353,8 @@ export class Engine {
       window.dispatchEvent(new CustomEvent('flight:ready'));
     }
     window.dispatchEvent(new CustomEvent('flight:t', { detail: t }));
+    // office detour: the scroll's own progress (the HUD's bar), and the detour clock
+    window.dispatchEvent(new CustomEvent('flight:progress', { detail: { p: this.renderP, u: this.detourU } }));
   }
 
   private firstFrameDone = false;
@@ -1204,6 +1364,8 @@ export class Engine {
     return [
       this.plane.group, this.trail.line, this.airTrail.mesh, this.flock.group, this.launchString.line,
       this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
+      // the street's clutter is small and many draws: the reflections do without it
+      ...(this.city.life ? [this.city.life.group] : []),
     ];
   }
 
@@ -1355,6 +1517,7 @@ export class Engine {
     this.city.dispose();
     this.copilot.dispose();
     this.landing.dispose();
+    this.office.dispose();
     this.burst.dispose();
     this.confetti.dispose();
     this.renderer.dispose();

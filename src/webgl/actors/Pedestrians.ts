@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  DoubleSide,
   DynamicDrawUsage,
   Float32BufferAttribute,
   Group,
@@ -16,11 +17,15 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Quaternion,
+  NoColorSpace,
   RGBADepthPacking,
+  SRGBColorSpace,
+  TextureLoader,
   Vector3,
 } from 'three';
-import type { Material, WebGLProgramParametersWithUniforms } from 'three';
+import type { Material, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { softShadowTexture } from '../bake/CanvasTextures';
 import { asset } from '../asset';
 import { LAMP_CASTER_LAYER } from '../layers';
@@ -44,8 +49,32 @@ interface Variant {
   foot: number[];
   /** the right palm in the rest pose (the dog's collar), where a leash is held */
   hand: number[];
+  /**
+   * The MakeHuman people (blender/make_humans.py): the hero mesh drawn for the few people near the
+   * camera (`mesh` is then the lean one, for everyone else), their tile in the shared atlas, and
+   * what steers their look: `role` (coat, suit, jacket, dress, casual, sport), how common they are
+   * by crowd look (`mix`), whether they jog, and skin and hair tints near their own.
+   */
+  hero?: string;
+  trisHero?: number;
+  tile?: number;
+  role?: string;
+  mix?: { day: number; night: number };
+  jogger?: boolean;
+  skin?: string[];
+  hair?: string[];
 }
-interface Manifest { options: string[]; variants: Variant[] }
+interface Manifest {
+  options: string[];
+  variants: Variant[];
+  /** the GLB (default people.glb), the hero tier's (HIGH only) and, for textured people, the shared atlas */
+  glb?: string;
+  glbHero?: string;
+  atlas?: { color: string; orm: string; normal: string; low: { color: string; orm: string; normal: string } };
+}
+
+/** the atlas maps a textured person is drawn with (normal is left out on LOW) */
+interface Atlas { color: Texture; orm: Texture; normal: Texture | null }
 
 /** A walkway people follow: a sidewalk, a front walk, a stroll across a plaza. */
 export interface Walk {
@@ -86,6 +115,8 @@ export interface Stand {
   mood?: 'idle' | 'chat' | 'phone';
   /** people with the same `group` talk in turns rather than all at once */
   group?: number;
+  /** who stands here (a variant id: 'child', 'dog', ...); default a grown-up of the plan's look */
+  variant?: string;
 }
 
 export interface CrowdPlan {
@@ -375,7 +406,7 @@ interface Shared { uTime: { value: number }; uFar: { value: number }; uEye: { va
  * the depth and distance materials the sun's and the lamps' shadow passes draw it with, posed the
  * same way so the shadows walk too. One set per variant: its pivots are its own.
  */
-function figureMaterials(v: Variant, shared: Shared): { lit: MeshStandardMaterial; depth: Material; distance: Material } {
+function figureMaterials(v: Variant, shared: Shared, atlas: Atlas | null = null): { lit: MeshStandardMaterial; depth: Material; distance: Material } {
   const dog = v.kind === 'dog';
   const pivots = Array.from({ length: 16 }, (_, k) => new Vector3(...(v.pivots[k] ?? v.pivots[0]!) as [number, number, number]));
   const legLen = v.legs[0]! + v.legs[1]!;
@@ -388,11 +419,17 @@ function figureMaterials(v: Variant, shared: Shared): { lit: MeshStandardMateria
   const head = `#include <common>\n${RIG}\n${dog ? DOG : PERSON}`;
   const key = dog ? 'pedestrian-dog' : 'pedestrian-person';
 
-  const lit = new MeshStandardMaterial({ roughness: 0.8, metalness: 0 });
+  const lit = atlas
+    ? new MeshStandardMaterial({
+      map: atlas.color, roughnessMap: atlas.orm, aoMap: atlas.orm, normalMap: atlas.normal, roughness: 1, metalness: 0,
+      alphaTest: 0.5, side: DoubleSide,
+    })
+    : new MeshStandardMaterial({ roughness: 0.8, metalness: 0 });
+  const def = atlas ? '#define TEXTURED\n' : '';
   lit.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `${head}\nvarying vec3 vTint;\nvarying float vRough;\nvarying float vOcc;`)
+      .replace('#include <common>', `${def}${head}\nvarying vec3 vTint;\nvarying float vRough;\nvarying float vOcc;`)
       .replace(
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
@@ -403,17 +440,27 @@ function figureMaterials(v: Variant, shared: Shared): { lit: MeshStandardMateria
         int reg = int(aRig.x + 0.5) % 16;
         float pk = reg == 0 ? aCol0.x : reg == 1 ? aCol0.y : reg == 2 ? aCol0.z : reg == 3 ? aCol0.w
                  : reg == 4 ? aCol1.x : reg == 5 ? aCol1.y : reg == 6 ? aCol1.z : -1.0;
+        #ifdef TEXTURED
+        // the atlas holds tinted regions at a mean of 0.5 and fixed ones (eyes) as they are
+        vTint = pk >= 0.0 ? unpackColor(pk) * 2.0 : vec3(1.0);
+        #else
         vTint = pk >= 0.0 ? unpackColor(pk) : (reg == 7 ? vec3(0.018, 0.017, 0.016) : vec3(0.7, 0.69, 0.66));
+        #endif
         vRough = ROUGH[clamp(reg, 0, 8)];
         vOcc = aRig.w / 255.0;`,
       )
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = posed;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vTint;\nvarying float vRough;\nvarying float vOcc;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vTint * mix(1.0, vOcc, 0.85);')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vRough;');
+    shader.fragmentShader = atlas
+      ? shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTint;\nvarying float vRough;\nvarying float vOcc;')
+        // the baked occlusion also darkens the direct light a little (streetlights do most of the lighting)
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vTint * mix(1.0, texture2D(aoMap, vAoMapUv).r, 0.45);')
+      : shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTint;\nvarying float vRough;\nvarying float vOcc;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vTint * mix(1.0, vOcc, 0.85);')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vRough;');
   };
-  lit.customProgramCacheKey = () => key;
+  lit.customProgramCacheKey = () => `${key}${atlas ? (atlas.normal ? '-tex' : '-tex-lo') : ''}`;
 
   const posedDepth = <T extends Material>(mat: T, suffix: string): T => {
     mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
@@ -428,13 +475,15 @@ function figureMaterials(v: Variant, shared: Shared): { lit: MeshStandardMateria
           else pose(transformed, nrm);
         }`);
     };
-    mat.customProgramCacheKey = () => `${key}-${suffix}`;
+    mat.customProgramCacheKey = () => `${key}-${suffix}${atlas ? '-tex' : ''}`;
     return mat;
   };
+  // hair cards cut out of the shadows too
+  const cut = atlas ? { map: atlas.color, alphaTest: 0.5, side: DoubleSide } : {};
   return {
     lit,
-    depth: posedDepth(new MeshDepthMaterial({ depthPacking: RGBADepthPacking }), 'depth'),
-    distance: posedDepth(new MeshDistanceMaterial(), 'distance'),
+    depth: posedDepth(new MeshDepthMaterial({ depthPacking: RGBADepthPacking, ...cut }), 'depth'),
+    distance: posedDepth(new MeshDistanceMaterial(cut), 'distance'),
   };
 }
 
@@ -529,6 +578,8 @@ interface Body {
   r: number;
   pose: [number, number, number, number];
   colors: [number, number, number, number, number, number, number];
+  /** drawn by its variant's hero mesh this frame (its lean slot is folded away) */
+  hero: boolean;
 }
 
 interface Walker {
@@ -595,6 +646,11 @@ export class Pedestrians {
   private rand = mulberry32(9137);
   private k = 1;
   private disposables: { dispose(): void }[] = [];
+  /** per variant, its hero tier (HIGH only): the mesh, its per-instance attributes, who is in it */
+  private heroes: ({ mesh: InstancedMesh; attrs: InstancedBufferAttribute[]; cap: number; bodies: Body[] } | undefined)[] = [];
+  private eyeLocal = new Vector3();
+  private leanDirty: boolean[] = [];
+  private inv = new Matrix4();
 
   // the hash grid of everyone's position, rebuilt each frame
   private head = new Int32Array(GRID);
@@ -626,14 +682,35 @@ export class Pedestrians {
       r.json(),
     )) as Manifest;
     this.variants = manifest.variants;
-    const gltf = await new GLTFLoader().loadAsync(asset('/models/people/people.glb'));
+    const high = this.quality.tier === 'high';
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    const [gltf, heroGltf, atlas] = await Promise.all([
+      loader.loadAsync(asset(`/models/people/${manifest.glb ?? 'people.glb'}`)),
+      high && manifest.glbHero ? loader.loadAsync(asset(`/models/people/${manifest.glbHero}`)) : Promise.resolve(null),
+      manifest.atlas ? this.loadAtlas(manifest.atlas, high) : Promise.resolve(null),
+    ]);
     const geos = new Map<string, BufferGeometry>();
-    gltf.scene.traverse((o) => {
+    for (const g of heroGltf ? [gltf, heroGltf] : [gltf]) g.scene.updateMatrixWorld(true);
+    for (const g of heroGltf ? [gltf, heroGltf] : [gltf]) g.scene.traverse((o) => {
       const m = o as Mesh;
-      if (m.isMesh) geos.set(m.name, m.geometry);
+      if (!m.isMesh) return;
+      // meshopt's quantised positions come with a node transform that undoes them: fold it into
+      // float positions, as the rig's pivots (in the manifest) are in the model's own units
+      const geo = m.geometry;
+      if (!m.matrixWorld.equals(IDENTITY)) {
+        const p = geo.getAttribute('position');
+        const f = new Float32Array(p.count * 3);
+        for (let i = 0; i < p.count; i++) {
+          f[i * 3] = p.getX(i);
+          f[i * 3 + 1] = p.getY(i);
+          f[i * 3 + 2] = p.getZ(i);
+        }
+        geo.setAttribute('position', new Float32BufferAttribute(f, 3));
+        geo.applyMatrix4(m.matrixWorld);
+      }
+      geos.set(m.name, geo);
     });
     this.populate(manifest);
-    const high = this.quality.tier === 'high';
 
     // one instanced mesh per variant, moving people first
     const counts = this.variants.map(() => 0);
@@ -667,7 +744,8 @@ export class Pedestrians {
       geo.setAttribute('aPose', pose);
       geo.setAttribute('aCol0', col0);
       geo.setAttribute('aCol1', col1);
-      const mats = figureMaterials(v, this.uniforms);
+      const textured = !!atlas && v.tile !== undefined && !!geo.getAttribute('uv');
+      const mats = figureMaterials(v, this.uniforms, textured ? atlas : null);
       const mesh = new InstancedMesh(geo, mats.lit, n);
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       mesh.frustumCulled = false;
@@ -694,6 +772,33 @@ export class Pedestrians {
         pose.setXYZW(b.slot, ...b.pose);
         col0.setXYZW(b.slot, b.colors[0], b.colors[1], b.colors[2], b.colors[3]);
         col1.setXYZW(b.slot, b.colors[4], b.colors[5], b.colors[6], 0);
+      }
+      // the hero tier (HIGH): the same person at full detail, for the few within HERO_IN of the camera
+      const hgeo = high && textured && v.hero ? geos.get(v.hero) : undefined;
+      if (hgeo) {
+        const cap = Math.min(n, HERO_CAP);
+        hgeo.setAttribute('aRig', hgeo.getAttribute('_rig'));
+        hgeo.deleteAttribute('_rig');
+        const attrs = ['aGait', 'aPose', 'aCol0', 'aCol1'].map((name) => {
+          const a = new InstancedBufferAttribute(new Float32Array(cap * 4), 4);
+          a.setUsage(DynamicDrawUsage);
+          hgeo.setAttribute(name, a);
+          return a;
+        });
+        const hmesh = new InstancedMesh(hgeo, mats.lit, cap);
+        hmesh.instanceMatrix.setUsage(DynamicDrawUsage);
+        hmesh.frustumCulled = false;
+        hmesh.count = 0;
+        hmesh.visible = false;
+        hmesh.castShadow = true;
+        hmesh.receiveShadow = true;
+        hmesh.customDepthMaterial = mats.depth;
+        hmesh.customDistanceMaterial = mats.distance;
+        hmesh.layers.enable(LAMP_CASTER_LAYER);
+        hmesh.onBeforeRender = mesh.onBeforeRender;
+        this.group.add(hmesh);
+        this.disposables.push(hgeo, hmesh);
+        this.heroes[vi] = { mesh: hmesh, attrs, cap, bodies: [] };
       }
     });
 
@@ -730,6 +835,23 @@ export class Pedestrians {
     this.flush(true);
   }
 
+  /** The people's shared atlas: full size with normals on HIGH, the quarter-size copy without on LOW. */
+  private async loadAtlas(a: NonNullable<Manifest['atlas']>, high: boolean): Promise<Atlas> {
+    const tl = new TextureLoader();
+    const files = high ? a : a.low;
+    const load = async (f: string, srgb: boolean): Promise<Texture> => {
+      const t = await tl.loadAsync(asset(`/models/people/${f}`));
+      t.flipY = false;
+      t.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
+      t.anisotropy = high ? 4 : 1;
+      this.disposables.push(t);
+      return t;
+    };
+    const [color, orm, normal] = await Promise.all([load(files.color, true), load(files.orm, false),
+      high ? load(files.normal, false) : Promise.resolve(null)]);
+    return { color, orm, normal };
+  }
+
   // ---- who is out ----------------------------------------------------------------------------------
 
   private populate(manifest: Manifest): void {
@@ -738,6 +860,12 @@ export class Pedestrians {
     const night = plan.look === 'night';
     const byId = new Map(this.variants.map((v, i) => [v.id, i]));
     const pick = <T,>(list: T[]): T => list[Math.floor(rand() * list.length)]!;
+    // the MakeHuman people say how common they are themselves; the jogger is whoever is dressed for it
+    const people = this.variants.filter((v) => v.mix);
+    const mix: Record<string, number> = people.length
+      ? Object.fromEntries(people.map((v) => [v.id, v.mix![plan.look]]))
+      : MIX[plan.look];
+    const joggerId = this.variants.find((v) => v.jogger)?.id ?? 'jogger';
     const weighted = (w: Record<string, number>): string => {
       const ids = Object.keys(w).filter((id) => byId.has(id) && w[id]! > 0);
       let r = rand() * ids.reduce((a, id) => a + w[id]!, 0);
@@ -756,6 +884,7 @@ export class Pedestrians {
       let opts = 0;
       const maybe = (o: string, p: number): void => { if (has(o) && rand() < p) opts |= bit(o); };
       const woman = v.build === 'woman';
+      const role = v.role ?? (v.id.endsWith('coat') ? 'coat' : v.id === 'woman-dress' ? 'dress' : v.id === 'jogger' ? 'sport' : '');
       if (woman || id === 'jogger' || id === 'child') {
         // one hair style on top of the base cut (or none)
         const r = rand();
@@ -774,30 +903,33 @@ export class Pedestrians {
       if (opts & (bit('beanie') | bit('cap'))) opts &= ~bit('bun');
       if (opts & bit('backpack')) opts &= ~bit('bag');
 
-      const skin = pick(SKIN);
+      const skin = v.skin ? pick(v.skin) : pick(SKIN);
       let hr = rand() * HAIR_W.reduce((a, b) => a + b, 0);
       let hair = HAIR[0]!;
       for (let i = 0; i < HAIR.length; i++) {
         hr -= HAIR_W[i]!;
         if (hr < 0) { hair = HAIR[i]!; break; }
       }
-      const coat = v.id.endsWith('coat') || (night && v.id === 'man-jacket');
+      if (v.hair) hair = pick(v.hair);
+      const coat = role === 'coat' || role === 'suit' || (night && (v.id === 'man-jacket' || role === 'jacket'));
       const top = night
         ? (coat || rand() < 0.5 ? (rand() < 0.16 ? pick(COATS_BRIGHT) : pick(COATS)) : pick(TOPS_DAY))
         : pick(TOPS_DAY);
       let bottom = night ? pick(BOTTOMS_NIGHT) : pick(BOTTOMS_DAY);
-      if (v.id === 'woman-dress') bottom = rand() < 0.4 ? top : pick(SKIRTS_DAY);
-      if (id === 'jogger') bottom = pick(['#1c1d22', '#2b2d33', '#3a4f7a', '#24262b', '#5a5e66']);
+      if (role === 'dress') bottom = rand() < 0.4 ? top : night ? pick(COATS) : pick(SKIRTS_DAY);
+      if (role === 'suit' && rand() < 0.6) bottom = top;
+      if (role === 'sport') bottom = pick(['#1c1d22', '#2b2d33', '#3a4f7a', '#24262b', '#5a5e66']);
       const shoes = night ? pick(SHOES_NIGHT) : pick(SHOES_DAY);
       const acc = night ? pick(ACC_NIGHT) : pick(ACC_DAY);
       let under = pick(UNDER_DAY);
       if (v.id === 'woman-dress') under = rand() < (night ? 0.25 : 0.65) ? skin : pick(TIGHTS);
+      if (v.mix && role !== 'dress') under = pick(UNDER_DAY);
       if (v.id === 'woman-coat') under = rand() < 0.75 ? pick(TIGHTS) : pick(['#3b5068', '#2f3e55']);
       const s = (0.95 + rand() * 0.1) * k;
       return {
         variant: byId.get(id)!, slot: 0, shadow: 0, moving: false, x: 0, z: 0, yaw: 0, vx: 0, vz: 0, scale: s, fade: 1,
         phase: rand(), amp: 0, jog: 0, seed: rand(), r: 0.082 * s * (v.build === 'child' ? 0.8 : 1),
-        pose: [0, 0, 0, opts],
+        pose: [0, 0, 0, opts], hero: false,
         colors: [packColor(skin), packColor(hair), packColor(top), packColor(bottom), packColor(shoes), packColor(acc),
           packColor(under)],
       };
@@ -805,7 +937,7 @@ export class Pedestrians {
     const dogBody = (): Body => ({
       variant: byId.get('dog')!, slot: 0, shadow: 0, moving: true, x: 0, z: 0, yaw: 0, vx: 0, vz: 0,
       scale: (0.85 + rand() * 0.3) * k, fade: 1, phase: rand(), amp: 0, jog: 0, seed: rand(), r: 0.06 * k,
-      pose: [0, 0, 0, 0],
+      pose: [0, 0, 0, 0], hero: false,
       colors: [0, packColor(pick(DOG_COATS)), packColor(pick(DOG_COATS)), 0, 0, packColor(pick(COLLARS)), 0],
     });
     const strideOf = (b: Body, jog: boolean): number => {
@@ -822,8 +954,8 @@ export class Pedestrians {
       if (route.length < 0.5) continue;
       const [f0, f1] = walk.spread ?? [0, 1];
       for (let i = 0; i < walk.count; i++) {
-        const jog = rand() < (walk.joggers ?? 0);
-        const id = jog ? 'jogger' : weighted(MIX[plan.look]);
+        const jog = rand() < (walk.joggers ?? 0) && byId.has(joggerId);
+        const id = jog ? joggerId : weighted(mix);
         const body = dress(id);
         body.moving = true;
         body.jog = jog ? 1 : 0;
@@ -840,7 +972,7 @@ export class Pedestrians {
         };
         if (withMate) {
           // a companion on the left: a child beside a parent sometimes, else another adult
-          const mateId = rand() < 0.3 && byId.has('child') ? 'child' : weighted(MIX[plan.look]);
+          const mateId = rand() < 0.3 && byId.has('child') ? 'child' : weighted(mix);
           const mb = dress(mateId);
           mb.moving = true;
           const offset = 0.36 * k;
@@ -872,7 +1004,8 @@ export class Pedestrians {
     // people standing about; within a group, every other one talks while the rest listen
     const turns = new Map<number, number>();
     for (const st of plan.stands) {
-      const body = dress(weighted(MIX[plan.look]));
+      const asked = st.variant && byId.has(st.variant) ? st.variant : null;
+      const body = asked === 'dog' ? { ...dogBody(), moving: false } : dress(asked ?? weighted(mix));
       body.x = st.x;
       body.z = st.z;
       body.yaw = st.yaw;
@@ -894,11 +1027,71 @@ export class Pedestrians {
     this.uniforms.uTime.value = time;
     const dt = this.last < 0 ? 0.016 : Math.min(Math.max(time - this.last, 0), 0.1);
     this.last = time;
-    if (!this.walkers.length) return;
-    this.index();
-    for (const w of this.walkers) this.step(w, dt, time);
+    if (this.walkers.length) {
+      this.index();
+      for (const w of this.walkers) this.step(w, dt, time);
+    }
+    this.tiers();
     for (const b of this.bodies) if (b.moving) this.write(b);
     this.flush(false);
+  }
+
+  /**
+   * The hero tier: the people within HERO_IN of the camera (until they are past HERO_OUT, so nobody
+   * flickers between the two at the edge), the nearest HERO_TOTAL of them from at most HERO_KINDS
+   * base people (HERO_CAP a person), are drawn by
+   * their variant's hero mesh, and their lean instance is folded away. The camera is the one that
+   * drew the crowd last frame.
+   */
+  private tiers(): void {
+    if (!this.heroes.some(Boolean)) return;
+    this.group.updateWorldMatrix(true, false);
+    const eye = this.eyeLocal.copy(this.uniforms.uEye.value).applyMatrix4(this.inv.copy(this.group.matrixWorld).invert());
+    // who is near enough, over every person, nearest first; then at most HERO_TOTAL of them, in at
+    // most HERO_KINDS hero meshes (each one a draw)
+    const near: { b: Body; d: number }[] = [];
+    for (const b of this.bodies) {
+      if (!this.heroes[b.variant]) continue;
+      const d = Math.hypot(b.x - eye.x, b.z - eye.z, Math.max(0, eye.y - 0.5 * this.k));
+      if (d < (b.hero ? HERO_OUT : HERO_IN)) near.push({ b, d });
+    }
+    near.sort((p, q) => p.d - q.d);
+    const chosen = new Set<Body>();
+    const kinds = new Set<number>();
+    for (const { b } of near) {
+      if (chosen.size >= HERO_TOTAL) break;
+      if (!kinds.has(b.variant) && kinds.size >= HERO_KINDS) continue;
+      kinds.add(b.variant);
+      chosen.add(b);
+    }
+    for (const b of this.bodies) {
+      const want = chosen.has(b);
+      if (b.hero === want) continue;
+      b.hero = want;
+      this.leanDirty[b.variant] = true;
+      if (!b.moving) this.write(b);
+    }
+    this.heroes.forEach((h, vi) => {
+      if (!h) return;
+      h.bodies.length = 0;
+      for (const { b } of near) if (b.variant === vi && b.hero && h.bodies.length < h.cap) h.bodies.push(b);
+      const [gait, pose, col0, col1] = h.attrs as [InstancedBufferAttribute, InstancedBufferAttribute, InstancedBufferAttribute, InstancedBufferAttribute];
+      h.bodies.forEach((b, i) => {
+        const s = b.scale * b.fade;
+        this.q.setFromAxisAngle(this.Y, b.yaw);
+        h.mesh.setMatrixAt(i, this.m4.compose(this.p.set(b.x, 0, b.z), this.q, this.sc.set(s, s, s)));
+        gait.setXYZW(i, b.phase, b.amp, b.jog, b.seed);
+        pose.setXYZW(i, ...b.pose);
+        col0.setXYZW(i, b.colors[0], b.colors[1], b.colors[2], b.colors[3]);
+        col1.setXYZW(i, b.colors[4], b.colors[5], b.colors[6], 0);
+      });
+      h.mesh.count = h.bodies.length;
+      h.mesh.visible = h.bodies.length > 0;
+      if (h.bodies.length) {
+        h.mesh.instanceMatrix.needsUpdate = true;
+        for (const a of h.attrs) a.needsUpdate = true;
+      }
+    });
   }
 
   /** Everyone into the hash grid, by the cell they stand in. */
@@ -1128,7 +1321,9 @@ export class Pedestrians {
     if (!mesh) return;
     const s = b.scale * b.fade;
     this.q.setFromAxisAngle(this.Y, b.yaw);
-    mesh.setMatrixAt(b.slot, this.m4.compose(this.p.set(b.x, 0, b.z), this.q, this.sc.set(s, s, s)));
+    // someone the hero mesh draws is folded to a point in the lean one
+    const sl = b.hero ? 0 : s;
+    mesh.setMatrixAt(b.slot, this.m4.compose(this.p.set(b.x, 0, b.z), this.q, this.sc.set(sl, sl, sl)));
     this.gaits[b.variant]?.setXYZW(b.slot, b.phase, b.amp, b.jog, b.seed);
     const dog = this.variants[b.variant]!.kind === 'dog';
     const r = (dog ? 0.32 : 0.36) * s;
@@ -1141,7 +1336,8 @@ export class Pedestrians {
       if (!m) return;
       const gait = this.gaits[vi];
       if (!gait) return;
-      const n = all ? m.count : this.moving[vi]!;
+      const n = all || this.leanDirty[vi] ? m.count : this.moving[vi]!;
+      this.leanDirty[vi] = false;
       if (!n) return;
       m.instanceMatrix.clearUpdateRanges();
       m.instanceMatrix.addUpdateRange(0, n * 16);
@@ -1225,6 +1421,13 @@ export class Pedestrians {
 }
 
 const LEASH_SEGS = 6;
+const IDENTITY = new Matrix4();
+/** the hero tier: in within this distance of the camera, out past the other; at most this many a person */
+const HERO_IN = 6;
+const HERO_OUT = 7.5;
+const HERO_CAP = 8;
+const HERO_TOTAL = 8;
+const HERO_KINDS = 4;
 
 function wrapAngle(a: number): number {
   return a - Math.PI * 2 * Math.round(a / (Math.PI * 2));

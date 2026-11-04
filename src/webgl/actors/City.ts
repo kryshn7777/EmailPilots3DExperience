@@ -13,11 +13,14 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  NoColorSpace,
   PlaneGeometry,
   Points,
   PointsMaterial,
   Quaternion,
   RepeatWrapping,
+  type Texture,
+  TextureLoader,
   Vector3,
 } from 'three';
 import {
@@ -29,13 +32,15 @@ import {
 import { neonSignTexture, roadTexture } from '../bake/CanvasTextures';
 import { glowTexture } from '../bake/CanvasTextures';
 import { KitCity, type KitLot, type KitManifest, type KitRingSet } from './KitCity';
-import { Streetlights, type Lamp } from './Streetlights';
+import { Streetlights, lampHead, lampHeadY, type Lamp } from './Streetlights';
 import { StreetCars } from './StreetCars';
 import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footprint } from './CityStreet';
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
+import { CityLife } from './CityLife';
 import { pavingMaps } from '../bake/RoomTextures';
+import { applyStreets, setLampField } from '../materials/Streets';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -99,6 +104,19 @@ export class City {
       color: '#8c8c94',
       metalness: 0.05,
     });
+    // stains, gum, hairline cracks, shallow puddles; HIGH adds photographed concrete grain
+    const high = quality.tier === 'high';
+    const detail = (file: string): Texture => {
+      const t = new TextureLoader().load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      this.disposables.push(t);
+      return t;
+    };
+    const streetMaps = high ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : {};
+    const origin = this.group.position;
+    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, lamps: high ? 3 : 8, ...streetMaps });
     // 260x200, not 140x100: the district is 97 x 39 now and the old sheet's
     // edge cut across the frame in the upper corners of the dive
     const ground = new Mesh(new PlaneGeometry(260, 200), groundMaterial);
@@ -107,7 +125,7 @@ export class City {
     this.group.add(ground);
     this.disposables.push(ground.geometry, groundMaterial);
 
-    this.buildTraffic();
+    this.buildTraffic(quality);
     this.buildCars(quality);
     void this.init(path, quality);
   }
@@ -128,7 +146,15 @@ export class City {
     ]);
     const rings = allRings.city[quality.tier] as KitRingSet;
     const { lots } = cityRecipes(manifest.modules);
-    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, { tier: quality.tier, glow: 0.9 });
+    // the towers and blocks weather: upkeep, grime, rain streaks (HIGH adds photographed concrete grain)
+    const wall = quality.tier === 'high' ? new TextureLoader().load(asset('/models/homes/detail-concrete.webp')) : undefined;
+    if (wall) {
+      wall.colorSpace = NoColorSpace;
+      wall.wrapS = wall.wrapT = RepeatWrapping;
+      wall.anisotropy = 8;
+      this.disposables.push(wall);
+    }
+    this.kitCity = new KitCity(lots as KitLot[], rings, manifest, { tier: quality.tier, glow: 0.9, facades: wall ? { wall } : {} });
     this.group.add(this.kitCity.group);
 
     // effective wall half-extents per lot: kit modules are uniform-fit
@@ -162,12 +188,20 @@ export class City {
     const footprints: Footprint[] = [];
     extents.forEach((e, i) => {
       const lot = (lots as KitLot[])[i]!;
-      footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz });
+      footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz, h: lot.h });
     });
-    this.street = new CityStreet(footprints, quality);
+    this.street = new CityStreet(footprints, quality, { realProps: true });
     this.group.add(this.street.group);
     void this.buildTrees(this.street.trees, path, quality);
-    this.buildPeople(this.street.plazas, quality);
+    // the street lived in: clutter, deliveries, roadworks, bikes, roof plant (and the people about them)
+    this.life = new CityLife({
+      footprints, lots: lots as KitLot[], roofLots: rings.near,
+      plazas: this.street.plazas, occupied: this.street.occupied, hydrants: this.street.hydrants,
+      bins: this.street.bins, shelters: this.street.shelters, parked: this.parked, lamps: this.lampSpots(), quality,
+    });
+    this.group.add(this.life.group);
+    this.disposables.push(this.life);
+    this.buildPeople(this.street.plazas, quality, this.life.stands);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
@@ -196,21 +230,12 @@ export class City {
         lampList.push({ x: x + rand() * 0.6, z, yaw: z < 0 ? 0 : Math.PI });
       }
     }
-    this.streetlights = new Streetlights(lampList, quality.tier, 0.85);
+    this.streetlights = new Streetlights(lampList, quality.tier, 0.85, true);
     this.group.add(this.streetlights.group);
-    const poolMaterial = new MeshBasicMaterial({
-      map: glowTexture(), color: '#ffb468', transparent: true, opacity: quality.tier === 'high' ? 0.1 : 0.2, blending: AdditiveBlending,
-      depthWrite: false, toneMapped: false,
-    });
-    const poolGeometry = new PlaneGeometry(2.3, 2.3);
-    poolGeometry.rotateX(-Math.PI / 2);
-    const pools = new InstancedMesh(poolGeometry, poolMaterial, lampList.length);
-    lampList.forEach((l, i) => {
-      pools.setMatrixAt(i, new Matrix4().compose(p.set(l.x, 0.03, l.z * 0.55), q, s));
-    });
-    pools.frustumCulled = false;
-    this.group.add(pools);
-    this.disposables.push(poolMaterial, poolGeometry, pools, this.streetlights, poleMaterial);
+    // the pools of light on the road are the road's own (materials/Streets.ts): each lamp a downlight with
+    // inverse-square falloff and a glossy streak on the wet asphalt, not a painted disc
+    setLampField(lampList.map((l) => lampHead(l, 0.85)), -30, 6.4, lampHeadY(0.85));
+    this.disposables.push(this.streetlights, poleMaterial);
 
     // neon signs on walls facing the canyon — on the ACTUAL kit walls
     const NEON = ['#ff5f8f', '#5fd0ff', '#ffd05f', '#8fff9f', '#c88fff'];
@@ -313,11 +338,15 @@ export class City {
   private streetCars: StreetCars | null = null;
   private people: Pedestrians | null = null;
   private street: CityStreet | null = null;
+  /** CityLife's props: read by the probe (`__engine.city.life.stats`) */
+  life: CityLife | null = null;
+  /** the parked cars (buildCars), so the street's props keep out of them */
+  private parked: { x: number; z: number; yaw: number }[] = [];
   private streetlights: Streetlights | null = null;
 
 
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
-  private buildTraffic(): void {
+  private buildTraffic(quality: Quality): void {
     const road = roadTexture();
     // wet asphalt: the lamps and the neon streak in it
     const roadMat = new MeshStandardMaterial({ map: road, roughness: 0.42, metalness: 0.1 });
@@ -327,6 +356,18 @@ export class City {
     junctionMat.polygonOffset = true;
     junctionMat.polygonOffsetFactor = -2;
     junctionMat.polygonOffsetUnits = -2;
+    // cracked, patched, oil-stained, with puddles in the ruts (HIGH adds the parallax cracks and photo grain)
+    const high = quality.tier === 'high';
+    const loadDetail = (file: string): Texture => {
+      const t = new TextureLoader().load(asset(`/models/homes/${file}`));
+      t.colorSpace = NoColorSpace;
+      t.wrapS = t.wrapT = RepeatWrapping;
+      t.anisotropy = 8;
+      this.disposables.push(t);
+      return t;
+    };
+    const asphalt = high ? loadDetail('detail-asphalt.webp') : undefined;
+    for (const m of [roadMat, junctionMat]) applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, lamps: high ? 3 : 9, ...(asphalt ? { asphalt } : {}) });
     this.disposables.push(roadMat, road, junctionMat);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
@@ -395,6 +436,7 @@ export class City {
       const side = rand() < 0.5 ? -1 : 1;
       parked.push({ x, z: side * 1.97, yaw: side < 0 ? Math.PI : 0 });
     }
+    this.parked = parked;
     // stop lines before every cross street (CityStreet paints them 2.35 out from its centre; a car's nose stops 2.4 out)
     const STOP = CROSS_HALF + 1.1;
     const stopsPlus = CROSS_STREET_X.map((sx) => sx - STOP - x0);
@@ -663,7 +705,15 @@ export class City {
     this.group.add(this.trees.group);
   }
 
-  update(t: number, time = 0, focus?: Vector3): void {
+  /** the canyon lamps' poles, as buildStreetDressing stands them (its seeded jitter, replayed) */
+  private lampSpots(): { x: number; z: number }[] {
+    const rand = mulberry32(880);
+    const out: { x: number; z: number }[] = [];
+    for (let x = -30; x <= 34; x += 6.4) for (const z of [-2.05, 2.05]) out.push({ x: x + rand() * 0.6, z });
+    return out;
+  }
+
+  update(t: number, time = 0, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
     // the city comes on as the flight arrives: the street lamps first, then the windows, then the glass and neon
     const lamps = MathUtils.smoothstep(t, 0.625, 0.665);
@@ -679,6 +729,7 @@ export class City {
     this.people?.update(time);
     KitCity.tick(time);
     this.street?.update(time);
+    this.life?.update(time, eye);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
     let colorsDirty = false;
@@ -754,8 +805,8 @@ export class City {
   }
 
   /** People on the canyon sidewalks, round the corners and in the plazas, at the cars' 1.35x (see PedestrianPlans.cityCrowd). */
-  private buildPeople(plazas: CityStreet['plazas'], quality: Quality): void {
-    this.people = new Pedestrians(quality, cityCrowd(plazas, quality));
+  private buildPeople(plazas: CityStreet['plazas'], quality: Quality, extra: CityLife['stands'] = []): void {
+    this.people = new Pedestrians(quality, cityCrowd(plazas, quality, extra));
     this.group.add(this.people.group);
   }
 
