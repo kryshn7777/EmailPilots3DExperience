@@ -356,6 +356,33 @@ KINDS = {
 }
 
 
+LOUVER_POST = 5.0   # louver(): a frame post every 5 m along the wall
+
+
+def wall_grid(L, z0, z1, st):
+    """The window cells `build_wall` lays on this wall, for the shipped meshes' `Grid` UVs (the
+    runtime's interior mapping draws one room per cell). A list of bands up the wall, each
+    (h0, h1, bay width, storey height, cv at h0) with h measured from the wall's base z0: inside a
+    band cu = u / bay and cv = cv0 + (h - h0) / storey, so integer cu are the pier lines and integer
+    cv the floor slabs the generators used. The shopfront storey is one band of its own (its bay,
+    its whole height: cv 0..1) under the facade's (cv from 1 up)."""
+    bands = []
+    ground = st.get('ground')
+    h = 0.0
+    if ground:
+        nc = max(1, round(L / ground.get('bay', 4.5)))
+        bands.append((0.0, ground['h'], L / nc, ground['h'], 0.0))
+        h = ground['h']
+    H = z1 - z0
+    if st['kind'] == 'louver':
+        # no windows: the post spacing across, the whole height up (the last post bay may be short)
+        bw, fh = min(L, LOUVER_POST), H - h
+    else:
+        _, fh, _, bw = _grid(L, z0 + h, z1, st['floor_h'], st['bay'])
+    bands.append((h, H, bw, fh, 1.0 if ground else 0.0))
+    return bands
+
+
 def build_wall(hp, fr, L, z0, z1, st, rng):
     """One wall: optional shopfront storey, the facade, optional cornice."""
     ground = st.get('ground')

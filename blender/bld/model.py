@@ -14,7 +14,7 @@ import bmesh
 import bpy
 from mathutils import Vector
 
-from .facade import build_wall
+from .facade import build_wall, wall_grid
 from .geo import Builder, Frame, Z, rect_poly
 from .roofs import flat_roof, pyramid_hp
 
@@ -25,6 +25,46 @@ X, Y = Vector((1, 0, 0)), Vector((0, 1, 0))
 # reads it from the glass mesh's second UV set (see KitCity `windowMaterial`).
 PANE_CODES = {'glass_blinds': 1, 'lit_warm': 2, 'lit_warm_dim': 3, 'lit_white': 4, 'lit_cool': 5,
               'lit_cool_dim': 6}
+
+# The shipped meshes' second UV set, `Grid` (glTF TEXCOORD_1, three's `uv1`): on a wall slot's faces the
+# window cell coordinate (cu, cv), cu = distance along the wall / bay width and cv = storeys above the
+# wall's base, so fract() is the place inside one window bay and storey (see `facade.wall_grid`); on
+# every other face NO_GRID. The glTF exporter writes v as 1 - v, so v is stored flipped.
+GRID = 'Grid'
+NO_GRID = (-1.0, -1.0)
+
+
+def _band(bands, h):
+    for band in bands:
+        if h < band[1] - 1e-6:
+            return band
+    return bands[-1]
+
+
+def _grid_uv(meta, band, p):
+    """Grid UV (as stored, v flipped) of point `p` on a wall slot's face, in band `band`."""
+    h0, _, bw, fh, cv0 = band
+    rel = p - meta['o']
+    return rel.dot(meta['a']) / bw, 1.0 - (cv0 + (rel.dot(meta['b']) - h0) / fh)
+
+
+def _clip(poly, h, lo, hi):
+    """Clip a polygon (a list of per-corner tuples, interpolated linearly) to lo <= h(corner) <= hi."""
+    lerp = lambda a, b, t: tuple(x + (y - x) * t for x, y in zip(a, b)) if isinstance(a, tuple) else a + (b - a) * t
+    for bound, keep in ((lo, lambda x: x >= lo - 1e-6), (hi, lambda x: x <= hi + 1e-6)):
+        out = []
+        for i, a in enumerate(poly):
+            b = poly[(i + 1) % len(poly)]
+            ha, hb = h(a), h(b)
+            if keep(ha):
+                out.append(a)
+            if keep(ha) != keep(hb):
+                t = (bound - ha) / (hb - ha)
+                out.append(tuple(lerp(x, y, t) for x, y in zip(a, b)))
+        poly = out
+        if len(poly) < 3:
+            return []
+    return poly
 
 
 def _solid_uv(face, uv, normal, cx, cy, spread, A):
@@ -71,11 +111,13 @@ class Model:
         return random.Random(f'{self.id}/{key}')
 
     @contextmanager
-    def ctx(self, slot, origin, a, b, n):
+    def ctx(self, slot, origin, a, b, n, grid=None):
         """High-poly faces built inside this block belong to a baked slot: `origin`,
         `a`, `b` are its UV frame and `n` its outward normal. Only faces that face
-        the same way (the visible surface) will sample it in the hero tier."""
-        self.hp.ctx = dict(slot=slot, o=Vector(origin), a=Vector(a), b=Vector(b), n=Vector(n).normalized())
+        the same way (the visible surface) will sample it in the hero tier. `grid` is
+        a wall's window cells (`facade.wall_grid`), for the Grid UVs."""
+        self.hp.ctx = dict(slot=slot, o=Vector(origin), a=Vector(a), b=Vector(b), n=Vector(n).normalized(),
+                           grid=grid)
         try:
             yield
         finally:
@@ -125,11 +167,13 @@ class Model:
             key = f'{tid}:{keys[i]}'
             style = wall if 'kind' in wall else wall[keys[i]]
             self._slot(key, 'wall', L, z1 - z0)
+            # the window cells the facade generators lay here, for the Grid UVs
+            grid = wall_grid(L, z0, z1, style)
             self.lp.face(
                 [fr.p(0, 0, z0), fr.p(L, 0, z0), fr.p(L, 0, z1), fr.p(0, 0, z1)], 'lp',
-                expect=fr.n, meta=dict(slot=key, kind='wall', o=fr.p(0, 0, z0), a=fr.u, b=Z))
+                expect=fr.n, meta=dict(slot=key, kind='wall', o=fr.p(0, 0, z0), a=fr.u, b=Z, grid=grid))
             # the hero tier samples this slot's baked pixels on every face that looks out of the wall
-            with self.ctx(key, fr.p(0, 0, z0), fr.u, Z, fr.n):
+            with self.ctx(key, fr.p(0, 0, z0), fr.u, Z, fr.n, grid):
                 build_wall(self.hp, fr, L, z0, z1, style, self.rng(key))
         # roof=False: something (a mansard, a crown) sits on the whole top, so
         # a roof face here would only spend texture space on pixels nobody sees
@@ -280,11 +324,14 @@ class Model:
             tilt = (fr.n * rise + Z * inset).normalized()
             up_slope = (-fr.n * inset + Z * rise).normalized()
             key = f'{name}:{keys[i]}'
-            self._slot(key, 'wall', L, math.hypot(inset, rise))
+            slope = math.hypot(inset, rise)
+            self._slot(key, 'wall', L, slope)
             pts = [(a0.x, a0.y, z0), (b0.x, b0.y, z0), (b1.x, b1.y, z1), (a1.x, a1.y, z1)]
+            # Grid: one cell per dormer across (they sit at the cell centres), the whole slope up
+            grid = [(0.0, slope, L / dormers[i % 2], slope, 0.0)]
             self.lp.face(pts, 'lp', expect=tilt,
-                         meta=dict(slot=key, kind='wall', o=Vector(pts[0]), a=fr.u, b=up_slope))
-            with self.ctx(key, pts[0], fr.u, up_slope, tilt):
+                         meta=dict(slot=key, kind='wall', o=Vector(pts[0]), a=fr.u, b=up_slope, grid=grid))
+            with self.ctx(key, pts[0], fr.u, up_slope, tilt, grid):
                 self.hp.face(pts, wall_mat, expect=tilt)
                 rng = self.rng(key)
                 count = dormers[i % 2]
@@ -416,8 +463,34 @@ class Model:
         return self.hp.to_object()
 
     def final_object(self, scale):
-        """The shipping mesh: welded, flat/smooth as authored, scaled to kit size."""
-        bm = self.lp.bm.copy()
+        """The shipping mesh: welded, flat/smooth as authored, scaled to kit size.
+
+        Carries the Grid UVs (window cells) too. A wall with a shopfront storey is split at the
+        top of it, since the shop bays and storey are a different grid from the facade's above
+        (the UVMap is linear across the wall, so the halves sample exactly the pixels it did)."""
+        src = self.lp.bm
+        src_uv = src.loops.layers.uv['UVMap']
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new('UVMap')
+        grid_uv = bm.loops.layers.uv.new(GRID)
+        for face, meta in zip(src.faces, self.lp.meta):
+            corners = [(l.vert.co.copy(), tuple(l[src_uv].uv)) for l in face.loops]
+            bands = meta.get('grid') if meta['kind'] == 'wall' else None
+            if bands:
+                h = lambda c: (c[0] - meta['o']).dot(meta['b'])
+                parts = [(band, _clip(corners, h, band[0] if k else -1e9,
+                                      band[1] if k < len(bands) - 1 else 1e9))
+                         for k, band in enumerate(bands)]
+            else:
+                parts = [(None, corners)]
+            for band, poly in parts:
+                if len(poly) < 3:
+                    continue
+                nf = bm.faces.new([bm.verts.new(p) for p, _ in poly])
+                nf.smooth, nf.material_index = face.smooth, face.material_index
+                for loop, (p, t) in zip(nf.loops, poly):
+                    loop[uv].uv = t
+                    loop[grid_uv].uv = _grid_uv(meta, band, p) if band else (NO_GRID[0], 1 - NO_GRID[1])
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
         bmesh.ops.scale(bm, vec=(scale, scale, scale), verts=bm.verts)
         mesh = bpy.data.meshes.new(self.id)
@@ -457,6 +530,7 @@ class Model:
                         drop.update((idxs[a], idxs[b]))
         bm = bmesh.new()
         uv = bm.loops.layers.uv.new('UVMap')
+        grid_uv = bm.loops.layers.uv.new(GRID)
         for i, (f, meta) in enumerate(zip(faces, self.hp.meta)):
             if i in drop:
                 continue
@@ -470,9 +544,20 @@ class Model:
                     px = x + rel.dot(meta['a']) * self.density
                     py = y + hpx - rel.dot(meta['b']) * self.density
                     loop[uv].uv = (px / A, 1 - py / A)
+                bands = meta.get('grid')
+                if bands:
+                    # the band (shopfront or facade) the face belongs to, by its centre's height
+                    band = _band(bands, (f.calc_center_median() - meta['o']).dot(meta['b']))
+                    for loop in nf.loops:
+                        loop[grid_uv].uv = _grid_uv(meta, band, loop.vert.co)
+                else:
+                    for loop in nf.loops:
+                        loop[grid_uv].uv = (NO_GRID[0], 1 - NO_GRID[1])
             else:
                 cx, cy = cells[self.hp.mats[f.material_index]]
                 _solid_uv(nf, uv, f.normal, cx, cy, layout.pitch * 0.3, A)
+                for loop in nf.loops:
+                    loop[grid_uv].uv = (NO_GRID[0], 1 - NO_GRID[1])
         bmesh.ops.scale(bm, vec=(scale, scale, scale), verts=bm.verts)
         mesh = bpy.data.meshes.new(f'{self.id}.hero')
         bm.to_mesh(mesh)
