@@ -36,6 +36,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { asset } from '../asset';
 import { cityRecipes, type CityLot, type KitModuleRef } from '../bake/cityGen.mjs';
 import { arrivalScreens, heightToNormal, plasterMaps, woodMaps } from '../bake/RoomTextures';
@@ -433,7 +434,7 @@ export class Office {
     const sizes = new Map<string, [number, number, number]>();
     if (manifest?.file) {
       try {
-        const gltf = await new GLTFLoader().loadAsync(asset(`/models/office/${manifest.file}`));
+        const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(asset(`/models/office/${manifest.file}`));
         roots = new Map();
         for (const node of manifest.nodes) {
           const root = gltf.scene.getObjectByName(node.name);
@@ -454,7 +455,8 @@ export class Office {
     this.propsBuilt = true;
     const batch = new Batcher();
     const sizeOf = (n: PropName): [number, number, number] => sizes.get(n) ?? [...PROP_SIZES[n]];
-    const deskTop = sizeOf('desk_pod')[1];
+    // the desk's own height, not the pod's: the real model stands its monitor on the desk, so it is taller
+    const deskTop = PROP_SIZES.desk_pod[1];
     // a GLB prop's parts, prop-local, with each material swapped where the manifest says it glows
     const glbParts = new Map<string, { geom: BufferGeometry; mat: Material }[]>();
     const glowing = new Map<Material, Material>();
@@ -477,17 +479,36 @@ export class Office {
             mat = g;
           }
         }
-        const geom = mesh.geometry.clone().applyMatrix4(local);
+        // the models face +z; the layout faces -z toward the window
+        const geom = mesh.geometry.clone().applyMatrix4(local).rotateY(Math.PI);
         return [{ geom, mat }];
       });
       glbParts.set(name, parts);
     }
     const m = new Matrix4();
+    const mm = new Matrix4();
+    const tr = new Matrix4();
+    const sc = new Matrix4();
+    // the real props are built to their own sizes: a desk is one desk where the layout has a pod of two, a cable
+    // tray is two metres where it has three, a rack with its doors open is wider than the layout allows, and so on
+    const FIT: Partial<Record<PropName, { scale?: number; copies?: number[] }>> = {
+      desk_pod: { copies: [-0.8, 0.8] },
+      cable_tray: { copies: [-0.5, 0.5] },
+      rack_42u: { scale: 0.85 },
+      whiteboard: { scale: 1.4 },
+      plant_pot: { scale: 0.75 },
+    };
     for (const p of LAYOUT.props) {
-      placementMatrix(p, deskTop, sizeOf(p.name)[1], m);
+      const prop = p.name === 'rack_42u' && p.x > 5.5 ? { ...p, x: p.x + 0.35 } : p;
+      placementMatrix(prop, deskTop, sizeOf(p.name)[1], m);
       const glb = glbParts.get(p.name);
       if (glb) {
-        for (const part of glb) batch.add(part.mat, part.geom, m);
+        const fit = FIT[p.name];
+        for (const dx of fit?.copies ?? [0]) {
+          mm.copy(m).multiply(tr.makeTranslation(dx, 0, 0));
+          if (fit?.scale) mm.multiply(sc.makeScale(fit.scale, fit.scale, fit.scale));
+          for (const part of glb) batch.add(part.mat, part.geom, mm);
+        }
       } else {
         for (const part of standIn(p.name)) {
           batch.add(this.materials[part.mat], part.geom, m);
