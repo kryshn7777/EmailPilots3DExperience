@@ -1,0 +1,442 @@
+{
+ "atlas": 1024,
+ "litter": [
+  "litter_paper",
+  "litter_cup",
+  "litter_card",
+  "litter_can",
+  "litter_ball"
+ ],
+ "props": {
+  "hydrant": {
+   "near": 900,
+   "size": [
+    0.275,
+    0.318,
+    0.799
+   ],
+   "source": "fire_hydrant",
+   "lean": 180
+  },
+  "hydrant_aged": {
+   "near": 900,
+   "size": [
+    0.275,
+    0.318,
+    0.799
+   ],
+   "source": "fire_hydrant",
+   "lean": 180
+  },
+  "trash_can": {
+   "near": 699,
+   "size": [
+    0.778,
+    0.556,
+    0.906
+   ],
+   "source": "metal_trash_can",
+   "lean": 160
+  },
+  "trash_can_rust": {
+   "near": 699,
+   "size": [
+    0.773,
+    0.549,
+    0.906
+   ],
+   "source": "metal_trash_can",
+   "lean": 159
+  },
+  "trashbag": {
+   "near": 419,
+   "size": [
+    0.528,
+    0.463,
+    0.575
+   ],
+   "source": "trashbag",
+   "lean": 90
+  },
+  "aircon": {
+   "near": 499,
+   "size": [
+    0.8,
+    0.374,
+    0.928
+   ],
+   "source": "exterior_aircon_unit",
+   "lean": 127
+  },
+  "aircon_rust": {
+   "near": 500,
+   "size": [
+    0.8,
+    0.374,
+    0.928
+   ],
+   "source": "exterior_aircon_unit",
+   "lean": 127
+  },
+  "utility_box": {
+   "near": 260,
+   "size": [
+    0.52,
+    0.432,
+    1.12
+   ],
+   "source": "utility_box_01",
+   "lean": 40
+  },
+  "utility_box_wide": {
+   "near": 300,
+   "size": [
+    0.92,
+    0.432,
+    1.12
+   ],
+   "source": "utility_box_02",
+   "lean": 58
+  },
+  "barrier": {
+   "near": 380,
+   "size": [
+    1.565,
+    0.442,
+    1.112
+   ],
+   "source": "concrete_road_barrier_02",
+   "lean": 69
+  },
+  "barrel": {
+   "near": 300,
+   "size": [
+    0.634,
+    0.639,
+    0.93
+   ],
+   "source": "barrel_03",
+   "lean": 70
+  },
+  "crate": {
+   "near": 220,
+   "size": [
+    0.529,
+    1.166,
+    0.464
+   ],
+   "source": "wooden_crate_02",
+   "lean": 30
+  },
+  "plastic_crate": {
+   "near": 360,
+   "size": [
+    0.506,
+    0.406,
+    0.254
+   ],
+   "source": "plastic_crate_02",
+   "lean": 59
+  },
+  "cardboard": {
+   "near": 159,
+   "size": [
+    0.387,
+    0.516,
+    0.342
+   ],
+   "source": "cardboard_box_01",
+   "lean": 30
+  },
+  "tyre": {
+   "near": 300,
+   "size": [
+    0.6,
+    0.165,
+    0.6
+   ],
+   "source": "old_tyre",
+   "lean": 70
+  },
+  "chalkboard": {
+   "near": 386,
+   "size": [
+    0.92,
+    0.759,
+    1.509
+   ],
+   "source": "standing_chalkboard_01",
+   "lean": 386
+  },
+  "wet_sign": {
+   "near": 228,
+   "size": [
+    0.3,
+    0.359,
+    0.63
+   ],
+   "source": "WetFloorSign_01",
+   "lean": 59
+  },
+  "coffee_cart": {
+   "near": 3200,
+   "size": [
+    2.168,
+    1.073,
+    1.718
+   ],
+   "source": "CoffeeCart_01",
+   "lean": 500
+  },
+  "planter": {
+   "near": 600,
+   "size": [
+    0.913,
+    0.414,
+    0.425
+   ],
+   "source": "planter_box_01",
+   "lean": 100
+  },
+  "propane": {
+   "near": 239,
+   "size": [
+    0.337,
+    0.337,
+    0.554
+   ],
+   "source": "propane_tank",
+   "lean": 104
+  },
+  "chair": {
+   "near": 418,
+   "size": [
+    0.642,
+    0.628,
+    0.88
+   ],
+   "source": "plastic_monobloc_chair_01",
+   "lean": 79
+  },
+  "water_tank": {
+   "near": 468,
+   "size": [
+    3.14,
+    3.195,
+    6.11
+   ],
+   "lean": 233
+  },
+  "rooftop_unit": {
+   "near": 224,
+   "size": [
+    2.75,
+    1.4,
+    1.23
+   ],
+   "lean": 134
+  },
+  "dish": {
+   "near": 90,
+   "size": [
+    0.76,
+    0.988,
+    1.513
+   ],
+   "lean": 54
+  },
+  "antenna": {
+   "near": 174,
+   "size": [
+    2.412,
+    2.782,
+    4.23
+   ],
+   "lean": 174
+  },
+  "roof_vent": {
+   "near": 116,
+   "size": [
+    1.224,
+    0.68,
+    1.15
+   ],
+   "lean": 68
+  },
+  "news_red": {
+   "near": 84,
+   "size": [
+    0.48,
+    0.46,
+    0.955
+   ],
+   "lean": 58
+  },
+  "news_blue": {
+   "near": 84,
+   "size": [
+    0.48,
+    0.46,
+    0.955
+   ],
+   "lean": 58
+  },
+  "news_yellow": {
+   "near": 84,
+   "size": [
+    0.48,
+    0.46,
+    0.955
+   ],
+   "lean": 58
+  },
+  "mailbox": {
+   "near": 116,
+   "size": [
+    0.5,
+    0.545,
+    1.27
+   ],
+   "lean": 68
+  },
+  "bike_rack": {
+   "near": 120,
+   "size": [
+    0.749,
+    0.05,
+    0.906
+   ],
+   "lean": 84
+  },
+  "bike_teal": {
+   "near": 432,
+   "size": [
+    1.736,
+    0.492,
+    0.981
+   ],
+   "lean": 194
+  },
+  "bike_black": {
+   "near": 432,
+   "size": [
+    1.736,
+    0.492,
+    0.981
+   ],
+   "lean": 194
+  },
+  "bike_red": {
+   "near": 432,
+   "size": [
+    1.736,
+    0.492,
+    0.981
+   ],
+   "lean": 194
+  },
+  "cone": {
+   "near": 52,
+   "size": [
+    0.36,
+    0.36,
+    0.69
+   ],
+   "lean": 52
+  },
+  "hoarding_a": {
+   "near": 84,
+   "size": [
+    2.45,
+    0.327,
+    2.4
+   ],
+   "lean": 58
+  },
+  "hoarding_b": {
+   "near": 72,
+   "size": [
+    2.45,
+    0.327,
+    2.4
+   ],
+   "lean": 50
+  },
+  "scaffold": {
+   "near": 274,
+   "size": [
+    2.724,
+    0.989,
+    7.038
+   ],
+   "lean": 191
+  },
+  "pallet": {
+   "near": 132,
+   "size": [
+    1.2,
+    0.94,
+    0.144
+   ],
+   "lean": 132
+  },
+  "cable": {
+   "near": 20,
+   "size": [
+    0.035,
+    0.04,
+    0.4
+   ],
+   "uv": [
+    0.69454,
+    0.70619
+   ],
+   "lean": 14
+  },
+  "litter_paper": {
+   "near": 24,
+   "size": [
+    0.4,
+    0.28,
+    0.037
+   ],
+   "lean": 24
+  },
+  "litter_cup": {
+   "near": 56,
+   "size": [
+    0.131,
+    0.086,
+    0.086
+   ],
+   "lean": 56
+  },
+  "litter_card": {
+   "near": 12,
+   "size": [
+    0.6,
+    0.6,
+    0.025
+   ],
+   "lean": 12
+  },
+  "litter_can": {
+   "near": 28,
+   "size": [
+    0.12,
+    0.066,
+    0.066
+   ],
+   "lean": 28
+  },
+  "litter_ball": {
+   "near": 20,
+   "size": [
+    0.072,
+    0.092,
+    0.104
+   ],
+   "lean": 20
+  }
+ }
+}

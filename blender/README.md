@@ -13,6 +13,9 @@ npm run build:clouds                             # the cloud-sea HDR the homes a
 npm run bake:rings                               # then re-partition the lots into LOD rings
 python blender/make_cars.py && npm run compress:models   # the nine road vehicles (six family cars, three supercars): lean, mid and hero tiers and the hero maps
 python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
+python blender/fetch_city_props.py && python blender/make_city_props.py && npm run compress:models
+                                                 # the night city's street and roof props, one shared atlas
+                                                 # (Poly Haven CC0 scans + bld/city_props.py; --render DIR: a contact sheet)
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
 python blender/make_airliner.py                  # the landing chapter's A320neo-class jet, both tiers, and its livery maps

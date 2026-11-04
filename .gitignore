@@ -27,3 +27,6 @@ pnpm-debug.log*
 # blender tooling
 __pycache__/
 *.blend1
+
+# downloaded Poly Haven sources (blender/fetch_city_props.py)
+blender/cache/

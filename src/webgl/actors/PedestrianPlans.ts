@@ -174,6 +174,8 @@ const canyonGreen = (time: number): boolean => time % 14 < 4.6;
 export function cityCrowd(
   plazas: { x0: number; x1: number; z0: number; z1: number }[],
   quality: Quality,
+  /** people CityLife stands about its props: the coffee cart's queue, the bus stops, a smoke by a door */
+  extra: Stand[] = [],
 ): CrowdPlan {
   const high = quality.tier === 'high';
   const k = 1.35;
@@ -252,5 +254,6 @@ export function cityCrowd(
       }
     }
   }
+  stands.push(...extra);
   return { walks, stands, look: 'night', scale: k, far: high ? 55 : 35, seed: 6151 };
 }

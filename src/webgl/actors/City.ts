@@ -38,6 +38,7 @@ import { ReflectionProbe } from '../materials/ReflectionProbe';
 import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footprint } from './CityStreet';
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
+import { CityLife } from './CityLife';
 import { pavingMaps } from '../bake/RoomTextures';
 import { applyStreets, setLampField } from '../materials/Streets';
 import { PaperPlane } from './PaperPlane';
@@ -187,12 +188,20 @@ export class City {
     const footprints: Footprint[] = [];
     extents.forEach((e, i) => {
       const lot = (lots as KitLot[])[i]!;
-      footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz });
+      footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz, h: lot.h });
     });
-    this.street = new CityStreet(footprints, quality);
+    this.street = new CityStreet(footprints, quality, { realProps: true });
     this.group.add(this.street.group);
     void this.buildTrees(this.street.trees, path, quality);
-    this.buildPeople(this.street.plazas, quality);
+    // the street lived in: clutter, deliveries, roadworks, bikes, roof plant (and the people about them)
+    this.life = new CityLife({
+      footprints, lots: lots as KitLot[], roofLots: rings.near,
+      plazas: this.street.plazas, occupied: this.street.occupied, hydrants: this.street.hydrants,
+      bins: this.street.bins, shelters: this.street.shelters, parked: this.parked, lamps: this.lampSpots(), quality,
+    });
+    this.group.add(this.life.group);
+    this.disposables.push(this.life);
+    this.buildPeople(this.street.plazas, quality, this.life.stands);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
@@ -329,6 +338,10 @@ export class City {
   private streetCars: StreetCars | null = null;
   private people: Pedestrians | null = null;
   private street: CityStreet | null = null;
+  /** CityLife's props: read by the probe (`__engine.city.life.stats`) */
+  life: CityLife | null = null;
+  /** the parked cars (buildCars), so the street's props keep out of them */
+  private parked: { x: number; z: number; yaw: number }[] = [];
   private streetlights: Streetlights | null = null;
 
 
@@ -423,6 +436,7 @@ export class City {
       const side = rand() < 0.5 ? -1 : 1;
       parked.push({ x, z: side * 1.97, yaw: side < 0 ? Math.PI : 0 });
     }
+    this.parked = parked;
     // stop lines before every cross street (CityStreet paints them 2.35 out from its centre; a car's nose stops 2.4 out)
     const STOP = CROSS_HALF + 1.1;
     const stopsPlus = CROSS_STREET_X.map((sx) => sx - STOP - x0);
@@ -691,7 +705,15 @@ export class City {
     this.group.add(this.trees.group);
   }
 
-  update(t: number, time = 0, focus?: Vector3): void {
+  /** the canyon lamps' poles, as buildStreetDressing stands them (its seeded jitter, replayed) */
+  private lampSpots(): { x: number; z: number }[] {
+    const rand = mulberry32(880);
+    const out: { x: number; z: number }[] = [];
+    for (let x = -30; x <= 34; x += 6.4) for (const z of [-2.05, 2.05]) out.push({ x: x + rand() * 0.6, z });
+    return out;
+  }
+
+  update(t: number, time = 0, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
     // the city comes on as the flight arrives: the street lamps first, then the windows, then the glass and neon
     const lamps = MathUtils.smoothstep(t, 0.625, 0.665);
@@ -707,6 +729,7 @@ export class City {
     this.people?.update(time);
     KitCity.tick(time);
     this.street?.update(time);
+    this.life?.update(time, eye);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
     let colorsDirty = false;
@@ -782,8 +805,8 @@ export class City {
   }
 
   /** People on the canyon sidewalks, round the corners and in the plazas, at the cars' 1.35x (see PedestrianPlans.cityCrowd). */
-  private buildPeople(plazas: CityStreet['plazas'], quality: Quality): void {
-    this.people = new Pedestrians(quality, cityCrowd(plazas, quality));
+  private buildPeople(plazas: CityStreet['plazas'], quality: Quality, extra: CityLife['stands'] = []): void {
+    this.people = new Pedestrians(quality, cityCrowd(plazas, quality, extra));
     this.group.add(this.people.group);
   }
 
