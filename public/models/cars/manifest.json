@@ -3,9 +3,16 @@
   {
    "id": "sedan",
    "file": "sedan.glb",
+   "mid": "sedan-mid.glb",
    "hi": "sedan-hi.glb",
+   "maps": {
+    "paint": "sedan-paint.webp",
+    "normal": "sedan-paint-n.webp"
+   },
    "tris": 1472,
-   "hiTris": 10820,
+   "midTris": 10916,
+   "hiTris": 22532,
+   "hpTris": 72018,
    "length": 1.551,
    "width": 0.601,
    "height": 0.482,
@@ -53,9 +60,16 @@
   {
    "id": "hatch",
    "file": "hatch.glb",
+   "mid": "hatch-mid.glb",
    "hi": "hatch-hi.glb",
+   "maps": {
+    "paint": "hatch-paint.webp",
+    "normal": "hatch-paint-n.webp"
+   },
    "tris": 1424,
-   "hiTris": 10540,
+   "midTris": 10668,
+   "hiTris": 20844,
+   "hpTris": 63170,
    "length": 1.304,
    "width": 0.574,
    "height": 0.488,
@@ -103,9 +117,16 @@
   {
    "id": "suv",
    "file": "suv.glb",
+   "mid": "suv-mid.glb",
    "hi": "suv-hi.glb",
+   "maps": {
+    "paint": "suv-paint.webp",
+    "normal": "suv-paint-n.webp"
+   },
    "tris": 1424,
-   "hiTris": 11804,
+   "midTris": 11964,
+   "hiTris": 24380,
+   "hpTris": 75186,
    "length": 1.584,
    "width": 0.634,
    "height": 0.568,
@@ -153,9 +174,16 @@
   {
    "id": "pickup",
    "file": "pickup.glb",
+   "mid": "pickup-mid.glb",
    "hi": "pickup-hi.glb",
+   "maps": {
+    "paint": "pickup-paint.webp",
+    "normal": "pickup-paint-n.webp"
+   },
    "tris": 1472,
-   "hiTris": 10660,
+   "midTris": 10692,
+   "hiTris": 23224,
+   "hpTris": 78082,
    "length": 1.749,
    "width": 0.647,
    "height": 0.574,
@@ -203,9 +231,16 @@
   {
    "id": "van",
    "file": "van.glb",
+   "mid": "van-mid.glb",
    "hi": "van-hi.glb",
+   "maps": {
+    "paint": "van-paint.webp",
+    "normal": "van-paint-n.webp"
+   },
    "tris": 1400,
-   "hiTris": 10214,
+   "midTris": 10278,
+   "hiTris": 22862,
+   "hpTris": 77524,
    "length": 1.766,
    "width": 0.667,
    "height": 0.706,
@@ -253,9 +288,16 @@
   {
    "id": "taxi",
    "file": "taxi.glb",
+   "mid": "taxi-mid.glb",
    "hi": "taxi-hi.glb",
+   "maps": {
+    "paint": "taxi-paint.webp",
+    "normal": "taxi-paint-n.webp"
+   },
    "tris": 1484,
-   "hiTris": 9904,
+   "midTris": 10000,
+   "hiTris": 21232,
+   "hpTris": 70438,
    "length": 1.551,
    "width": 0.601,
    "height": 0.482,
@@ -303,9 +345,16 @@
   {
    "id": "supercar",
    "file": "supercar.glb",
+   "mid": "supercar-mid.glb",
    "hi": "supercar-hi.glb",
+   "maps": {
+    "paint": "supercar-paint.webp",
+    "normal": "supercar-paint-n.webp"
+   },
    "tris": 1532,
-   "hiTris": 12684,
+   "midTris": 12812,
+   "hiTris": 23944,
+   "hpTris": 70746,
    "length": 1.492,
    "width": 0.653,
    "height": 0.383,
@@ -353,9 +402,16 @@
   {
    "id": "gt",
    "file": "gt.glb",
+   "mid": "gt-mid.glb",
    "hi": "gt-hi.glb",
+   "maps": {
+    "paint": "gt-paint.webp",
+    "normal": "gt-paint-n.webp"
+   },
    "tris": 1568,
-   "hiTris": 12534,
+   "midTris": 12630,
+   "hiTris": 24666,
+   "hpTris": 74856,
    "length": 1.551,
    "width": 0.65,
    "height": 0.422,
@@ -403,9 +459,16 @@
   {
    "id": "hyper",
    "file": "hyper.glb",
+   "mid": "hyper-mid.glb",
    "hi": "hyper-hi.glb",
+   "maps": {
+    "paint": "hyper-paint.webp",
+    "normal": "hyper-paint-n.webp"
+   },
    "tris": 1616,
-   "hiTris": 12048,
+   "midTris": 12144,
+   "hiTris": 22360,
+   "hpTris": 69374,
    "length": 1.518,
    "width": 0.647,
    "height": 0.393,

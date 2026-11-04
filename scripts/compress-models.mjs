@@ -1,4 +1,4 @@
-// Compresses the buildings', trees', biplane's and ship's GLBs in place (public/models/city-kit, public/models/homes, public/models/ship,
+// Compresses the buildings', trees', biplane's, ship's and cars' GLBs in place (public/models/city-kit, public/models/homes, public/models/ship, public/models/cars,
 // public/models/biplane):
 // welds identical vertices, quantizes them (KHR_mesh_quantization) and packs the buffers with
 // meshopt (EXT_meshopt_compression), which KitCity decodes with three's MeshoptDecoder.
@@ -17,7 +17,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
-const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship'];
+const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
@@ -37,7 +37,10 @@ for (const dir of DIRS) {
     const done = doc.getRoot().listExtensionsUsed().some((e) => e.extensionName === 'EXT_meshopt_compression');
     if (done && !force) continue;
     const size0 = statSync(path).size;
-    await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high' }));
+    // the cars' clear-coated paint mirrors the street, so its normals keep 12 bits (16-bit storage):
+    // the default 8 bits band the reflections on a smooth body
+    const extra = dir.endsWith('/cars') ? { quantizeNormal: 12 } : {};
+    await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high', ...extra }));
     await io.write(path, doc);
     const size1 = statSync(path).size;
     before += size0;

@@ -145,6 +145,8 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 - *Streetlamps*: the road and pavement light themselves from the lamps (`lampField` in `Streets.ts`; inverse-square downlights, glossy streaks on wet asphalt), not painted discs; `Streetlights` has a `soft` mode with physical falloff for the real lights.
 - Still to do: decals from Blender anchors (shopfronts, signs, AC units: grime, rust, posters, litter) and lamp and street-furniture irregularity.
 
+**Cars:** all nine vehicles are generated (`blender/make_cars.py`): a high-poly build is baked into a hero tier (21 to 25k triangles, occlusion, road-grime and normal maps) for cars within 12 units on HIGH, a mid tier (the old close-up model with baked occlusion) out to 28 units, and the lean shells beyond and on LOW (see blender/README.md). No downloaded vehicle was realistic and licensed for this use; the survey is in `public/models/cars/CREDITS.md`.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## Camera direction and the lens

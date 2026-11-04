@@ -11,7 +11,7 @@ npm run compress:models                          # weld + quantize + meshopt the
 npm run build:ground                             # the repeating street/lawn cell under the homes
 npm run build:clouds                             # the cloud-sea HDR the homes are lit and reflected by
 npm run bake:rings                               # then re-partition the lots into LOD rings
-python blender/make_cars.py                      # the nine road vehicles (six family cars, three supercars), lean and close-up
+python blender/make_cars.py && npm run compress:models   # the nine road vehicles (six family cars, three supercars): lean, mid and hero tiers and the hero maps
 python blender/make_people.py                    # the pedestrians and a dog (--render DIR: a contact sheet)
 python blender/make_lighthouse.py                # lighthouse, islet, cottage and their maps
 python blender/make_ocean.py                     # tileable wave normal and foam maps
@@ -120,7 +120,7 @@ chapter's sun.
 
 | script | writes | notes |
 | --- | --- | --- |
-| `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each twice: `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris: `paint` tinted per instance, `detail` vertex-coloured) for distance and the LOW tier; `<type>-hi.glb`, the close-up model (see below). `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets` and `exotic`; the runtime is `StreetCars.ts`. 3.6 MB for all eighteen files |
+| `make_cars.py` | `public/models/cars/` | nine vehicles, six family cars (sedan, hatch, suv, pickup, van, taxi) and three exotics (supercar, gt, hyper), each in three shipped tiers built from one description (see below): `<type>.glb`, a lean lofted shell (1.4 to 1.6k tris) for distance and the LOW tier; `<type>-mid.glb` (10 to 13k) and `<type>-hi.glb`, the hero (21 to 25k), with its maps `<type>-paint.webp` and `<type>-paint-n.webp`. `manifest.json` carries sizes, `lamp` glow points, `wheelRadius`, `wheelOffsets`, `exotic`, `maps` and the tiers' triangle counts; the runtime is `StreetCars.ts`. 3.5 MB for all 45 files (meshopt-packed by `compress:models`, normals at 12 bits); `CREDITS.md` records the survey of downloadable cars (none used) |
 | `make_lighthouse.py` | `public/models/lighthouse/` | ~29k tris in 15 named meshes (one per material) plus stone, rock, slate, wood, plaster and brick maps; `manifest.json` carries the material table `Beacon.ts` builds from |
 | `make_ocean.py` | `public/models/ocean/` | spectrum-generated tileable normal and foam maps for `ocean.frag.glsl` |
 | `make_airliner.py` | `public/models/airliner/` | an A320neo-class jet lofted in metres and scaled to 7.4 units (`bld/airliner.py`): `airliner.glb` (~38k tris, HIGH) and `airliner-low.glb` (~12k, LOW, no fan blades or panel lines), one mesh per material plus each wheel and fan on its own and Empties for the lights and fan axes; `livery.webp` / `livery-low.webp`, an atlas painted with PIL (the fuselage unrolled in the top half, the fin projected side-on in the bottom) and `glow.webp`, the lit cabin windows. Runtime: `Airliner.ts` |
@@ -128,13 +128,41 @@ chapter's sun.
 The lighthouse is modelled in the units of the old procedural tower (lantern centre at
 z = 12.2, base radius 1.8), so the anchors in `Beacon.ts` (beam pivot, flare, tooltip) hold.
 
-## Cars (close-up tier)
+## Cars (close-up tiers)
 
 The lean cars are cheap on purpose. The camera sails 8 to 30 units over the streets, though,
-where a car is 100 to 200 px long, so `StreetCars.ts` swaps every car inside 28 units of the
-camera (33 on the way back, so it never flickers) to the model from `build_hi`. HIGH only.
+where a car is 100 to 200 px long, and sometimes drops to street level beside them, so on HIGH
+`StreetCars.ts` swaps every car inside 28 units of the camera (33 on the way back, so it never
+flickers) to a close-up model: the **hero** inside 12 units (15 on the way back), the **mid**
+between. All three tiers come from one description, in four builds (`bld/car_bake.py`):
 
-| type | tris, lean / close-up | what |
+| build | body skin | wheels, round parts | ships | tris with wheels |
+| --- | --- | --- | --- | --- |
+| high-poly | a section every 1.5 cm, 96 points round (each of the ring's 24 spans split in four along a Catmull-Rom curve) | 64 segments, 2.5x | never: the bake source (`--hp DIR` writes it out) | 63 to 78k |
+| hero `-hi` | a section every 4.5 cm, 48 points round; UV set and MikkTSpace tangents | 32, 1.6x | HIGH, inside 12 units | 21 to 25k |
+| mid `-mid` | the old close-up loft (24 points, 60 to 75 sections) | 24, 1x | HIGH, 12 to 28 units | 10 to 13k |
+| lean | the lofted shell from `build` | boxes | everywhere else, and all of LOW | 1.4 to 1.6k |
+
+The ring is an analytic function of x, so more sections are exact rather than smoothed, and
+everything fitted to the skin (lamps, plates, seals, glass) stays on it. The flanks of the
+close-up tiers curve more than the old model's (the rocker tucks under, the shoulder rolls into
+the tumblehome: `SIDE_CURVE`).
+
+Baked, with Cycles (glass hidden, so light reaches the cabin through the windows; the four
+wheels placed and a road under the car as occluders):
+
+| what | where | how |
+| --- | --- | --- |
+| occlusion, grime, curvature | hero `paint`: `<type>-paint.webp`, 1024 px, R/G/B | AO (0.5 m) into the body's UV set; road film from height (heaviest on the sills, lower doors and bumpers), cavities and two octaves of noise; convex curvature from pointiness |
+| normals | hero `paint`: `<type>-paint-n.webp`, 1024 px | tangent space, the high-poly skin projected onto the hero's |
+| occlusion | every tier's `detail` and `wheel` (multiplied into the vertex colour; alpha, the material class, untouched), the mid and lean `paint` (new vertex colours, with the grime tint low on the body) | per-vertex AO; the wheel on its own (it turns) at 12 cm |
+
+`StreetCars.ts` gives each type's hero paint its own copy of the clear-coated paint with these
+maps: R is the `aoMap` (dims sky and reflections, and the direct light a little), G lays a road
+film over the paint that roughens it and thins the clearcoat. The other tiers' paint reads the
+vertex colours. Draw calls per type are unchanged (paint, detail, glass, wheels per close tier).
+
+| type | tris, lean / old close-up (now the mid tier) | what |
 | --- | --- | --- |
 | `sedan`, `taxi` | 1.47k / 10.8k, 9.9k | four-door saloon, twin-spoke rims, chrome window frames; the taxi adds the roof sign, checks and plastic wheel covers |
 | `hatch` | 1.42k / 10.5k | five-door hatch: roof spoiler with a brake light, rear wiper, five broad spokes |
@@ -153,14 +181,14 @@ wheels, `pinch` rounds the nose and tail off harder in plan, and `intake` presse
 the flank that deepens from the door to its back wall. The wing, snorkel, flank scoops and
 gills also exist as a few boxes in the lean model, so the silhouette holds across the swap.
 
-Four meshes per `<type>-hi.glb` (10 to 13k tris counting the four wheels):
+Four meshes per `<type>-hi.glb` and `<type>-mid.glb`:
 
 | mesh | what |
 | --- | --- |
-| `paint` | the body skin (a 24-point ring lofted along 60 to 75 sections, wheel arches cut into the flanks), mirror housings (and the exotics' stalks), the hatchbacks' roof spoiler, the hypercar's snorkel and fin, van roof ribs, pickup tailgate: tinted per instance, `MeshPhysicalMaterial` with clearcoat (a glossier one for the exotics) |
+| `paint` | the body skin (lofted as above, wheel arches cut into the flanks), mirror housings (and the exotics' stalks), the hatchbacks' roof spoiler, the hypercar's snorkel and fin, van roof ribs, pickup tailgate: tinted per instance, `MeshPhysicalMaterial` with clearcoat (a glossier one for the exotics) |
 | `glass` | one sheet per window, inset 1.6 cm from the skin, drawn tinted and see-through so the interior shows (a black rubber seal lines each opening) |
 | `detail` | interior (headlined shell, dash, wheel, seats, bolstered buckets in the exotics, console), lamps with bezels, lenses and LED running-light strips, grille slats, intakes, fog lamps, plates, badges and the model's name in chrome letters, exhaust tips, calipers (curved round the disc, painted), door and bumper shut lines, gloss-black pillars between the side windows, window frames and beltline, mirror stalks and repeaters, fuel flap, tow-eye covers, hood, frunk and deck lines, wipers, rear wiper, shark-fin antenna, taxi sign and checks, roof rails, van door rail and aerial, pickup bed ribs, liner and hitch; on the exotics the carbon splitter, skirts, diffuser and strakes, engine louvres, wing, canards and canopy |
-| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z, 24 segments round: tyre (bulged sidewall with a ring of raised lettering, squared shoulder, two ribs either side of a groove, a sipe across the shoulder rib every segment; 30 to 35-series on the exotics), rim lip and barrel with one of eight face designs on a concave dish (broad `star` or `six` spokes, thin `multi` spokes, `twin` pairs, `y` forks, twisted `blade`s, a pressed `steel` dish, a plastic `cover`), five lug nuts or a centre-lock nut, hub cap, a ventilated disc (vanes between its plates; drilled carbon-ceramic on the exotics) |
+| `wheel` | one wheel at the origin, axle along y (glTF z), outer face toward -z, 24 (mid) or 32 (hero) segments round: tyre (bulged sidewall with a ring of raised lettering, squared shoulder, two ribs either side of a groove, a sipe across the shoulder rib every segment; 30 to 35-series on the exotics), rim lip and barrel with one of eight face designs on a concave dish (broad `star` or `six` spokes, thin `multi` spokes, `twin` pairs, `y` forks, twisted `blade`s, a pressed `steel` dish, a plastic `cover`), five lug nuts or a centre-lock nut, hub cap, a ventilated disc (vanes between its plates; drilled carbon-ceramic on the exotics) |
 
 The runtime instances `wheel` four times per car (`wheelOffsets` in the manifest, the right-hand
 pair turned half way round) and sets each instance's rotation from the distance the car has
@@ -181,8 +209,10 @@ is how the corner lamps, window frames, louvres, gills and skirts follow the bod
 builds reuse `SPECS` for the envelope, so the lean and close-up cars of a type have the same
 size and silhouette.
 
-`StreetCars.ts` paints the exotics from a palette of their own (rosso, arancio, lime, giallo,
-deep blue, white, black, purple, gunmetal, racing green) and deals them out at about one car in
+`StreetCars.ts` paints the family cars in about the shares real traffic has (mostly whites,
+silvers, greys and blacks, then deep reds, blues, greens, a bronze and a champagne, all toned
+down, nothing saturated) and the exotics from a deeper palette of their own (rosso, arancio,
+giallo, verde, blu, white, black, viola, gunmetal, racing green), dealt out at about one car in
 seven, in traffic and parked alike: `TRAFFIC` and `PARKED` weight every type, and the exotics'
 share of the weights is handed out by a running tally rather than drawn, so every street has
 its few. On HIGH every car mesh but the glass casts into and takes the sun's shadow map (and
