@@ -50,6 +50,7 @@ import {
   ROOM_K, buildExitCurve, detourPose, envelopePose, type DetourPose, type DetourScene, type EnvelopePose,
 } from '../rig/officeShot';
 import { envelopeTextures } from './Envelopes';
+import { buildOfficeWalls } from './OfficeWalls';
 import {
   Batcher, LAYOUT, PROP_SIZES, ROOM, meshesUnder, placementMatrix, standIn, type PropName, type StandInMaterial,
 } from './OfficeProps';
@@ -204,6 +205,7 @@ export class Office {
 
     this.materials = this.makeMaterials();
     this.buildShell();
+    this.buildWalls();
 
     // the live laptop's display: the arrival office's two mail screens, swapped on u
     this.keep(this.screens.idle, this.screens.received);
@@ -331,6 +333,15 @@ export class Office {
   }
 
   /** floor, ceiling, walls, the window wall's mullions and glass, the LED cove */
+  /** posters, a TV, a door, conduit, panels, a dado: what hangs on and is fixed to the walls (OfficeWalls.ts) */
+  private buildWalls(): void {
+    const { x0, x1, z1, h } = ROOM;
+    const walls = buildOfficeWalls({ x0, x1, D: z1, h }, { dark: this.materials.dark, metal: this.materials.metal, screen: this.materials.screen }, this.high);
+    this.group.add(walls.group);
+    for (const d of walls.disposables) this.own(d);
+    this.textures.push(...walls.textures);
+  }
+
   private buildShell(): void {
     const { x0, x1, z1, h } = ROOM;
     const W = x1 - x0;
