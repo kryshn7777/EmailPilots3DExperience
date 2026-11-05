@@ -462,6 +462,8 @@ export class Engine {
     this.pinned = new PinnedTitles();
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
+    // the run-in to the lighthouse waits for all of it (the tower's manifest is a fetch the manager misses)
+    this.readiness.register(0.46, this.beacon.loaded);
     // what the sea mirrors: the sky, and the lights that light the lighthouse and the ship in it
     for (const o of [this.sky.mesh, this.sun, this.hemi]) o.layers.enable(REFLECTED_LAYER);
     this.city = new City(new Vector3(...CITY_ANCHOR), this.path, this.quality);
