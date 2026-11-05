@@ -3,6 +3,8 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 
 gsap.registerPlugin(ScrollTrigger);
+// scroll feel: a phone's URL bar showing or hiding must not re-measure the timeline mid-scroll
+ScrollTrigger.config({ ignoreMobileResize: true });
 
 // --- scroll feel ---
 /** what the visitor is scrolling with; it sets Lenis' coast and the scrub spring's frequency */

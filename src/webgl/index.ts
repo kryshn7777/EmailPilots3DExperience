@@ -29,6 +29,8 @@ export function boot(): void {
     // the page tells the engine when the experience is on screen and when to replay it
     window.addEventListener('experience:visible', (e) => engine.setActive((e as CustomEvent<boolean>).detail));
     window.addEventListener('flight:replay', () => engine.replay());
+    // scroll feel: the rail's ticks jump to a chapter
+    window.addEventListener('flight:jump', (e) => engine.jumpToT((e as CustomEvent<number>).detail));
 
     const { initSwupChoreo } = await import('./transitions/SwupChoreo');
     initSwupChoreo(engine);

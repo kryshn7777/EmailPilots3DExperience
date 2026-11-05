@@ -107,6 +107,7 @@ import gsap from 'gsap';
 import { step as springStep, capDetour, type SpringState } from './scroll/spring';
 import { buildPace, floorAt, paceInputs, type Pace } from './rig/pace';
 import { Perf } from './debug/Perf';
+import { CHAPTERS } from '../story/chapters';
 // --- end scroll feel ---
 
 interface EngineOptions {
@@ -643,6 +644,8 @@ export class Engine {
     }
     const end = stage.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
     this.detourW = end > 1 ? MathUtils.clamp(spacer.offsetHeight / end, 0, 0.5) : 0;
+    // scroll feel: where each chapter starts on the scroll, for the rail's ticks (they move with the pace)
+    if (this.pace) window.dispatchEvent(new CustomEvent('flight:rail', { detail: CHAPTERS.map((c) => this.progressForT(c.t0)) }));
   }
 
   start(): void {
@@ -1449,7 +1452,7 @@ export class Engine {
     }
     window.dispatchEvent(new CustomEvent('flight:t', { detail: t }));
     // office detour: the scroll's own progress (the HUD's bar), and the detour clock
-    window.dispatchEvent(new CustomEvent('flight:progress', { detail: { p: this.renderP, u: this.detourU } }));
+    window.dispatchEvent(new CustomEvent('flight:progress', { detail: { p: this.renderP, u: this.detourU, s: this.feelSpeed } }));
   }
 
   private firstFrameDone = false;
@@ -1548,10 +1551,24 @@ export class Engine {
   }
   private probe = new URLSearchParams(location.search).has('probe');
 
+  // --- scroll feel ---
+  private sizedW = 0;
+  private sizedH = 0;
+  private sizedDpr = 0;
+  private touch = matchMedia('(pointer: coarse)').matches;
+  // --- end scroll feel ---
   private resize = (): void => {
     const dpr =
       Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale * this.resolution;
     const { clientWidth, clientHeight } = this.canvas;
+    // --- scroll feel --- a phone's URL bar showing or hiding is a height-only change of under 120 px:
+    // the canvas (100lvh) does not need a new size for it, and reallocating the targets mid-scroll hitches
+    if (this.touch && dpr === this.sizedDpr && clientWidth === this.sizedW && this.sizedH > 0 &&
+      Math.abs(clientHeight - this.sizedH) < 120) return;
+    this.sizedW = clientWidth;
+    this.sizedH = clientHeight;
+    this.sizedDpr = dpr;
+    // --- end scroll feel ---
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.composer.setSize(clientWidth, clientHeight);
