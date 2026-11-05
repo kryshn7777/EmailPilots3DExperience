@@ -31,6 +31,8 @@ export function boot(): void {
     window.addEventListener('flight:replay', () => engine.replay());
     // scroll feel: the rail's ticks jump to a chapter
     window.addEventListener('flight:jump', (e) => engine.jumpToT((e as CustomEvent<number>).detail));
+    // scroll feel: the wind sound's toggle (page.ts)
+    window.addEventListener('flight:sound', (e) => engine.setSound((e as CustomEvent<boolean>).detail));
 
     const { initSwupChoreo } = await import('./transitions/SwupChoreo');
     initSwupChoreo(engine);

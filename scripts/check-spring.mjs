@@ -10,6 +10,7 @@
 // cap holds the frame back on purpose), no final snap of 0.5 px or more, and the detour clock never
 // faster than MAX_U_RATE.
 import assert from 'node:assert';
+import { register } from 'node:module';
 import { step, capDetour } from '../src/webgl/scroll/spring.ts';
 import { detourStart, MAX_U_RATE } from '../src/webgl/rig/detour.ts';
 
@@ -198,4 +199,34 @@ if (OLD) {
   process.exit(0);
 }
 assert(all, 'spring checks failed');
+
+// load readiness (src/webgl/load/Readiness.ts): the cap holds short of a closed gate, never behind the
+// frame, opens when the load lands, and lets go after 12 s whatever happens
+// the sources import each other without extensions (Vite style): try '.ts' when a relative import misses
+register(
+  'data:text/javascript,' +
+    encodeURIComponent(
+      `export async function resolve(s, c, n) { try { return await n(s, c); } catch (e) {
+         if (/^\\.{1,2}\\//.test(s) && !/\\.[mc]?[jt]s$/.test(s)) return n(s + '.ts', c); throw e; } }`,
+    ),
+);
+globalThis.window ??= { dispatchEvent() {} };
+const { Readiness } = await import('../src/webgl/load/Readiness.ts');
+const r = new Readiness();
+const id = (t) => t; // progressForT: the identity is enough here
+assert.strictEqual(r.capTarget(0.9, 0.2, 0, id), 0.9, 'nothing registered: no cap');
+let land;
+r.register(0.5, new Promise((res) => (land = res)));
+assert(Math.abs(r.capTarget(0.9, 0.2, 0, id) - 0.496) < 1e-9, 'held short of the gate');
+assert.strictEqual(r.capTarget(0.9, 0.6, 0, id), 0.6, 'never behind the frame');
+assert.strictEqual(r.capTarget(0.3, 0.2, 0, id), 0.3, 'below the gate: untouched');
+land();
+await new Promise((res) => setTimeout(res, 0));
+assert.strictEqual(r.capTarget(0.9, 0.2, 0, id), 0.9, 'open once loaded');
+r.register(0.7, new Promise(() => {})); // never lands
+assert(r.capTarget(0.9, 0.2, 1000, id) < 0.9);
+assert(r.capTarget(0.9, 0.2, 12000, id) < 0.9, 'still held at 11 s');
+r.capTarget(0.9, 0.2, 13100, id);
+assert.strictEqual(r.capTarget(0.9, 0.2, 13200, id), 0.9, 'released after 12 s');
+console.log('readiness OK');
 console.log('spring OK');

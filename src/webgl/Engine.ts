@@ -108,6 +108,8 @@ import { step as springStep, capDetour, type SpringState } from './scroll/spring
 import { buildPace, floorAt, paceInputs, type Pace } from './rig/pace';
 import { Perf } from './debug/Perf';
 import { CHAPTERS } from '../story/chapters';
+import { Readiness } from './load/Readiness';
+import { Wind } from './audio/Wind';
 // --- end scroll feel ---
 
 interface EngineOptions {
@@ -139,6 +141,9 @@ const SUN_SHADOW_MAP = 2048;
 const DESK_UNTIL = 0.2;
 
 export class Engine {
+  // --- scroll feel --- first, so it sees every load the actors below start (load/Readiness.ts)
+  private readiness = new Readiness();
+  // --- end scroll feel ---
   private renderer: WebGLRenderer;
   private scene = new Scene();
   private camera: PerspectiveCamera;
@@ -266,6 +271,7 @@ export class Engine {
     const dw = this.rig.detour.weight;
     this.feelSpeed = calm ? 0 : MathUtils.smoothstep(this.vp, 4, 18) * (1 - dw);
     this.rig.speed = this.feelSpeed;
+    this.wind?.update(t, this.feelSpeed, calm ? 0 : this.vp, dt);
     if (dp > 1e-7 || this.idlePreset) this.movedAt = now;
     this.rig.rest = calm ? 0 : MathUtils.smoothstep((now - this.movedAt) / 1000, 1.2, 2.7) * (1 - dw);
     if (this.perf) {
@@ -280,6 +286,15 @@ export class Engine {
         tier: this.quality.tier,
       }, now);
     }
+  }
+
+  /** the wind sound (audio/Wind.ts), made on the first switch-on; never under reduced motion */
+  private wind: Wind | null = null;
+  setSound(on: boolean): void {
+    if (this.options.reducedMotion) return;
+    if (!this.wind && !on) return;
+    this.wind ??= new Wind();
+    this.wind.setEnabled(on);
   }
 
   /** An eased jump to story-t `t` (the progress rail's ticks). */
@@ -1136,8 +1151,11 @@ export class Engine {
     const time = (now - this.startTime) / 1000;
     // office detour: the spring runs on scroll PROGRESS; story-t and the detour clock come from it
     const W = this.detourW;
-    const target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
-    // --- scroll feel --- the scrub spring (scroll/spring.ts): fixed 1/120 s substeps, critically
+    let target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
+    // --- scroll feel --- held short of a chapter that has not loaded yet (never behind the frame, never
+    // for more than 12 s; load/Readiness.ts)
+    if (!this.idlePreset && !this.warming) target = this.readiness.capTarget(target, this.renderP, now, (t) => this.progressForT(t));
+    // the scrub spring (scroll/spring.ts): fixed 1/120 s substeps, critically
     // damped (more so while fast), no overshoot, and a snap only under ~0.16 px. Under reduced motion a
     // stiff one (w 20) instead of a jump, so a scrollbar drag or a key still reads as one movement.
     const err = Math.abs(target - this.renderP);
@@ -1589,6 +1607,7 @@ export class Engine {
     clearTimeout(this.warmTimer);
     gsap.ticker.remove(this.tick);
     this.perf?.dispose();
+    this.wind?.dispose();
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost);
