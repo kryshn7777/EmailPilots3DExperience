@@ -18,7 +18,7 @@ import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
 const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars',
-  'public/models/city-props', 'public/models/yard-props', 'public/models/office', 'public/models/people', 'public/models/birds'];
+  'public/models/city-props', 'public/models/yard-props', 'public/models/office', 'public/models/people', 'public/models/birds', 'public/models/cafe'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
@@ -47,7 +47,9 @@ for (const dir of DIRS) {
       : dir.endsWith('/office') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
       : dir.endsWith('/people') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
       // the birds' feather cards sample slots a few texels wide in a 1024 atlas: 14-bit UVs, 10-bit normals
-      : dir.endsWith('/birds') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
+      : dir.endsWith('/birds') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
+      // the café terrace's props sample 256 px tiles of one 1024 atlas: 14-bit UVs too
+      : dir.endsWith('/cafe') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
     await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high', ...extra }));
     await io.write(path, doc);
     const size1 = statSync(path).size;

@@ -39,6 +39,7 @@ import { CROSS_HALF, CityStreet, ROAD_HALF, canyonPhase, crossPhase, type Footpr
 import { Pedestrians } from './Pedestrians';
 import { cityCrowd } from './PedestrianPlans';
 import { CityLife } from './CityLife';
+import { CAFE_SEAT, CafeTerrace } from './CafeTerrace';
 import { pavingMaps } from '../bake/RoomTextures';
 import { applyStreets, setLampField } from '../materials/Streets';
 import { PaperPlane } from './PaperPlane';
@@ -190,8 +191,17 @@ export class City {
       const lot = (lots as KitLot[])[i]!;
       footprints.push({ x: lot.x, z: lot.z, hx: e.hx, hz: e.hz, h: lot.h });
     });
-    this.street = new CityStreet(footprints, quality, { realProps: true });
+    // the restaurant terrace takes the plaza on the left of the street (north, -z) that the flight has
+    // ahead of it as it comes down into the canyon (x -3..6): on a wide screen it fills the left of the
+    // frame from the descent until the camera draws level (x 8..14, tried too, sits behind the title)
+    this.street = new CityStreet(footprints, quality, { realProps: true, cafe: { x: 1.5, side: -1 } });
     this.group.add(this.street.group);
+    if (this.street.terrace) {
+      this.terrace = new CafeTerrace(this.street.terrace, quality, this.group.position);
+      this.street.occupied.push(...this.terrace.occupied);
+      this.group.add(this.terrace.group);
+      this.disposables.push(this.terrace);
+    }
     void this.buildTrees(this.street.trees, path, quality);
     // the street lived in: clutter, deliveries, roadworks, bikes, roof plant (and the people about them)
     this.life = new CityLife({
@@ -201,7 +211,7 @@ export class City {
     });
     this.group.add(this.life.group);
     this.disposables.push(this.life);
-    this.buildPeople(this.street.plazas, quality, this.life.stands);
+    this.buildPeople(this.street.plazas, quality, this.life.stands, this.terrace);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
     this.buildDeliveries(buildings, path);
@@ -343,6 +353,8 @@ export class City {
   /** the parked cars (buildCars), so the street's props keep out of them */
   private parked: { x: number; z: number; yaw: number }[] = [];
   private streetlights: Streetlights | null = null;
+  /** Trattoria Luna's terrace (CafeTerrace): its diners are in the crowd, its delivery in BatchFleet */
+  terrace: CafeTerrace | null = null;
 
 
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
@@ -731,6 +743,12 @@ export class City {
     this.people?.update(time);
     KitCity.tick(time);
     this.street?.update(time);
+    // the terrace answers its delivery; the diners at that table look up and wave
+    if (this.terrace) {
+      const wave = this.terrace.update(t, time);
+      const at = this.terrace.waveAt;
+      if (at) this.people?.setWave(at.x, at.z, 0.55, wave);
+    }
     this.life?.update(time, eye);
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
@@ -807,8 +825,9 @@ export class City {
   }
 
   /** People on the canyon sidewalks, round the corners and in the plazas, at the cars' 1.35x (see PedestrianPlans.cityCrowd). */
-  private buildPeople(plazas: CityStreet['plazas'], quality: Quality, extra: CityLife['stands'] = []): void {
-    this.people = new Pedestrians(quality, cityCrowd(plazas, quality, extra));
+  private buildPeople(plazas: CityStreet['plazas'], quality: Quality, extra: CityLife['stands'] = [], cafe: CafeTerrace | null = null): void {
+    this.people = new Pedestrians(quality, cityCrowd(plazas, quality, extra,
+      cafe ? { stands: cafe.stands, walks: cafe.walks, seat: CAFE_SEAT } : null));
     this.group.add(this.people.group);
   }
 

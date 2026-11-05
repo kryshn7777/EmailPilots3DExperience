@@ -27,6 +27,8 @@ python blender/make_ship.py && npm run compress:models      # the lighthouse cha
 python blender/make_it_office.py && npm run compress:models # the night IT office's 13 props in one GLB on one baked atlas (see "IT office props")
                                                  # (--render DIR: Cycles high-poly vs shipped comparisons; --debug DIR: the maps as PNGs)
 python blender/make_birds.py && npm run compress:models    # the window's pigeons, starlings and gull: feathered HIGH cards, LOW wing cards, two baked atlases (see "Birds")
+python blender/make_cafe_props.py && npm run compress:models  # the night city's restaurant terrace: bistro chairs, laid tables, parasols, planters,
+                                                 # menu board, festoon post; near + lean meshes on one baked 1024 atlas (--sheet DIR: a contact sheet)
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`

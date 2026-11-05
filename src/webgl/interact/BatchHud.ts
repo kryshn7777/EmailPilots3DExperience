@@ -32,7 +32,7 @@ export class BatchHud {
   private shownCount = -1;
   private shownFoot = '';
 
-  constructor(chipCount = 10) {
+  constructor(chipCount = 12) {
     this.el = document.createElement('div');
     this.el.className = 'batch';
     this.el.dataset.visible = 'false';

@@ -21,7 +21,9 @@ import {
   RGBADepthPacking,
   SRGBColorSpace,
   TextureLoader,
+  Vector2,
   Vector3,
+  Vector4,
 } from 'three';
 import type { Material, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -103,6 +105,8 @@ export interface Walk {
   round?: number;
   /** a one-way walkway: everyone walks from the first point to the last (1) or back (-1); default both */
   dir?: 1 | -1;
+  /** its people are dressed after everyone standing (a walkway added to a plan without changing anyone's look) */
+  late?: boolean;
 }
 
 /** Someone standing still: on a porch, by a car, chatting on the sidewalk, in a plaza. */
@@ -111,8 +115,12 @@ export interface Stand {
   z: number;
   /** heading: 0 faces +x, as everywhere on the site */
   yaw: number;
-  /** 'idle' looks about, 'chat' talks (turns with whoever faces them), 'phone' reads one */
-  mood?: 'idle' | 'chat' | 'phone';
+  /**
+   * 'idle' looks about, 'chat' talks (turns with whoever faces them), 'phone' reads one; 'eat' sits
+   * (on a chair whose seat is at the plan's `seat` height) at a table, eats, talks across it and
+   * glances about, and waves when a delivery lands near it (see `setWave`)
+   */
+  mood?: 'idle' | 'chat' | 'phone' | 'eat';
   /** people with the same `group` talk in turns rather than all at once */
   group?: number;
   /** who stands here (a variant id: 'child', 'dog', ...); default a grown-up of the plan's look */
@@ -128,6 +136,8 @@ export interface CrowdPlan {
   scale?: number;
   /** people further than this from the camera are not drawn (their vertices collapse in the shader) */
   far: number;
+  /** the seat height (crowd units) the seated (`mood: 'eat'`) sit at: their hips go a little above it */
+  seat?: number;
   seed?: number;
 }
 
@@ -206,6 +216,10 @@ uniform float uTime;
 uniform float uFar;
 // the main camera: the shadow passes draw from the light, and cameraPosition is the light there
 uniform vec3 uEye;
+// seated people: the hip's height above the floor (model units) and the ankle's above the sole
+uniform vec2 uSeat;
+// a wave: seated people within z of (x, y) in the crowd's frame raise a hand, by w
+uniform vec4 uWave;
 
 const float ROUGH[9] = float[9](0.6, 0.48, 0.84, 0.8, 0.45, 0.6, 0.84, 0.5, 0.62);
 
@@ -287,6 +301,38 @@ void pose(inout vec3 p, inout vec3 n) {
   float tYaw = 0.11 * a * sw * (1.0 + j);
   float pYaw = -0.07 * a * sw;
   float lean = -(0.03 * a + 0.14 * j * a);
+  float seatBob = 0.0;
+  if (mode == 3) {
+    // seated: the hip at the seat, the thighs forward (tipped down a little if the shins are short of
+    // the floor), the shins down to it, the feet flat; one foot a little forward of the other
+    float h = uSeat.x;
+    float drop = clamp((h - uSeat.y - uLeg.y) / uLeg.x, 0.0, 0.45);
+    float th = 0.5 * PI - asin(drop);
+    float kneeY = h - uLeg.x * cos(th);
+    float shin = acos(clamp((kneeY - uSeat.y) / uLeg.y, -1.0, 1.0));
+    float fwd = 0.18 * fract(seed * 13.7);
+    L = vec4(th, th - shin - fwd, -(shin + fwd), 0.0);
+    R = vec4(th - 0.04, th - shin, -shin, 0.0);
+    seatBob = h - uPiv[7].y;
+    // forearms on the table, a fork in the left hand; now and then the right hand comes up to the mouth
+    float cyc = fract(t / (5.5 + 3.0 * fract(seed * 7.3)) + seed * 5.0);
+    float bite = hat(cyc, 0.5, 0.11) * (1.0 - step(0.5, talk));
+    shL = 0.32 + 0.04 * sin(t * 1.7 + seed * 9.0);
+    elL = 1.3 + 0.15 * sin(t * 1.3 + seed * 4.0);
+    shR = mix(0.3, 0.62, bite) + talk * 0.35;
+    elR = mix(1.25, 2.5, bite) + talk * (0.35 + 0.3 * sin(t * 3.3 + seed * 5.0));
+    abL = 0.12; abR = -0.12;
+    hPitch = mix(-0.2, 0.05, bite) + aPose.y * (1.0 - turn) * 0.05 * sin(t * 2.6 + seed * 3.0);
+    lean = -0.14 - 0.05 * bite;
+    // a delivery lands on the table: they look up and wave
+    vec2 at = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz;
+    float wv = uWave.w * (1.0 - smoothstep(uWave.z * 0.6, uWave.z, distance(at, uWave.xy)));
+    shR = mix(shR, 2.7, wv);
+    elR = mix(elR, 0.55 + 0.4 * sin(t * 9.0 + seed * 3.0), wv);
+    abR = mix(abR, -0.3, wv);
+    hPitch = mix(hPitch, 0.3, wv);
+    lean = mix(lean, -0.02, wv);
+  }
   float roll = still * 0.02 * sin(t * 0.43 + seed * 13.0);
   float sway = -0.016 * a * cos(2.0 * PI * (ph - 0.31)) * (uLeg.x + uLeg.y) + still * 0.012 * (uLeg.x + uLeg.y) * sin(t * 0.43 + seed * 13.0);
   // the head holds its line, glances about now and then, and looks around more when standing
@@ -343,7 +389,7 @@ void pose(inout vec3 p, inout vec3 n) {
   q = uPiv[0];
   p = q + rotY(p - q, pYaw);
   n = rotY(n, pYaw);
-  p.y += bob;
+  p.y += mode == 3 ? seatBob : bob;
   p.z += sway;
 }
 `;
@@ -399,7 +445,10 @@ const CULL = /* glsl */ `
   bool gone = distance(origin, uEye) > uFar || (opt > 0 && ((mask >> (opt - 1)) & 1) == 0);
 `;
 
-interface Shared { uTime: { value: number }; uFar: { value: number }; uEye: { value: Vector3 } }
+interface Shared {
+  uTime: { value: number }; uFar: { value: number }; uEye: { value: Vector3 };
+  uSeat: { value: Vector2 }; uWave: { value: Vector4 };
+}
 
 /**
  * The materials of one variant: a standard material posed and tinted per instance (see RIG), and
@@ -640,7 +689,10 @@ export class Pedestrians {
   private shadowMoving = 0;
   private leash: LineSegments | null = null;
   private leashed: Walker[] = [];
-  private uniforms: Shared = { uTime: { value: 0 }, uFar: { value: 60 }, uEye: { value: new Vector3(0, 1e5, 0) } };
+  private uniforms: Shared = {
+    uTime: { value: 0 }, uFar: { value: 60 }, uEye: { value: new Vector3(0, 1e5, 0) },
+    uSeat: { value: new Vector2(0.18, 0.024) }, uWave: { value: new Vector4(0, 0, 0, 0) },
+  };
   private ready = false;
   private last = -1;
   private rand = mulberry32(9137);
@@ -669,6 +721,8 @@ export class Pedestrians {
   constructor(private quality: Quality, private plan: CrowdPlan) {
     this.k = plan.scale ?? 1;
     this.uniforms.uFar.value = plan.far;
+    // the hip joint sits about 9 cm over the seat (0.33 site units a metre); the uniform is in model units
+    if (plan.seat) this.uniforms.uSeat.value.x = (plan.seat + 0.09 * METRE * this.k) / this.k;
     // dev hook for automated inspection (like the engine's `__engine`): the crowds, under ?probe
     if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('probe')) {
       const w = window as unknown as { __crowds?: Pedestrians[] };
@@ -946,8 +1000,8 @@ export class Pedestrians {
       return (jog ? (2 * JOG_REACH * leg) / JOG_STANCE : (2 * WALK_REACH * leg) / WALK_STANCE) * b.scale;
     };
 
-    // walkers
-    for (const walk of plan.walks) {
+    // walkers (a `late` walkway's are dressed after the people standing, so adding one moves nobody else's look)
+    const walkers = (list: Walk[]): void => { for (const walk of list) {
       const route = new Route(walk.points, walk.round ?? 0.6);
       // a companion or a dog needs a walkway wide enough to walk beside
       const roomy = walk.width > 0.75 * k;
@@ -999,7 +1053,8 @@ export class Pedestrians {
         this.walkers.push(w);
         this.place(w, 0);
       }
-    }
+    } };
+    walkers(plan.walks.filter((w) => !w.late));
 
     // people standing about; within a group, every other one talks while the rest listen
     const turns = new Map<number, number>();
@@ -1011,6 +1066,12 @@ export class Pedestrians {
       body.yaw = st.yaw;
       if (st.mood === 'chat') body.pose[1] = 0.7 + rand() * 0.3;
       if (st.mood === 'phone') body.pose[2] = 2;
+      if (st.mood === 'eat') {
+        body.pose[2] = 3;
+        body.pose[1] = 0.6 + rand() * 0.4;
+        // no backpacks or bags on a chair's back
+        body.pose[3] &= ~(bit('backpack') | bit('bag'));
+      }
       if (st.group !== undefined) {
         const n = turns.get(st.group) ?? 0;
         turns.set(st.group, n + 1);
@@ -1018,6 +1079,7 @@ export class Pedestrians {
       }
       this.bodies.push(body);
     }
+    walkers(plan.walks.filter((w) => w.late));
   }
 
   // ---- each frame --------------------------------------------------------------------------------------
@@ -1421,12 +1483,20 @@ export class Pedestrians {
    * phone is (about chest high, a hand's length in front of them: 0.62 units up for a city figure)
    * and which way they face. `any` widens it to everyone standing. Empty until the figures load.
    */
+  /**
+   * The seated people within `r` of (x, z) (this crowd's frame) look up and wave, by `amount` (0..1):
+   * a delivery landing on their table. One uniform; nothing is uploaded per person.
+   */
+  setWave(x: number, z: number, r: number, amount: number): void {
+    this.uniforms.uWave.value.set(x, z, r, amount);
+  }
+
   phoneHolders(any = false): { x: number; y: number; z: number; yaw: number }[] {
     if (!this.ready) return [];
     const out: { x: number; y: number; z: number; yaw: number }[] = [];
     for (const b of this.bodies) {
       const v = this.variants[b.variant];
-      if (b.moving || !v || v.kind !== 'person' || (!any && b.pose[2] !== 2)) continue;
+      if (b.moving || !v || v.kind !== 'person' || b.pose[2] === 3 || (!any && b.pose[2] !== 2)) continue;
       const reach = 0.1 * v.height * b.scale;
       out.push({ x: b.x + Math.cos(b.yaw) * reach, y: 0.78 * v.height * b.scale, z: b.z - Math.sin(b.yaw) * reach, yaw: b.yaw });
     }

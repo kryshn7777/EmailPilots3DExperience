@@ -30,6 +30,7 @@ import { mulberry32 } from '../util';
 import { BATCH_TOTAL } from './BatchSend';
 import { SHIP_DECK_SPOTS, type Beacon } from './Beacon';
 import type { City } from './City';
+import { CAFE_DELIVERY } from './CafeTerrace';
 import { dartGeometry } from './PaperPlane';
 import type { TownSites } from './Rooftops';
 
@@ -62,7 +63,7 @@ const TRAIL_POINTS = 14;
 const TRAIL_STEP = 0.0012;
 const UP = new Vector3(0, 1, 0);
 
-type Kind = 'town' | 'ship' | 'phone' | 'window';
+type Kind = 'town' | 'ship' | 'phone' | 'window' | 'cafe';
 /**
  * Every delivery of the fleet, in story-t: when its plane leaves the flight and when it lands. The
  * tally reads these times alone, so it is a pure function of t whatever the plan picked. The two
@@ -78,17 +79,23 @@ const SCHEDULE: readonly { kind: Kind; from: number; land: number; place: string
   { kind: 'window', from: 0.698, land: 0.728, place: 'a window in the city' },
   { kind: 'phone', from: 0.722, land: 0.744, place: 'a phone in the city' },
   { kind: 'window', from: 0.719, land: 0.749, place: 'a window in the city' },
+  // onto a table of the restaurant terrace on the left of the street (CafeTerrace), as the flight comes
+  // down into the canyon with the terrace ahead; last in the list so the other planes keep their numbers
+  { kind: 'cafe', from: CAFE_DELIVERY.from, land: CAFE_DELIVERY.land, place: 'café terrace' },
 ];
+/** the darts that leave the flight from outside the V (the freighter's, the phones', the terrace's) */
+const EXTRA = SCHEDULE.filter((s) => s.kind !== 'town' && s.kind !== 'window').length;
 /** how the light column over each kind of landing is sized, and when it goes (absolute t, or after landing) */
 const BEAM: Record<Exclude<Kind, 'window'>, { h: number; r: number; off: (land: number) => [number, number] }> = {
   town: { h: 10, r: 0.5, off: () => [0.334, 0.345] },
   ship: { h: 26, r: 1.3, off: () => [0.572, 0.585] },
   phone: { h: 4, r: 0.18, off: (land) => [land + 0.02, land + 0.034] },
+  cafe: { h: 2.4, r: 0.16, off: (land) => [land + 0.022, land + 0.036] },
 };
 /** how bright each column is (additive): the town's stands in a bright evening haze */
-const BEAM_GAIN: Record<Exclude<Kind, 'window'>, number> = { town: 1.2, ship: 0.8, phone: 0.7 };
+const BEAM_GAIN: Record<Exclude<Kind, 'window'>, number> = { town: 1.2, ship: 0.8, phone: 0.7, cafe: 0.6 };
 /** where the HUD pins a landed chip above each kind of landing */
-const CHIP_UP: Record<Kind, number> = { town: 2.1, ship: 15, phone: 1.0, window: 0.7 };
+const CHIP_UP: Record<Kind, number> = { town: 2.1, ship: 15, phone: 1.0, window: 0.7, cafe: 0.95 };
 
 interface Delivery {
   kind: Kind;
@@ -114,7 +121,8 @@ interface Delivery {
  * LOW) rise out of the cloud sea behind it and close into a V around it; then, one at a time, planes
  * of the batch are delivered at random places: two peel off onto lawns in the town, two glide down
  * onto the freighter off the lighthouse, two come down onto the phones of people standing in the
- * city's plazas, and City's first two window darts count as two more. The hero and the rest carry
+ * city's plazas, one lands on a table of the restaurant terrace on the left of the canyon (CafeTerrace),
+ * and City's first two window darts count as two more. The hero and the rest carry
  * on. The HUD card (BatchHud) counts the batch the whole way: 3/42 out of the laptop, 12/42 in
  * formation, each delivery a toast, and from story-t 0.79 the whole 42/42.
  *
@@ -144,6 +152,7 @@ export class BatchFleet {
   private townPlanned = false;
   private shipPlanned = false;
   private phonePlanned = false;
+  private cafePlanned = false;
   private windows: { t: number; at: Vector3 }[] = [];
   // scratch
   private p0 = new Vector3();
@@ -168,7 +177,7 @@ export class BatchFleet {
     const param = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('batchseed') : null;
     this.seed = param !== null && Number.isFinite(Number(param)) ? Number(param) >>> 0 : (Math.random() * 2 ** 32) >>> 0;
     const phase = mulberry32(77);
-    for (let i = 0; i < this.count + 4; i++) this.phases.push(phase() * Math.PI * 2);
+    for (let i = 0; i < this.count + EXTRA; i++) this.phases.push(phase() * Math.PI * 2);
 
     // town deliveries fly the V's two wingtips; the freighter's and the phones' come in from out of frame
     let extra = this.count;
@@ -182,14 +191,14 @@ export class BatchFleet {
       curve: null,
       rest: new Vector3(),
       spot: null,
-      scale: s.kind === 'town' ? [0.8, 1.5] : s.kind === 'ship' ? [1, 2.4] : [0.6, 0.4],
+      scale: s.kind === 'town' ? [0.8, 1.5] : s.kind === 'ship' ? [1, 2.4] : s.kind === 'cafe' ? [0.7, 0.24] : [0.6, 0.4],
       chip: new Vector3(),
     }));
 
     this.dartMaterial = new MeshStandardMaterial({
       map: this.paper, color: '#d6d1c7', roughness: 0.85, side: DoubleSide, emissive: '#8f97a8', emissiveIntensity: 0.14,
     });
-    this.darts = new InstancedMesh(this.dartGeometry, this.dartMaterial, this.count + 4);
+    this.darts = new InstancedMesh(this.dartGeometry, this.dartMaterial, this.count + EXTRA);
     this.darts.instanceMatrix.setUsage(DynamicDrawUsage);
     this.darts.frustumCulled = false;
     this.group.add(this.darts);
@@ -219,7 +228,7 @@ export class BatchFleet {
     this.group.add(this.beams);
 
     if (!this.low) {
-      const verts = (this.count + 4) * (TRAIL_POINTS - 1) * 2;
+      const verts = (this.count + EXTRA) * (TRAIL_POINTS - 1) * 2;
       this.trailPositions = new Float32Array(verts * 3);
       this.trailColors = new Float32Array(verts * 3);
       const g = new BufferGeometry();
@@ -481,6 +490,41 @@ export class BatchFleet {
     }
   }
 
+  /**
+   * The terrace's table: of its street-side tables with people at them, one the chase camera has in
+   * view as the dart touches down (on this screen's shape). The dart comes off the flight's left,
+   * swings out over the pavement and settles onto the table along the street.
+   */
+  private planCafe(aspect: number): void {
+    const terrace = this.city.terrace!;
+    const options = terrace.candidates().map((c) => ({ ...c, view: this.view(CAFE_DELIVERY.land, c.at, aspect) }));
+    if (!options.length) return;
+    this.cafePlanned = true;
+    // in view, clear of the middle of the frame (the chapter's title stands there) but not at its edge:
+    // the one nearest 0.55 of the half-screen out
+    const inView = options.filter((o) => o.view < IN_VIEW * 0.9).sort((a, b) => Math.abs(a.view - 0.55) - Math.abs(b.view - 0.55));
+    const choice = inView[0] ?? [...options].sort((a, b) => a.view - b.view)[0]!;
+    terrace.setTarget(choice.index);
+    for (const d of this.deliveries) {
+      if (d.kind !== 'cafe') continue;
+      const rest = choice.at.clone();
+      rest.y += 0.012;
+      const start = this.path.pointAt(d.from, new Vector3());
+      this.path.tangentAt(d.from, this.tan);
+      this.side.crossVectors(this.tan, UP).normalize();
+      // the flight's left is -side (side = tangent x up points right)
+      start.addScaledVector(this.tan, 1.5).addScaledVector(this.side, -1.2).addScaledVector(UP, 1.6);
+      d.curve = new CubicBezierCurve3(
+        start,
+        start.clone().addScaledVector(this.tan, 4).addScaledVector(UP, 0.6),
+        rest.clone().add(new Vector3(-1.4, 0.55, 0.15)),
+        rest,
+      );
+      d.rest.copy(rest);
+      d.planned = true;
+    }
+  }
+
   // ---- each frame -------------------------------------------------------------------------------
 
   /** Which deliveries are planned, and where (for tests: identical for the same `?batchseed`). */
@@ -500,14 +544,15 @@ export class BatchFleet {
       if (holders.length) this.planPhones(aspect, holders);
     }
     if (!this.windows.length) this.windows = this.city.batchWindows;
+    if (!this.cafePlanned && this.city.terrace) this.planCafe(aspect);
 
-    const on = (t > FLEET_JOIN[0] && t < CARRY[1]) || (t > 0.524 && t < 0.586) || (t > 0.699 && t < 0.78);
+    const on = (t > FLEET_JOIN[0] && t < CARRY[1]) || (t > 0.524 && t < 0.586) || (t > CAFE_DELIVERY.from && t < 0.78);
     this.group.visible = on;
     if (!on) return;
     // pale paper in the sunset; lit a little from within at night, so it reads against the dark
     this.dartMaterial.emissiveIntensity = t < 0.4 ? 0.14 : 0.55;
 
-    for (let i = 0; i < this.count + 4; i++) {
+    for (let i = 0; i < this.count + EXTRA; i++) {
       const s = this.attitude(i, t, aspect);
       if (s <= 1e-4) this.darts.setMatrixAt(i, this.zero);
       else this.darts.setMatrixAt(i, this.m4.compose(this.p0, this.q, this.scl.setScalar(s)));
@@ -594,7 +639,7 @@ export class BatchFleet {
         return;
       }
       const at = d.kind === 'ship' ? this.beacon.shipDeckAt(d.land, d.spot!, this.p1) : this.p1.copy(d.rest);
-      const ground = d.kind === 'phone' ? at.y - d.rest.y + this.city.group.position.y : d.kind === 'ship' ? at.y - 2 : GROUND;
+      const ground = d.kind === 'phone' ? at.y - d.rest.y + this.city.group.position.y : d.kind === 'ship' ? at.y - 2 : d.kind === 'cafe' ? at.y : GROUND;
       const h = spec.h * up;
       this.m4.makeScale(spec.r, h, spec.r).setPosition(at.x, ground + h / 2, at.z);
       this.beams.setMatrixAt(i, this.m4);

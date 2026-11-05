@@ -186,7 +186,9 @@ export class CityStreet {
   private signalColor = new Float32Array(0);
   private disposables: { dispose(): void }[] = [];
   /** plaza rectangles (centre, size, side), exposed for the lights and the cars */
-  readonly plazas: { x0: number; x1: number; z0: number; z1: number }[] = [];
+  readonly plazas: { x0: number; x1: number; z0: number; z1: number; cafe?: boolean }[] = [];
+  /** the plaza given over to the restaurant terrace (CafeTerrace dresses it; nothing of ours stands in it) */
+  terrace: { x0: number; x1: number; z0: number; z1: number } | null = null;
   /**
    * Where the street trees stand. They are real trees from the homes set (branching trunks and
    * leaf cards, see City `buildTrees`), so this only decides where; `s` is a size factor.
@@ -199,7 +201,7 @@ export class CityStreet {
   readonly bins: { x: number; z: number }[] = [];
   readonly shelters: { x: number; z: number; yaw: number }[] = [];
 
-  constructor(footprints: Footprint[], quality: Quality, opts: { realProps?: boolean } = {}) {
+  constructor(footprints: Footprint[], quality: Quality, opts: { realProps?: boolean; cafe?: { x: number; side: 1 | -1 } } = {}) {
     const rand = mulberry32(8855);
     const own = <T extends { dispose(): void }>(x: T): T => { this.disposables.push(x); return x; };
     const high = quality.tier === 'high';
@@ -263,8 +265,17 @@ export class CityStreet {
       place[kind]!.push({ x, z, yaw, s, ...(color ? { color } : {}) });
     };
 
+    // the terrace: the deep plaza on the asked side nearest the asked x
+    const cafeGap = opts.cafe
+      ? gaps.filter((g) => g.side === opts.cafe!.side && g.depth >= 1.6 && g.x1 - g.x0 >= 6)
+        .sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - opts.cafe!.x) - Math.abs((b.x0 + b.x1) / 2 - opts.cafe!.x))[0] ?? null
+      : null;
     for (const g of gaps) {
       const w = g.x1 - g.x0 - 0.3;
+      // the terrace's plaza is dressed as every other one (so the random streams stay in step for the rest),
+      // and then everything but its kerbside bollards is taken out of it again
+      const mark = g === cafeGap ? Object.fromEntries(Object.entries(place).map(([k, l]) => [k, l.length])) : null;
+      const candleMark = candles.length;
       if (g.depth < 0.5) {
         // an alley mouth: a bin, a hydrant
         add('bin', (g.x0 + g.x1) / 2, g.side * (FACE + 0.15), 0, 1);
@@ -279,7 +290,9 @@ export class CityStreet {
       // the paver pattern keeps a constant size however big the plaza is
       slab.geometry.attributes.uv!.array.forEach((_v, i, a) => { (a as Float32Array)[i] = (a as Float32Array)[i]! * (i % 2 ? depth / 2 : w / 2); });
       this.group.add(slab);
-      this.plazas.push({ x0: g.x0, x1: g.x1, z0: Math.min(g.side * FACE, g.side * (FACE + depth)), z1: Math.max(g.side * FACE, g.side * (FACE + depth)) });
+      const rect = { x0: g.x0, x1: g.x1, z0: Math.min(g.side * FACE, g.side * (FACE + depth)), z1: Math.max(g.side * FACE, g.side * (FACE + depth)) };
+      this.plazas.push(mark ? { ...rect, cafe: true } : rect);
+      if (mark) this.terrace = rect;
 
       // trees in a row down the middle of the plaza, planters under the first and last
       const nTrees = Math.max(1, Math.floor(w / 2.1));
@@ -325,6 +338,10 @@ export class CityStreet {
             if (cafeRand() < 0.72) add(`diner${Math.floor(cafeRand() * 6)}`, seat.x, seat.z, yaw, 1);
           }
         }
+      }
+      if (mark) {
+        for (const [k, list] of Object.entries(place)) if (k !== 'bollard') list.length = mark[k] ?? list.length;
+        candles.length = candleMark;
       }
     }
     // hydrants and bins along the curbs, wherever there is room
