@@ -222,6 +222,11 @@ export class ScrollDirector {
     });
   }
 
+  /** the timeline's length in px (the master trigger's end) */
+  get endPx(): number {
+    return this.trigger.end;
+  }
+
   /** An eased jump to a share of the timeline (0..1 scroll progress): the progress rail's ticks. */
   jumpToProgress(p: number): void {
     const end = this.trigger.end;

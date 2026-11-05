@@ -105,7 +105,8 @@ import { MAX_U_RATE, T_S, detourMap, detourStart, insideAt, progressOf } from '.
 // --- scroll feel ---
 import gsap from 'gsap';
 import { step as springStep, capDetour, type SpringState } from './scroll/spring';
-import { buildPace, paceInputs, type Pace } from './rig/pace';
+import { buildPace, floorAt, paceInputs, type Pace } from './rig/pace';
+import { Perf } from './debug/Perf';
 // --- end scroll feel ---
 
 interface EngineOptions {
@@ -233,6 +234,53 @@ export class Engine {
   progressForT(t: number): number {
     return progressOf(this.pace.paceLin(t), this.detourW);
   }
+  /** the dart's speed for the eye (world speed over the camera's height), smoothed; and 0..1 of it */
+  private vp = 0;
+  private feelSpeed = 0;
+  private feelPrev = new Vector3();
+  private feelHere = new Vector3();
+  private feelPrevP = 0;
+  private feelInit = false;
+  /** when the rendered scroll last moved (performance.now ms): the camera breathes after a while at rest */
+  private movedAt = 0;
+  private perf: Perf | null = new URLSearchParams(location.search).has('perf') ? new Perf() : null;
+
+  /**
+   * Speed-linked camera and post: how fast the flight reads (vp = |d dart| / dt / h), smoothed, and
+   * what follows from it (a wider lens, more air, a longer contrail, a little zoom blur on HIGH), all
+   * faded out by the detour's weight (its ends are the main rig's frame exactly) and off under reduced
+   * motion. Also the ?perf overlay's numbers.
+   */
+  private updateFeel(t: number, dt: number, rawMs: number, now: number): void {
+    this.path.pointAt(t, this.feelHere);
+    const dist = this.feelInit ? this.feelHere.distanceTo(this.feelPrev) : 0;
+    const dp = Math.abs(this.renderP - this.feelPrevP);
+    this.feelPrev.copy(this.feelHere);
+    this.feelPrevP = this.renderP;
+    this.feelInit = true;
+    const h = MathUtils.clamp(this.camera.position.y - floorAt(t), 0.8, 14);
+    const vpRaw = dist / Math.max(dt, 1e-3) / h;
+    this.vp = MathUtils.damp(this.vp, vpRaw, 6, dt);
+    const calm = this.options.reducedMotion || this.idlePreset !== null;
+    const dw = this.rig.detour.weight;
+    this.feelSpeed = calm ? 0 : MathUtils.smoothstep(this.vp, 4, 18) * (1 - dw);
+    this.rig.speed = this.feelSpeed;
+    if (dp > 1e-7 || this.idlePreset) this.movedAt = now;
+    this.rig.rest = calm ? 0 : MathUtils.smoothstep((now - this.movedAt) / 1000, 1.2, 2.7) * (1 - dw);
+    if (this.perf) {
+      const endPx = this.director?.endPx ?? 0;
+      this.perf.frame({
+        dtMs: rawMs, t,
+        worldPer100: dp > 1e-7 && endPx > 0 ? (dist / (dp * endPx)) * 100 : 0,
+        vh: vpRaw,
+        errPx: Math.abs((this.idlePreset ? this.renderP : this.scrollP) - this.renderP) * endPx,
+        kind: this.director?.kind ?? 'native',
+        resolution: this.resolution,
+        tier: this.quality.tier,
+      }, now);
+    }
+  }
+
   /** An eased jump to story-t `t` (the progress rail's ticks). */
   jumpToT(t: number): void {
     this.director?.jumpToProgress(this.progressForT(t));
@@ -1111,7 +1159,10 @@ export class Engine {
     const blurTarget = this.options.reducedMotion
       ? 0
       : MathUtils.smoothstep(err, 0.006, 0.05) * 0.17;
-    this.blurLevel = MathUtils.damp(this.blurLevel, blurTarget, 9, dt);
+    // scroll feel: and at high perceived speed on HIGH, a touch of it whatever the spring is doing
+    const speedBlur = this.quality.tier === 'high' && !this.options.reducedMotion && !this.idlePreset
+      ? 0.12 * MathUtils.smoothstep(this.vp, 8, 25) * (1 - this.rig.detour.weight) : 0;
+    this.blurLevel = MathUtils.damp(this.blurLevel, Math.max(blurTarget, speedBlur), 9, dt);
     this.zoomBlur.strength = this.blurLevel < 0.004 ? 0 : this.blurLevel;
     const t = this.renderT;
 
@@ -1137,6 +1188,7 @@ export class Engine {
     // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
     this.rig.jolt = this.idlePreset ? 0 : Math.max(this.storm.flash, this.lightning.flash);
     this.office.pose(this.detourU, this.rig, this.camera.aspect);
+    this.updateFeel(t, dt, rawMs, now); // scroll feel
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -1356,7 +1408,7 @@ export class Engine {
 
     if (t > CONTRAIL_FROM) {
       this.trail.visible = true;
-      this.trail.update(t, this.path, this.plane.group.position);
+      this.trail.update(t, this.path, this.plane.group.position, MathUtils.lerp(0.8, 1.6, this.feelSpeed)); // scroll feel
     } else {
       this.trail.visible = false;
     }
@@ -1519,6 +1571,7 @@ export class Engine {
     this.disposed = true;
     clearTimeout(this.warmTimer);
     gsap.ticker.remove(this.tick);
+    this.perf?.dispose();
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost);
