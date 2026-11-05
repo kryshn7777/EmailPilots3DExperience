@@ -715,12 +715,14 @@ export class City {
 
   update(t: number, time = 0, focus?: Vector3, eye?: Vector3): void {
     if (!this.group.visible) return;
-    // the city comes on as the flight arrives: the street lamps first, then the windows, then the glass and neon
-    const lamps = MathUtils.smoothstep(t, 0.625, 0.665);
-    const lit = MathUtils.smoothstep(t, 0.64, 0.71);
-    this.streetlights?.setLevel(0.06 + 0.94 * lamps);
-    this.kitCity?.setPower(lit);
-    if (this.windows) (this.windows.material as MeshBasicMaterial).opacity = 0.1 + 0.9 * lit;
+    // the city is lit from the moment it appears (it switches on at 0.622, inside the weather): the lamps
+    // and the windows start well up and only swell to full, because ramping them from dark left the first
+    // stretch of the street - the one the flight comes down onto - black, with nothing to read
+    const lamps = MathUtils.smoothstep(t, 0.622, 0.66);
+    const lit = MathUtils.smoothstep(t, 0.622, 0.7);
+    this.streetlights?.setLevel(0.7 + 0.3 * lamps);
+    this.kitCity?.setPower(0.62 + 0.38 * lit);
+    if (this.windows) (this.windows.material as MeshBasicMaterial).opacity = 0.65 + 0.35 * lit;
     if (focus) this.streetlights?.follow(focus);
     // traffic loops on absolute time only — the scene lives on its own, with
     // or without scroll (scroll-coupled surge removed by request)

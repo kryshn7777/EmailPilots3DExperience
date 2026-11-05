@@ -556,14 +556,14 @@ export class CityStreet {
           p.x += age * age * 0.5 + sin(age * 6.0 + aPhase * 40.0) * 0.05 * age;
           p.z += sin(age * 5.0 + aPhase * 17.0) * 0.07 * age;
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = (14.0 + age * 74.0) * (260.0 / -mv.z);
+          gl_PointSize = min((14.0 + age * 74.0) * (260.0 / -mv.z), 300.0);
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D uMap;
         varying float vAge;
         void main() {
-          float a = texture2D(uMap, gl_PointCoord).r * (1.0 - vAge) * smoothstep(0.0, 0.08, vAge) * 0.2;
+          float a = texture2D(uMap, gl_PointCoord).a * (1.0 - vAge) * smoothstep(0.0, 0.08, vAge) * 0.2;
           gl_FragColor = vec4(vec3(0.78, 0.72, 0.8) * a, a);
         }`,
       transparent: true, depthWrite: false, blending: AdditiveBlending,

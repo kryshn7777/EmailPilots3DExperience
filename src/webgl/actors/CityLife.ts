@@ -765,7 +765,7 @@ export class CityLife {
           p.x += age * age * 0.35 + sin(age * 7.0 + aPhase * 40.0) * 0.04 * age;
           p.z += sin(age * 5.0 + aPhase * 17.0) * 0.05 * age;
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = (8.0 + age * (34.0 + 30.0 * aK)) * (260.0 / -mv.z);
+          gl_PointSize = min((8.0 + age * (34.0 + 30.0 * aK)) * (260.0 / -mv.z), 300.0);
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
@@ -773,7 +773,7 @@ export class CityLife {
         varying float vAge;
         varying float vK;
         void main() {
-          float a = texture2D(uMap, gl_PointCoord).r * (1.0 - vAge) * smoothstep(0.0, 0.1, vAge) * (0.12 + 0.12 * vK);
+          float a = texture2D(uMap, gl_PointCoord).a * (1.0 - vAge) * smoothstep(0.0, 0.1, vAge) * (0.12 + 0.12 * vK);
           gl_FragColor = vec4(vec3(0.86, 0.78, 0.7) * a, a);
         }`,
       transparent: true, depthWrite: false, blending: AdditiveBlending,

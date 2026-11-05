@@ -728,14 +728,22 @@ export function cloudDeckTexture(): CanvasTexture {
 
 /** Soft radial spot — dust motes, rain caps, glows. */
 export function glowTexture(): CanvasTexture {
-  const [canvas, ctx] = makeCanvas(64);
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
+  // Smooth, not three stops: a puff or halo is drawn hundreds of pixels wide, and a 64 px gradient with a
+  // kink at 0.4 showed as concentric rings (each texel's edge, magnified) in the steam and the lamp haze.
+  // The falloff (1 - r)^1.6 reaches zero with zero slope at the rim, and many stops keep the 8-bit steps
+  // fine enough that the filter blends them away.
+  const [canvas, ctx] = makeCanvas(128);
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (let i = 0; i <= 32; i++) {
+    const r = i / 32;
+    g.addColorStop(r, `rgba(255,255,255,${Math.pow(1 - r, 1.6).toFixed(4)})`);
+  }
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new CanvasTexture(canvas);
+  ctx.fillRect(0, 0, 128, 128);
+  const texture = new CanvasTexture(canvas);
+  texture.generateMipmaps = true;
+  texture.anisotropy = 1;
+  return texture;
 }
 
 /** Soft round blob, black in the middle and clear at the edge: a contact shadow decal. */

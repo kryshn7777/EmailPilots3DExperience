@@ -1101,7 +1101,7 @@ export class Engine {
     // are only worth seeing once the day has gone (by day a lit room is a faint warmth)
     windowLight.day.value = MathUtils.smoothstep(sunLevel, 0.4, 1.4);
     // the city's glass comes on with the city (City.update)
-    const cityLit = t > 0.62 && t < 0.8 ? 0.25 + 0.75 * MathUtils.smoothstep(t, 0.64, 0.71) : 1;
+    const cityLit = t > 0.62 && t < 0.8 ? 0.7 + 0.3 * MathUtils.smoothstep(t, 0.622, 0.7) : 1;
     windowLight.lamp.value = (0.3 + 0.7 * this.lampLevel) * cityLit;
   }
 
