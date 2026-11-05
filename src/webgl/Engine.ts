@@ -457,7 +457,7 @@ export class Engine {
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
-    this.birds = new Birds(rand);
+    this.birds = new Birds(rand, this.quality.tier === 'high');
     this.shafts = new LightShafts(rand, this.quality.tier === 'high');
     this.pinned = new PinnedTitles();
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
@@ -1387,7 +1387,9 @@ export class Engine {
       innerHeight * Math.min(devicePixelRatio, 2),
     );
     this.biplane.update(t, time, this.storm.flash);
-    this.birds.update(time, t);
+    // dev hook: `window.__birdTime` freezes the birds' clock (wing beats, the stream) for inspection
+    const birdClock = this.probe ? (window as unknown as { __birdTime?: number }).__birdTime : undefined;
+    this.birds.update(birdClock ?? time, t);
     this.shafts.update(time, t, this.sunDirWorld, this.sun.color, this.sunLevel);
     this.wingPlanes.update(
       this.rig.planeWorldPos,

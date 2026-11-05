@@ -1,0 +1,109 @@
+{
+ "species": {
+  "pigeon": {
+   "shoulder": [
+    0.022,
+    0.02,
+    0.026
+   ],
+   "elbow": [
+    0.085,
+    0.021,
+    0.01
+   ],
+   "wrist": [
+    0.158,
+    0.021,
+    0.032
+   ],
+   "tail": [
+    0,
+    0.006,
+    -0.074
+   ],
+   "flap": {
+    "hz": 6.2,
+    "up": 58,
+    "down": -42,
+    "fold": 0.85,
+    "glide": 22
+   },
+   "tris": 1740,
+   "trisLo": 268,
+   "span": 0.751
+  },
+  "starling": {
+   "shoulder": [
+    0.014,
+    0.012,
+    0.018
+   ],
+   "elbow": [
+    0.048,
+    0.013,
+    0.008
+   ],
+   "wrist": [
+    0.09,
+    0.013,
+    0.022
+   ],
+   "tail": [
+    0,
+    0.005,
+    -0.053
+   ],
+   "flap": {
+    "hz": 10.5,
+    "up": 55,
+    "down": -42,
+    "fold": 0.8,
+    "glide": 4
+   },
+   "tris": 1468,
+   "trisLo": 268,
+   "span": 0.44
+  },
+  "gull": {
+   "shoulder": [
+    0.028,
+    0.026,
+    0.03
+   ],
+   "elbow": [
+    0.148,
+    0.027,
+    0.004
+   ],
+   "wrist": [
+    0.285,
+    0.027,
+    0.042
+   ],
+   "tail": [
+    0,
+    0.008,
+    -0.108
+   ],
+   "flap": {
+    "hz": 3.0,
+    "up": 36,
+    "down": -26,
+    "fold": 0.55,
+    "glide": 4
+   },
+   "tris": 1820,
+   "trisLo": 268,
+   "span": 1.169
+  }
+ },
+ "files": {
+  "glb": "birds.glb",
+  "glbLo": "birds-lo.glb",
+  "color": "birds-color.webp",
+  "orm": "birds-orm.webp",
+  "normal": "birds-normal.webp",
+  "colorLo": "birds-lo-color.webp",
+  "ormLo": "birds-lo-orm.webp"
+ }
+}
