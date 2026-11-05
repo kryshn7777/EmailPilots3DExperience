@@ -55,6 +55,7 @@ import { Beacon } from './actors/Beacon';
 import { Biplane } from './actors/Biplane';
 import { PinnedTitles } from './actors/PinnedTitles';
 import { Birds } from './actors/Birds';
+import { LightShafts } from './actors/LightShafts';
 import { City } from './actors/City';
 import { Clouds } from './actors/Clouds';
 import { Copilot } from './actors/Copilot';
@@ -78,6 +79,9 @@ import { Flock } from './actors/Flock';
 import { WindowFrame } from './actors/WindowFrame';
 import { WingPlanes } from './actors/WingPlanes';
 import { BatchSend } from './actors/BatchSend';
+// --- BatchFleet ---
+import { BatchFleet } from './actors/BatchFleet';
+// --- end BatchFleet ---
 import { liveLaptopScreen } from './actors/LaptopScreen';
 import { HERO_RELEASE, STAGE, launchPulse, planeScale } from './rig/launch';
 import { CameraRig } from './rig/CameraRig';
@@ -99,6 +103,15 @@ import { mulberry32 } from './util';
 // office detour (rig/detour.ts)
 import { Office, OFFICE_GRADE } from './actors/Office';
 import { MAX_U_RATE, T_S, detourMap, detourStart, insideAt, progressOf } from './rig/detour';
+// --- scroll feel ---
+import gsap from 'gsap';
+import { step as springStep, capDetour, type SpringState } from './scroll/spring';
+import { buildPace, floorAt, paceInputs, type Pace } from './rig/pace';
+import { Perf } from './debug/Perf';
+import { CHAPTERS } from '../story/chapters';
+import { Readiness } from './load/Readiness';
+import { Wind } from './audio/Wind';
+// --- end scroll feel ---
 
 interface EngineOptions {
   reducedMotion: boolean;
@@ -129,6 +142,9 @@ const SUN_SHADOW_MAP = 2048;
 const DESK_UNTIL = 0.2;
 
 export class Engine {
+  // --- scroll feel --- first, so it sees every load the actors below start (load/Readiness.ts)
+  private readiness = new Readiness();
+  // --- end scroll feel ---
   private renderer: WebGLRenderer;
   private scene = new Scene();
   private camera: PerspectiveCamera;
@@ -159,6 +175,7 @@ export class Engine {
   private storm: Storm;
   private biplane: Biplane;
   private birds: Birds;
+  private shafts: LightShafts;
   private pinned: PinnedTitles;
   private bloomFx: BloomEffect | null = null;
   /** how much the grade asks of the sun shafts (1 is the default strength) */
@@ -166,6 +183,9 @@ export class Engine {
   private beacon: Beacon;
   private wingPlanes = new WingPlanes();
   private batch: BatchSend;
+  // --- BatchFleet ---
+  private fleet: BatchFleet;
+  // --- end BatchFleet ---
   private traffic!: Traffic;
   private zoomBlur = new ZoomBlurEffect();
   /** forked bolts that descend through the storm and the lighthouse's sky (none under reduced motion) */
@@ -184,6 +204,106 @@ export class Engine {
   private sunLevel = 0;
   private blurLevel = 0;
   private scrubVel = 0;
+  // --- scroll feel ---
+  private spring: SpringState = { x: 0, v: 0 };
+  /** gsap.ticker callback: registered after Lenis' (ScrollDirector), so a frame is Lenis -> ScrollTrigger -> onProgress -> render */
+  private tick = (): void => {
+    if (this.disposed) return;
+    if (!this.active) return;
+    // reduced motion: draw only while the spring is still moving (or something asked for a frame)
+    if (this.options.reducedMotion && !this.needsFrame()) {
+      this.lastTime = performance.now();
+      return;
+    }
+    this.dirty = false;
+    this.renderFrame();
+  };
+  private dirty = true;
+  private needsFrame(): boolean {
+    if (this.dirty || this.scrubVel !== 0) return true;
+    const target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
+    return Math.abs(target - this.renderP) > 1e-7;
+  }
+  /** a hidden tab: the first frame back must not read the pause as one long frame */
+  private onVisibility = (): void => {
+    if (document.visibilityState === 'visible') this.lastTime = performance.now();
+  };
+  /**
+   * The pace warp (rig/pace.ts): scroll -> linear t (detourMap) -> story-t. Built once at init from the
+   * flight line and the camera (a few ms).
+   */
+  private pace!: Pace;
+  /** scroll progress (0..1) to story-t and the detour clock, through the pace warp */
+  private mapScroll(p: number): { t: number; u: number; active: boolean } {
+    const m = detourMap(p, this.detourW);
+    return { t: this.pace.paceT(m.t), u: m.active ? this.pace.paceU(m.u) : m.u, active: m.active };
+  }
+  /** the scroll progress that shows story-t `t` (outside the detour) */
+  progressForT(t: number): number {
+    return progressOf(this.pace.paceLin(t), this.detourW);
+  }
+  /** the dart's speed for the eye (world speed over the camera's height), smoothed; and 0..1 of it */
+  private vp = 0;
+  private feelSpeed = 0;
+  private feelPrev = new Vector3();
+  private feelHere = new Vector3();
+  private feelPrevP = 0;
+  private feelInit = false;
+  /** when the rendered scroll last moved (performance.now ms): the camera breathes after a while at rest */
+  private movedAt = 0;
+  private perf: Perf | null = new URLSearchParams(location.search).has('perf') ? new Perf() : null;
+
+  /**
+   * Speed-linked camera and post: how fast the flight reads (vp = |d dart| / dt / h), smoothed, and
+   * what follows from it (a wider lens, more air, a longer contrail, a little zoom blur on HIGH), all
+   * faded out by the detour's weight (its ends are the main rig's frame exactly) and off under reduced
+   * motion. Also the ?perf overlay's numbers.
+   */
+  private updateFeel(t: number, dt: number, rawMs: number, now: number): void {
+    this.path.pointAt(t, this.feelHere);
+    const dist = this.feelInit ? this.feelHere.distanceTo(this.feelPrev) : 0;
+    const dp = Math.abs(this.renderP - this.feelPrevP);
+    this.feelPrev.copy(this.feelHere);
+    this.feelPrevP = this.renderP;
+    this.feelInit = true;
+    const h = MathUtils.clamp(this.camera.position.y - floorAt(t), 0.8, 14);
+    const vpRaw = dist / Math.max(dt, 1e-3) / h;
+    this.vp = MathUtils.damp(this.vp, vpRaw, 6, dt);
+    const calm = this.options.reducedMotion || this.idlePreset !== null;
+    const dw = this.rig.detour.weight;
+    this.feelSpeed = calm ? 0 : MathUtils.smoothstep(this.vp, 4, 18) * (1 - dw);
+    this.rig.speed = this.feelSpeed;
+    this.wind?.update(t, this.feelSpeed, calm ? 0 : this.vp, dt);
+    if (dp > 1e-7 || this.idlePreset) this.movedAt = now;
+    this.rig.rest = calm ? 0 : MathUtils.smoothstep((now - this.movedAt) / 1000, 1.2, 2.7) * (1 - dw);
+    if (this.perf) {
+      const endPx = this.director?.endPx ?? 0;
+      this.perf.frame({
+        dtMs: rawMs, t,
+        worldPer100: dp > 1e-7 && endPx > 0 ? (dist / (dp * endPx)) * 100 : 0,
+        vh: vpRaw,
+        errPx: Math.abs((this.idlePreset ? this.renderP : this.scrollP) - this.renderP) * endPx,
+        kind: this.director?.kind ?? 'native',
+        resolution: this.resolution,
+        tier: this.quality.tier,
+      }, now);
+    }
+  }
+
+  /** the wind sound (audio/Wind.ts), made on the first switch-on; never under reduced motion */
+  private wind: Wind | null = null;
+  setSound(on: boolean): void {
+    if (this.options.reducedMotion) return;
+    if (!this.wind && !on) return;
+    this.wind ??= new Wind();
+    this.wind.setEnabled(on);
+  }
+
+  /** An eased jump to story-t `t` (the progress rail's ticks). */
+  jumpToT(t: number): void {
+    this.director?.jumpToProgress(this.progressForT(t));
+  }
+  // --- end scroll feel ---
   private city: City;
   private copilot: Copilot;
   private landing: Landing;
@@ -226,7 +346,6 @@ export class Engine {
   private maneuverPulse = 0;
   /** 1 at night, 0 in daylight: how brightly the town's lamps burn */
   private lampLevel = 1;
-  private rafId = 0;
   private startTime = performance.now();
   private lastTime = this.startTime;
   private disposed = false;
@@ -338,7 +457,8 @@ export class Engine {
     this.storm = new Storm(this.path, this.quality.rainCount, rand);
     this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
-    this.birds = new Birds(rand);
+    this.birds = new Birds(rand, this.quality.tier === 'high');
+    this.shafts = new LightShafts(rand, this.quality.tier === 'high');
     this.pinned = new PinnedTitles();
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
@@ -356,6 +476,10 @@ export class Engine {
     this.batch = new BatchSend(this.path, { low: this.quality.tier === 'low', calm: this.options.reducedMotion });
     this.flock = new Flock(rand);
     this.office = new Office(this.path, this.city, this.quality);
+    // --- BatchFleet ---
+    this.fleet = new BatchFleet(this.path, this.quality, this.beacon, this.city);
+    this.scene.add(this.fleet.group);
+    // --- end BatchFleet ---
 
     this.scene.add(
       this.plane.group,
@@ -379,6 +503,7 @@ export class Engine {
       this.lightning.group,
       this.biplane.group,
       this.birds.group,
+      this.shafts.group,
       this.pinned.group,
       this.beacon.group,
       this.wingPlanes.group,
@@ -396,6 +521,9 @@ export class Engine {
     if (this.clouds.volume) this.scene.add(this.clouds.volume);
 
     this.rig = new CameraRig(this.path, this.camera, this.plane, { reducedMotion: this.options.reducedMotion });
+    // --- scroll feel ---
+    this.pace = buildPace(paceInputs(this.path, this.rig));
+    // --- end scroll feel ---
 
     this.composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -501,11 +629,11 @@ export class Engine {
     const clean = path.replace(/\/+$/, '') || '/';
     this.idlePreset = ROUTE_PRESETS[clean] ?? null;
     this.measureDetour();
-    const t = this.idlePreset ? this.idlePreset.t : detourMap(this.scrollP, this.detourW).t;
+    const t = this.idlePreset ? this.idlePreset.t : this.mapScroll(this.scrollP).t;
     // jumping t across chapters must not fire seam beats or drag the trail
     this.prevT = t;
     this.trail.reset();
-    if (this.options.reducedMotion) this.renderFrame();
+    this.dirty = true;
   }
 
   /** Page-transition flourish: the plane banks hard while the DOM swaps. */
@@ -535,6 +663,8 @@ export class Engine {
     }
     const end = stage.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
     this.detourW = end > 1 ? MathUtils.clamp(spacer.offsetHeight / end, 0, 0.5) : 0;
+    // scroll feel: where each chapter starts on the scroll, for the rail's ticks (they move with the pace)
+    if (this.pace) window.dispatchEvent(new CustomEvent('flight:rail', { detail: CHAPTERS.map((c) => this.progressForT(c.t0)) }));
   }
 
   start(): void {
@@ -542,7 +672,6 @@ export class Engine {
       reducedMotion: this.options.reducedMotion,
       onProgress: (p) => {
         this.scrollP = p;
-        if (this.options.reducedMotion) this.renderFrame();
       },
     });
 
@@ -552,11 +681,10 @@ export class Engine {
     this.renderFrame();
     this.warming = false;
 
-    if (this.options.reducedMotion) {
-      this.renderFrame();
-    } else {
-      this.loop();
-    }
+    // --- scroll feel --- one clock: gsap.ticker, after Lenis' own tick (added by ScrollDirector above)
+    gsap.ticker.add(this.tick);
+    document.addEventListener('visibilitychange', this.onVisibility);
+    // --- end scroll feel ---
 
     this.scheduleWarm();
   }
@@ -1027,43 +1155,26 @@ export class Engine {
     const time = (now - this.startTime) / 1000;
     // office detour: the spring runs on scroll PROGRESS; story-t and the detour clock come from it
     const W = this.detourW;
-    const target = this.idlePreset ? progressOf(this.idlePreset.t, W) : this.scrollP;
-    // mass-spring scrub: the world has WEIGHT — it leans into motion,
-    // carries momentum, and settles with a breath of overshoot (ζ≈0.85).
-    // A plain exponential chase tracked fine but felt weightless.
+    let target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
+    // --- scroll feel --- held short of a chapter that has not loaded yet (never behind the frame, never
+    // for more than 12 s; load/Readiness.ts)
+    if (!this.idlePreset && !this.warming) target = this.readiness.capTarget(target, this.renderP, now, (t) => this.progressForT(t));
+    // the scrub spring (scroll/spring.ts): fixed 1/120 s substeps, critically
+    // damped (more so while fast), no overshoot, and a snap only under ~0.16 px. Under reduced motion a
+    // stiff one (w 20) instead of a jump, so a scrollbar drag or a key still reads as one movement.
     const err = Math.abs(target - this.renderP);
-    if (this.options.reducedMotion) {
-      this.renderP = target;
-      this.scrubVel = 0;
-    } else {
-      // Softer and less damped than before: K 170/C 25 sat at ζ≈0.96, which
-      // is a spring that stops dead on arrival. ζ≈0.80 lets the world lean
-      // past the target and settle back, so the flight carries its own
-      // momentum a few frames beyond the scroll instead of being pinned to it.
-      const K = 120; // stiffness: response ≈ quarter of a second
-      const C = 17.5; // damping: ζ≈0.80 — weight, with a breath of overshoot
-      this.scrubVel += (target - this.renderP) * K * dt;
-      this.scrubVel *= Math.exp(-C * dt);
-      let next = MathUtils.clamp(this.renderP + this.scrubVel * dt, 0, 1);
-      // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
-      // always play under their flare (keyed on u) instead of being stepped over between two frames
-      if (W > 0 && !this.idlePreset) {
-        const ps = detourStart(W);
-        const lo = Math.min(this.renderP, next);
-        const hi = Math.max(this.renderP, next);
-        const cap = MAX_U_RATE * W * dt;
-        if (hi > ps && lo < ps + W && hi - lo > cap) {
-          next = this.renderP + Math.sign(next - this.renderP) * cap;
-          this.scrubVel = (next - this.renderP) / Math.max(dt, 1e-4);
-        }
-      }
-      this.renderP = next;
-    }
-    if (err < 0.0004 && Math.abs(this.scrubVel) < 0.004) {
-      this.renderP = target;
-      this.scrubVel = 0;
-    }
-    const mapped = detourMap(this.renderP, W);
+    this.spring.x = this.renderP;
+    this.spring.v = this.scrubVel;
+    const omega = this.options.reducedMotion ? 20 : (this.director?.omega ?? 11);
+    springStep(this.spring, target, dt, { omega });
+    this.spring.x = MathUtils.clamp(this.spring.x, 0, 1);
+    // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
+    // always play under their flare (keyed on u) instead of being stepped over between two frames
+    if (W > 0 && !this.idlePreset) capDetour(this.spring, this.renderP, detourStart(W), W, MAX_U_RATE, dt);
+    this.renderP = this.spring.x;
+    this.scrubVel = this.spring.v;
+    // --- end scroll feel ---
+    const mapped = this.mapScroll(this.renderP); // scroll feel: through the pace warp
     this.renderT = this.idlePreset ? this.idlePreset.t : mapped.t;
     this.detourU = this.idlePreset ? 0 : mapped.u;
     this.inside = mapped.active && !this.idlePreset && insideAt(this.detourU) && !!this.office.scene?.exit;
@@ -1073,7 +1184,10 @@ export class Engine {
     const blurTarget = this.options.reducedMotion
       ? 0
       : MathUtils.smoothstep(err, 0.006, 0.05) * 0.17;
-    this.blurLevel = MathUtils.damp(this.blurLevel, blurTarget, 9, dt);
+    // scroll feel: and at high perceived speed on HIGH, a touch of it whatever the spring is doing
+    const speedBlur = this.quality.tier === 'high' && !this.options.reducedMotion && !this.idlePreset
+      ? 0.12 * MathUtils.smoothstep(this.vp, 8, 25) * (1 - this.rig.detour.weight) : 0;
+    this.blurLevel = MathUtils.damp(this.blurLevel, Math.max(blurTarget, speedBlur), 9, dt);
     this.zoomBlur.strength = this.blurLevel < 0.004 ? 0 : this.blurLevel;
     const t = this.renderT;
 
@@ -1099,6 +1213,7 @@ export class Engine {
     // the storm's lightning reaches the lens as a short jolt (last frame's flash: the storm updates later)
     this.rig.jolt = this.idlePreset ? 0 : Math.max(this.storm.flash, this.lightning.flash);
     this.office.pose(this.detourU, this.rig, this.camera.aspect);
+    this.updateFeel(t, dt, rawMs, now); // scroll feel
     this.rig.update(t, time, dt);
     // the plane "comes out of the screen": hidden until the launch thread
     // has drawn a little way out of the laptop (sub-pages always show it)
@@ -1232,6 +1347,9 @@ export class Engine {
     if (this.inside) this.applyOfficeGrade();
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position, this.camera);
     this.batch.update(this.idlePreset ? 1 : t, time, this.rooftops.sites, this.camera.aspect);
+    // --- BatchFleet ---
+    this.fleet.update(this.idlePreset ? 1 : t, this.rooftops.sites, this.camera.aspect);
+    // --- end BatchFleet ---
     this.mountains.update(t, this.camera.position, this.fog.color, 0);
 
     if (nearDesk) {
@@ -1269,7 +1387,10 @@ export class Engine {
       innerHeight * Math.min(devicePixelRatio, 2),
     );
     this.biplane.update(t, time, this.storm.flash);
-    this.birds.update(time, t);
+    // dev hook: `window.__birdTime` freezes the birds' clock (wing beats, the stream) for inspection
+    const birdClock = this.probe ? (window as unknown as { __birdTime?: number }).__birdTime : undefined;
+    this.birds.update(birdClock ?? time, t);
+    this.shafts.update(time, t, this.sunDirWorld, this.sun.color, this.sunLevel);
     this.wingPlanes.update(
       this.rig.planeWorldPos,
       this.rig.currentSide,
@@ -1294,7 +1415,9 @@ export class Engine {
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.office.update(this.detourU, this.inside, this.camera, !this.idlePreset && !this.warming);
-    this.batchHud.update(this.batch.state(t), this.camera, !this.idlePreset && !this.warming);
+    // --- BatchFleet: the card counts the whole batch (was this.batch.state(t)) ---
+    this.batchHud.update(this.fleet.state(t, this.batch.state(t), this.camera.aspect), this.camera, !this.idlePreset && !this.warming);
+    // --- end BatchFleet ---
     this.city.update(t, time, this.rig.planeWorldPos, this.camera.position);
     const onLine = this.rig.detour.weight > 0; // office detour: the copilot holds the main line
     this.copilot.update(
@@ -1313,7 +1436,7 @@ export class Engine {
 
     if (t > CONTRAIL_FROM) {
       this.trail.visible = true;
-      this.trail.update(t, this.path, this.plane.group.position);
+      this.trail.update(t, this.path, this.plane.group.position, MathUtils.lerp(0.8, 1.6, this.feelSpeed)); // scroll feel
     } else {
       this.trail.visible = false;
     }
@@ -1354,7 +1477,7 @@ export class Engine {
     }
     window.dispatchEvent(new CustomEvent('flight:t', { detail: t }));
     // office detour: the scroll's own progress (the HUD's bar), and the detour clock
-    window.dispatchEvent(new CustomEvent('flight:progress', { detail: { p: this.renderP, u: this.detourU } }));
+    window.dispatchEvent(new CustomEvent('flight:progress', { detail: { p: this.renderP, u: this.detourU, s: this.feelSpeed } }));
   }
 
   private firstFrameDone = false;
@@ -1366,6 +1489,7 @@ export class Engine {
       this.wingPlanes.group, this.batch.group, this.burst.points, this.confetti.points,
       // the street's clutter is small and many draws: the reflections do without it
       ...(this.city.life ? [this.city.life.group] : []),
+      this.fleet.group, // BatchFleet
     ];
   }
 
@@ -1399,12 +1523,6 @@ export class Engine {
     this.rayColor.copy(this.sun.color).lerp(this.white, 0.45);
     this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.rayColor, 1.5 * this.rayBoost, this.idlePreset ? 0 : flare * 0.8);
   }
-
-  private loop = (): void => {
-    if (this.disposed) return;
-    if (this.active) this.renderFrame();
-    this.rafId = requestAnimationFrame(this.loop);
-  };
 
   private active = true;
 
@@ -1458,17 +1576,31 @@ export class Engine {
   }
   private probe = new URLSearchParams(location.search).has('probe');
 
+  // --- scroll feel ---
+  private sizedW = 0;
+  private sizedH = 0;
+  private sizedDpr = 0;
+  private touch = matchMedia('(pointer: coarse)').matches;
+  // --- end scroll feel ---
   private resize = (): void => {
     const dpr =
       Math.min(window.devicePixelRatio, this.quality.maxDpr) * this.quality.renderScale * this.resolution;
     const { clientWidth, clientHeight } = this.canvas;
+    // --- scroll feel --- a phone's URL bar showing or hiding is a height-only change of under 120 px:
+    // the canvas (100lvh) does not need a new size for it, and reallocating the targets mid-scroll hitches
+    if (this.touch && dpr === this.sizedDpr && clientWidth === this.sizedW && this.sizedH > 0 &&
+      Math.abs(clientHeight - this.sizedH) < 120) return;
+    this.sizedW = clientWidth;
+    this.sizedH = clientHeight;
+    this.sizedDpr = dpr;
+    // --- end scroll feel ---
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(clientWidth, clientHeight, false);
     this.composer.setSize(clientWidth, clientHeight);
     if (this.cinema) this.cinema.pixelRatio = dpr;
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    if (this.options.reducedMotion) this.composer.render();
+    this.dirty = true;
   };
 
   private onContextLost = (event: Event): void => {
@@ -1480,7 +1612,10 @@ export class Engine {
   dispose(): void {
     this.disposed = true;
     clearTimeout(this.warmTimer);
-    cancelAnimationFrame(this.rafId);
+    gsap.ticker.remove(this.tick);
+    this.perf?.dispose();
+    this.wind?.dispose();
+    document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost);
     this.director?.dispose();
@@ -1509,10 +1644,12 @@ export class Engine {
     this.storm.dispose();
     this.biplane.dispose();
     this.birds.dispose();
+    this.shafts.dispose();
     this.pinned.dispose();
     this.beacon.dispose();
     this.wingPlanes.dispose();
     this.batch.dispose();
+    this.fleet.dispose(); // BatchFleet
     this.traffic.dispose();
     this.city.dispose();
     this.copilot.dispose();

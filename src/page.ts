@@ -89,11 +89,21 @@ function bindChromeOnce(): void {
   // the bar follows the scroll's own progress, which keeps moving through the office detour while
   // story-t holds still (rig/detour.ts); the chapter readout says where the flight is
   let detourU = 0;
+  let revealDur = -1;
   window.addEventListener('flight:progress', (e) => {
-    const { p, u } = (e as CustomEvent<{ p: number; u: number }>).detail;
+    const { p, u, s } = (e as CustomEvent<{ p: number; u: number; s?: number }>).detail;
     if (bar) bar.style.transform = `scaleX(${p.toFixed(4)})`;
     detourU = u;
+    // scroll feel: with the copy on, its reveals are quicker while the scroll is quick (600 -> 250 ms)
+    if (!document.body.classList.contains('is-clean') && s !== undefined) {
+      const ms = Math.round((600 - 350 * s) / 25) * 25;
+      if (ms !== revealDur) {
+        revealDur = ms;
+        document.documentElement.style.setProperty('--reveal-dur', `${ms}ms`);
+      }
+    }
   });
+  bindFlightChrome();
   window.addEventListener('flight:t', (e) => {
     const t = (e as CustomEvent<number>).detail;
 
@@ -145,6 +155,125 @@ function bindChromeOnce(): void {
       );
     }
   }
+}
+
+/**
+ * Scroll feel: the controls over the flight (in the canvas-only mode too).
+ *  - the rail's ticks: one per chapter, placed where the chapter starts on the scroll (the engine sends
+ *    their positions, `flight:rail`, as the pace warp moves them), a click or Enter jumps there;
+ *  - the first-load "scroll" cue, gone after 40 px;
+ *  - the sound toggle (webgl/audio/Wind.ts): off by default, remembered, never under reduced motion;
+ *  - the loading cue, while the story waits on a chapter that has not loaded (`flight:loading`);
+ *  - all of it fades out 2.5 s after the last input and comes back on a pointer move, a scroll or a key.
+ */
+function bindFlightChrome(): void {
+  const rail = document.querySelector<HTMLElement>('#scroll-progress .rail');
+  const ticks: HTMLButtonElement[] = [];
+  if (rail) {
+    CHAPTER_NAMES.forEach((name, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rail__tick';
+      b.setAttribute('aria-label', `Chapter ${i + 1}: ${name.toLowerCase()}`);
+      const label = document.createElement('span');
+      label.textContent = `${String(i + 1).padStart(2, '0')} ${name}`;
+      label.setAttribute('aria-hidden', 'true');
+      b.appendChild(label);
+      b.style.setProperty('--at', `${(CHAPTER_T[i]! * 100).toFixed(2)}%`);
+      b.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('flight:jump', { detail: CHAPTER_T[i]! }));
+        b.blur();
+      });
+      rail.appendChild(b);
+      ticks.push(b);
+    });
+  }
+  window.addEventListener('flight:rail', (e) => {
+    const at = (e as CustomEvent<number[]>).detail;
+    at.forEach((p, i) => ticks[i]?.style.setProperty('--at', `${(p * 100).toFixed(2)}%`));
+  });
+  let current = -1;
+  window.addEventListener('flight:t', (e) => {
+    const t = (e as CustomEvent<number>).detail;
+    let i = 0;
+    while (i < 9 && t >= CHAPTER_T[i + 1]!) i++;
+    if (i === current) return;
+    ticks[current]?.removeAttribute('aria-current');
+    ticks[i]?.setAttribute('aria-current', 'step');
+    current = i;
+  });
+
+  // the cue: only until the visitor has scrolled a little
+  const cue = document.getElementById('scroll-cue');
+  const onCueScroll = (): void => {
+    if (window.scrollY > 40) {
+      cue?.classList.add('is-gone');
+      window.removeEventListener('scroll', onCueScroll);
+    }
+  };
+  window.addEventListener('scroll', onCueScroll, { passive: true });
+  onCueScroll();
+
+  // the loading cue
+  const loadCue = document.getElementById('load-cue');
+  window.addEventListener('flight:loading', (e) => {
+    const on = (e as CustomEvent<boolean>).detail;
+    if (!loadCue) return;
+    loadCue.dataset.on = String(on);
+    loadCue.textContent = on ? 'Loading the next leg…' : '';
+  });
+
+  // the sound toggle
+  const sound = document.getElementById('sound-toggle');
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (sound && !calm) {
+    const label = sound.querySelector<HTMLElement>('[data-label]');
+    const set = (on: boolean, save: boolean): void => {
+      sound.setAttribute('aria-pressed', String(on));
+      if (label) label.textContent = on ? 'Sound on' : 'Sound off';
+      if (save) {
+        try {
+          localStorage.setItem('flight-sound', on ? '1' : '0');
+        } catch {
+          /* storage blocked: the choice lasts this visit */
+        }
+      }
+      window.dispatchEvent(new CustomEvent('flight:sound', { detail: on }));
+    };
+    let saved = false;
+    try {
+      saved = localStorage.getItem('flight-sound') === '1';
+    } catch {
+      saved = false;
+    }
+    // a remembered "on" still needs a gesture before audio may start: the first pointer or key press
+    sound.setAttribute('aria-pressed', 'false');
+    if (saved) {
+      const resume = (ev: Event): void => {
+        // a press on the toggle itself is the toggle's own business (its click follows)
+        if ((ev.target as Element | null)?.closest?.('#sound-toggle')) return;
+        set(true, false);
+        window.removeEventListener('pointerdown', resume);
+        window.removeEventListener('keydown', resume);
+      };
+      window.addEventListener('pointerdown', resume);
+      window.addEventListener('keydown', resume);
+    }
+    sound.addEventListener('click', () => set(sound.getAttribute('aria-pressed') !== 'true', true));
+  }
+
+  // idle fade: 2.5 s after the last input
+  let idleTimer = 0;
+  const wake = (): void => {
+    if (document.body.classList.contains('chrome-idle')) document.body.classList.remove('chrome-idle');
+    clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => document.body.classList.add('chrome-idle'), 2500);
+  };
+  for (const type of ['pointermove', 'pointerdown', 'keydown', 'scroll', 'wheel', 'touchstart']) {
+    window.addEventListener(type, wake, { passive: true });
+  }
+  window.addEventListener('flight:activity', wake);
+  wake();
 }
 
 function bindReveals(): void {

@@ -6,6 +6,9 @@ export interface BatchHudState {
   sent: number;
   delivered: number;
   chips: { anchor: Vector3; shown: boolean; mode: 'flying' | 'landed'; label: string }[];
+  /** set by the batch fleet (BatchFleet.state): the card's phase and footer line, overriding the scouts' defaults */
+  phase?: 'sending' | 'done';
+  foot?: string;
 }
 
 const TOTAL = 42;
@@ -14,7 +17,9 @@ const TOTAL = 42;
  * The batch readout. A cyber card at the top of the screen reads "Email Pilots — Batch sending
  * 3/42" while the planes leave the laptop (the count ticks up as each one goes), then turns into
  * "Email delivered successfully" once the first two have landed. Each landing also gets a small
- * "delivered" tag pinned over its house. All of the look is in global.css (`.batch`); this only
+ * "delivered" tag pinned over its house. Later in the flight the batch fleet (BatchFleet.state) drives
+ * the same card: the count, a footer toast per delivery ("Delivered · harbour freighter · 6/42") and
+ * a chip on each fleet landing. All of the look is in global.css (`.batch`); this only
  * owns the markup, the text and the pinning.
  */
 export class BatchHud {
@@ -27,7 +32,7 @@ export class BatchHud {
   private shownCount = -1;
   private shownFoot = '';
 
-  constructor(chipCount = 2) {
+  constructor(chipCount = 10) {
     this.el = document.createElement('div');
     this.el.className = 'batch';
     this.el.dataset.visible = 'false';
@@ -63,14 +68,14 @@ export class BatchHud {
     if (this.el.dataset.visible !== next) this.el.dataset.visible = next;
     if (show) {
       const done = state.delivered >= 2;
-      const phase = done ? 'done' : 'sending';
+      const phase = state.phase ?? (done ? 'done' : 'sending');
       if (this.el.dataset.phase !== phase) this.el.dataset.phase = phase;
       if (state.sent !== this.shownCount) {
         this.shownCount = state.sent;
         this.count.textContent = `${state.sent}/${TOTAL}`;
-        this.meter.style.setProperty('--p', String(state.sent / TOTAL));
+        this.meter.style.setProperty('--p', String(Math.min(state.sent / TOTAL, 1)));
       }
-      const foot = done
+      const foot = state.foot ?? (done
         ? 'Planes 1 + 2 landed · tracking plane 3'
         : state.delivered === 1
           ? 'First plane landed · tracking plane 3'
@@ -78,7 +83,7 @@ export class BatchHud {
             ? 'Planes 1 + 2 away · tracking plane 3'
             : state.sent === 0
               ? 'Queued'
-              : `Plane ${state.sent} away`;
+              : `Plane ${state.sent} away`);
       if (foot !== this.shownFoot) {
         this.shownFoot = foot;
         this.foot.textContent = foot;

@@ -163,12 +163,12 @@ const MIX: Record<'day' | 'night', Record<string, number>> = {
 };
 
 /** walking speed in metres a second (scaled to site units by 0.33 and the crowd's scale) */
-const WALK = [1.15, 1.5];
+const WALK = [1.0, 1.35];
 const JOG = [2.4, 2.95];
 const METRE = 0.33;
 /** stance share of the cycle and how far the ankle reaches ahead of the hip, per leg length (see legPose) */
 const WALK_STANCE = 0.62;
-const WALK_REACH = 0.46;
+const WALK_REACH = 0.33; // the ankle reaches this fraction of the leg ahead of and behind the hip (0.46 splayed the longer-legged people into a wide V)
 const JOG_STANCE = 0.36;
 const JOG_REACH = 0.44;
 /** units over which a walker grows in and shrinks away at a wrapping walk's ends */
@@ -266,9 +266,9 @@ void pose(inout vec3 p, inout vec3 n) {
   // +1 while the left leg is forward
   float sw = cos(2.0 * PI * (ph - 0.04));
   // arms swing against the legs; the elbow bends on the forward swing
-  float armA = mix(0.34, 0.62, j) * a;
+  float armA = mix(0.44, 0.62, j) * a;
   float shL = -armA * sw, shR = armA * sw;
-  float elB = mix(0.18, 1.45, j);
+  float elB = mix(0.26, 1.45, j);
   float elL = elB + a * mix(0.3, 0.2, j) * max(0.0, -sw);
   float elR = elB + a * mix(0.3, 0.2, j) * max(0.0, sw);
   shL += still * 0.035 * sin(t * 0.8 + seed * 31.0);
@@ -284,7 +284,7 @@ void pose(inout vec3 p, inout vec3 n) {
   if (mode == 1) { shR = 0.42; elR = 0.6; abR = -0.1; }                         // holding a leash
   if (mode == 2) { shR = 0.32; elR = 1.9; abR = 0.12; hPitch = -0.42; }          // reading a phone
   // chest against pelvis, forward lean, a standing weight shift
-  float tYaw = 0.09 * a * sw * (1.0 + j);
+  float tYaw = 0.11 * a * sw * (1.0 + j);
   float pYaw = -0.07 * a * sw;
   float lean = -(0.03 * a + 0.14 * j * a);
   float roll = still * 0.02 * sin(t * 0.43 + seed * 13.0);
@@ -1414,6 +1414,25 @@ export class Pedestrians {
     out.y += sy!;
     out.z += sz!;
   }
+
+  // --- BatchFleet: people standing with a phone, for the batch's phone deliveries ---
+  /**
+   * The people standing still and reading a phone (`mood: 'phone'`), in this crowd's frame: where the
+   * phone is (about chest high, a hand's length in front of them: 0.62 units up for a city figure)
+   * and which way they face. `any` widens it to everyone standing. Empty until the figures load.
+   */
+  phoneHolders(any = false): { x: number; y: number; z: number; yaw: number }[] {
+    if (!this.ready) return [];
+    const out: { x: number; y: number; z: number; yaw: number }[] = [];
+    for (const b of this.bodies) {
+      const v = this.variants[b.variant];
+      if (b.moving || !v || v.kind !== 'person' || (!any && b.pose[2] !== 2)) continue;
+      const reach = 0.1 * v.height * b.scale;
+      out.push({ x: b.x + Math.cos(b.yaw) * reach, y: 0.78 * v.height * b.scale, z: b.z - Math.sin(b.yaw) * reach, yaw: b.yaw });
+    }
+    return out;
+  }
+  // --- end BatchFleet ---
 
   dispose(): void {
     for (const d of this.disposables) d.dispose();

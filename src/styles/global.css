@@ -8,6 +8,8 @@
 
 html {
   scroll-behavior: auto; /* Lenis owns smoothing */
+  /* scroll feel: no rubber-band or pull-to-refresh dragging the page (and the flight) past its ends */
+  overscroll-behavior: none;
 }
 
 body {
@@ -24,7 +26,10 @@ body {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: 100dvh;
+  /* scroll feel: the LARGE viewport, which does not change as the mobile URL bar shows and hides (100dvh
+     resized the canvas, and re-rendered at a new aspect, on every scroll direction change). The bottom
+     of the frame can sit under the bar; the HUD and the rail keep to the safe area. */
+  height: 100lvh;
   z-index: 0;
   pointer-events: none;
 }
@@ -130,7 +135,8 @@ main#swup {
 [data-reveal] {
   opacity: 0;
   translate: 0 28px;
-  transition: opacity 700ms ease, translate 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* --reveal-dur: shorter while the scroll is quick (page.ts, ?copy=1 only) */
+  transition: opacity var(--reveal-dur, 700ms) ease, translate var(--reveal-dur, 700ms) cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 [data-reveal].is-in {
@@ -185,7 +191,7 @@ main#swup {
 [data-reveal] .manual-item {
   opacity: 0;
   translate: 0 16px;
-  transition: opacity 600ms ease, translate 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: opacity var(--reveal-dur, 600ms) ease, translate var(--reveal-dur, 600ms) cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 [data-reveal] .chapter__body {
@@ -521,7 +527,7 @@ main#swup {
 #hud {
   position: fixed;
   left: clamp(1rem, 4vw, 3rem);
-  bottom: 1.1rem;
+  bottom: max(1.1rem, calc(0.6rem + env(safe-area-inset-bottom)));
   z-index: 9;
   display: flex;
   gap: 1.5rem;
@@ -537,11 +543,12 @@ main#swup {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: env(safe-area-inset-bottom);
   height: 2px;
   z-index: 9;
   background: color-mix(in srgb, var(--ink) 10%, transparent);
   pointer-events: none;
+  transition: opacity 600ms ease;
 }
 
 #scroll-progress i {
@@ -558,6 +565,213 @@ body[data-route]:not([data-route='/']) #hud,
 body[data-route]:not([data-route='/']) #scroll-progress {
   opacity: 0;
 }
+
+/* --- scroll feel: the rail's chapter ticks, the scroll cue, the sound toggle (page.ts) ---
+   Shown in the default canvas-only mode too, kept minimal, and faded out 2.5 s after the last input
+   (body.chrome-idle) unless one of them has keyboard focus. */
+body[data-route]:not([data-route='/']) #scroll-progress,
+body[data-route]:not([data-route='/']) .scroll-cue,
+body.is-landing #scroll-progress,
+body.is-landing .scroll-cue {
+  visibility: hidden;
+}
+
+.rail {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 0;
+}
+
+.rail__tick {
+  position: absolute;
+  bottom: 0;
+  left: var(--at, 0%);
+  width: 28px;
+  height: 26px;
+  margin: 0 0 0 -14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--ink);
+  font: inherit;
+}
+
+.rail__tick::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  bottom: 0;
+  width: 2px;
+  height: 7px;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  transition: height 160ms ease, background 160ms ease;
+}
+
+.rail__tick:hover::before,
+.rail__tick:focus-visible::before,
+.rail__tick[aria-current='step']::before {
+  height: 11px;
+  background: var(--beacon-beam);
+}
+
+.rail__tick span {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  translate: -50% 4px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--void) 78%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, translate 160ms ease;
+}
+
+.rail__tick:first-child span { left: 14px; translate: 0 4px; }
+.rail__tick:last-child span { left: auto; right: 14px; translate: 0 4px; }
+
+.rail__tick:hover span,
+.rail__tick:focus-visible span {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+.rail__tick:first-child:hover span,
+.rail__tick:first-child:focus-visible span,
+.rail__tick:last-child:hover span,
+.rail__tick:last-child:focus-visible span {
+  translate: 0 0;
+}
+
+.rail__tick:focus-visible,
+.sound-toggle:focus-visible {
+  outline: 2px solid var(--beacon-beam);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.scroll-cue {
+  position: fixed;
+  left: 50%;
+  bottom: max(2.2rem, calc(1.6rem + env(safe-area-inset-bottom)));
+  z-index: 9;
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink) 80%, transparent);
+  text-shadow: 0 1px 12px rgba(5, 7, 15, 0.7);
+  pointer-events: none;
+  transition: opacity 500ms ease;
+}
+
+.scroll-cue i {
+  display: block;
+  width: 1px;
+  height: 26px;
+  background: linear-gradient(to bottom, transparent, var(--ink));
+  animation: cue-drop 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: 50% 0;
+}
+
+@keyframes cue-drop {
+  0% { scale: 1 0; opacity: 0; }
+  35% { scale: 1 1; opacity: 1; }
+  100% { scale: 1 1; opacity: 0; translate: 0 10px; }
+}
+
+.scroll-cue.is-gone {
+  opacity: 0;
+}
+
+.sound-toggle {
+  position: fixed;
+  right: clamp(1rem, 4vw, 3rem);
+  bottom: max(0.8rem, calc(0.4rem + env(safe-area-inset-bottom)));
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0.3rem 0.55rem;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 600ms ease, color 200ms ease;
+}
+
+.sound-toggle:hover,
+.sound-toggle[aria-pressed='true'] {
+  color: var(--ink);
+}
+
+.sound-toggle svg .wave {
+  opacity: 0.25;
+  transition: opacity 200ms ease;
+}
+
+.sound-toggle[aria-pressed='true'] svg .wave {
+  opacity: 1;
+}
+
+/* the loading cue (webgl/load/Readiness.ts): the story is waiting on the next chapter */
+.load-cue {
+  position: fixed;
+  right: clamp(1rem, 4vw, 3rem);
+  bottom: max(2.6rem, calc(2.2rem + env(safe-area-inset-bottom)));
+  z-index: 9;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+
+.load-cue[data-on='true'] {
+  opacity: 1;
+}
+
+body.chrome-idle #scroll-progress:not(:focus-within),
+body.chrome-idle .sound-toggle:not(:focus-visible) {
+  opacity: 0;
+}
+
+body.chrome-idle #scroll-progress:not(:focus-within) .rail__tick {
+  pointer-events: none;
+}
+
+body[data-route]:not([data-route='/']) .sound-toggle,
+body.is-landing .sound-toggle {
+  opacity: 0;
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-cue i { animation: none; }
+  /* no sound under reduced motion (webgl/audio/Wind.ts stays off) */
+  .sound-toggle { display: none; }
+}
+/* --- end scroll feel --- */
 
 /* preloader */
 #preloader {
@@ -811,9 +1025,13 @@ body.has-cursor #cursor.is-active { scale: 1.6; border-color: var(--beacon-beam)
    visibility, NOT display: the document must keep its full height because
    scroll height is what drives the flight. */
 body.is-clean .experience,
-body.is-clean #hud,
-body.is-clean #scroll-progress {
+body.is-clean #hud {
   visibility: hidden !important;
+}
+
+/* scroll feel: in canvas-only mode the rail stays (minimal): its track is fainter and the fill thinner */
+body.is-clean #scroll-progress {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 /* On the home page the nav waits for the flight to finish (body.is-landing, set by page.ts when the

@@ -117,6 +117,18 @@ export class CameraRig {
   /** a jolt to the camera, 0..1 (the Engine feeds it the storm's lightning) */
   jolt = 0;
 
+  // --- scroll feel ---
+  /**
+   * How fast the flight is going for the eye, 0..1 (the Engine: smoothstep of the dart's speed over
+   * the camera's height, faded out by the detour's weight). A little wider lens and a little more air
+   * at speed. 0 under reduced motion.
+   */
+  speed = 0;
+  /** 0..1: the scroll has been at rest a while (the Engine eases it in): the camera breathes */
+  rest = 0;
+  private turnLP = 0;
+  // --- end scroll feel ---
+
   // --- office detour (rig/detour.ts, rig/officeShot.ts): laid over everything else, last ---
   /**
    * The office detour's own camera and dart, blended in by `weight` (0 at both ends of the detour,
@@ -221,7 +233,7 @@ export class CameraRig {
     // in the study the hero leaves the laptop on its own time (launch.ts); from the window on it is the path's t
     const sHero = heroParam(t);
     this.path.pointAt(sHero, this.planePos);
-    const a = rig.turbAmp;
+    const a = rig.turbAmp * (1 + 0.6 * (calm ? 0 : this.speed)); // scroll feel: more air at speed
     if (a > 0) {
       this.planePos.x += this.noise.noise(time * 0.6, 0, 0) * a;
       this.planePos.y += this.noise.noise(0, time * 0.7 + 13.7, 0) * a;
@@ -235,7 +247,10 @@ export class CameraRig {
     const crossY =
       this.prevTangent.x * this.tangent.z - this.prevTangent.z * this.tangent.x;
     const turn = crossY / Math.max(dt, 1e-4);
-    const targetRoll = MathUtils.clamp(turn * 2.2, -0.6, 0.6);
+    // scroll feel: the per-frame yaw rate is noisy (frame times jitter, the scroll arrives in steps);
+    // low-pass it at 12/s before it banks the dart
+    this.turnLP = MathUtils.damp(this.turnLP, turn, 12, dt);
+    const targetRoll = MathUtils.clamp(this.turnLP * 2.2, -0.6, 0.6);
     this.roll = MathUtils.damp(this.roll, targetRoll, 8, dt);
     this.prevTangent.copy(this.tangent);
 
@@ -309,6 +324,13 @@ export class CameraRig {
       this.camPos.y += this.noise.noise(0, time * 29 + 7.1, 0) * j;
     }
     if (this.shot.weight > 0) this.camPos.lerp(this.shot.position, this.shot.weight);
+    // scroll feel: at rest the camera breathes, a slow drift of a few centimetres (7 s period)
+    if (!calm && this.rest > 0) {
+      const b = this.rest * 0.04;
+      this.camPos.x += this.noise.noise(time * 0.143, 91.7, 3.3) * b;
+      this.camPos.y += this.noise.noise(5.9, time * 0.143, 27.1) * b;
+      this.camPos.z += this.noise.noise(44.2, 8.8, time * 0.143) * b;
+    }
     if (dw > 0) this.camPos.lerp(this.detour.camPos, dw);
     this.camera.position.copy(this.camPos);
 
@@ -319,9 +341,11 @@ export class CameraRig {
       this.lookTarget.copy(this.lookAtPoint);
       this.lookInitialized = true;
     }
-    this.lookTarget.x = MathUtils.damp(this.lookTarget.x, this.lookAtPoint.x, 6, dt);
-    this.lookTarget.y = MathUtils.damp(this.lookTarget.y, this.lookAtPoint.y, 6, dt);
-    this.lookTarget.z = MathUtils.damp(this.lookTarget.z, this.lookAtPoint.z, 6, dt);
+    // scroll feel: 10/s (was 6): the scrub spring already smooths the scroll, and a slow look target
+    // on top of it was a second lag that made the frame swing in late after each stop
+    this.lookTarget.x = MathUtils.damp(this.lookTarget.x, this.lookAtPoint.x, 10, dt);
+    this.lookTarget.y = MathUtils.damp(this.lookTarget.y, this.lookAtPoint.y, 10, dt);
+    this.lookTarget.z = MathUtils.damp(this.lookTarget.z, this.lookAtPoint.z, 10, dt);
     this.lookAtPoint.copy(this.lookTarget);
     if (study > 0) this.lookAtPoint.lerp(this.studyLook, study);
     // a held camera pans with the dart itself rather than with the point ahead of it
@@ -341,6 +365,8 @@ export class CameraRig {
 
     // focal length: the chapter's lens times the beat's push, plus a kick when lightning hits
     let fov = rig.fov * (calm ? 1 : fovMul) + (calm ? 0 : this.jolt * 0.8);
+    // scroll feel: the lens opens up to 3.5 degrees at speed, and breathes +-0.3 degrees at rest
+    if (!calm) fov += Math.min(3.5, 3.5 * this.speed) + this.rest * 0.3 * Math.sin((time * 2 * Math.PI) / 7);
     // a tall phone screen sees a thin slice sideways: the study opens its lens so the laptop still fits
     const widen = MathUtils.lerp(1, MathUtils.clamp(1.25 / this.camera.aspect, 1, 1.9), study);
     if (widen > 1.001) fov = (2 * Math.atan(Math.tan((fov * DEG) / 2) * widen)) / DEG;

@@ -51,14 +51,15 @@ export class Trail {
     this.line.visible = false;
   }
 
-  update(t: number, path: FlightPath, head: Vector3): void {
+  /** `length` scales how far back along the line the trail reaches (scroll feel: longer at speed) */
+  update(t: number, path: FlightPath, head: Vector3, length = 1): void {
     this.positions[0] = head.x;
     this.positions[1] = head.y;
     this.positions[2] = head.z;
     for (let i = 1; i < POINTS; i++) {
       // never sample earlier than the takeoff window — the string must not
       // reach back into the room
-      const tt = Math.max(t - i * STEP, CONTRAIL_FROM);
+      const tt = Math.max(t - i * STEP * length, CONTRAIL_FROM);
       path.pointAt(tt, this.sample);
       this.positions[i * 3] = this.sample.x;
       this.positions[i * 3 + 1] = this.sample.y;

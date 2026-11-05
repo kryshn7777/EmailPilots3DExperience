@@ -1,0 +1,161 @@
+{
+  "viewport": 900,
+  "stagePx": 10980,
+  "W": 0.09836065573770492,
+  "chapters": [
+    {
+      "chapter": "desk",
+      "px": 892,
+      "w/100px": 1.02,
+      "w/100px max": 1.57,
+      "v/h": 1.152,
+      "v/h max": 1.964,
+      "v/h^0.6": 1.092,
+      "cam acc p95 (1e-4/px^2)": 0.53,
+      "cam acc max (1e-4/px^2)": 3.43
+    },
+    {
+      "chapter": "preflight",
+      "px": 791,
+      "w/100px": 2.58,
+      "w/100px max": 2.78,
+      "v/h": 0.418,
+      "v/h max": 1.53,
+      "v/h^0.6": 0.854,
+      "cam acc p95 (1e-4/px^2)": 6.67,
+      "cam acc max (1e-4/px^2)": 64.22
+    },
+    {
+      "chapter": "takeoff",
+      "px": 892,
+      "w/100px": 5.59,
+      "w/100px max": 6.38,
+      "v/h": 1.53,
+      "v/h max": 3.654,
+      "v/h^0.6": 2.433,
+      "cam acc p95 (1e-4/px^2)": 8.54,
+      "cam acc max (1e-4/px^2)": 70.54
+    },
+    {
+      "chapter": "formation",
+      "px": 990,
+      "w/100px": 2.88,
+      "w/100px max": 3.55,
+      "v/h": 0.407,
+      "v/h max": 0.753,
+      "v/h^0.6": 0.875,
+      "cam acc p95 (1e-4/px^2)": 5.15,
+      "cam acc max (1e-4/px^2)": 90.29
+    },
+    {
+      "chapter": "storm",
+      "px": 1188,
+      "w/100px": 2.99,
+      "w/100px max": 3.92,
+      "v/h": 0.446,
+      "v/h max": 1.126,
+      "v/h^0.6": 0.915,
+      "cam acc p95 (1e-4/px^2)": 3.67,
+      "cam acc max (1e-4/px^2)": 47.65
+    },
+    {
+      "chapter": "beacon",
+      "px": 990,
+      "w/100px": 3.53,
+      "w/100px max": 4.24,
+      "v/h": 0.269,
+      "v/h max": 0.318,
+      "v/h^0.6": 0.754,
+      "cam acc p95 (1e-4/px^2)": 6.87,
+      "cam acc max (1e-4/px^2)": 63.95
+    },
+    {
+      "chapter": "no-fly",
+      "px": 791,
+      "w/100px": 3.9,
+      "w/100px max": 4.59,
+      "v/h": 0.278,
+      "v/h max": 0.328,
+      "v/h^0.6": 0.8,
+      "cam acc p95 (1e-4/px^2)": 8.67,
+      "cam acc max (1e-4/px^2)": 40.1
+    },
+    {
+      "chapter": "city",
+      "px": 1188,
+      "w/100px": 3.54,
+      "w/100px max": 3.98,
+      "v/h": 1.44,
+      "v/h max": 3.052,
+      "v/h^0.6": 1.954,
+      "cam acc p95 (1e-4/px^2)": 5.14,
+      "cam acc max (1e-4/px^2)": 18.13
+    },
+    {
+      "chapter": "copilot",
+      "px": 993,
+      "w/100px": 4.19,
+      "w/100px max": 5.02,
+      "v/h": 0.399,
+      "v/h max": 1.246,
+      "v/h^0.6": 1,
+      "cam acc p95 (1e-4/px^2)": 17.44,
+      "cam acc max (1e-4/px^2)": 120.2
+    },
+    {
+      "chapter": "landing",
+      "px": 1188,
+      "w/100px": 4.72,
+      "w/100px max": 5.44,
+      "v/h": 3.472,
+      "v/h max": 6.285,
+      "v/h^0.6": 3.573,
+      "cam acc p95 (1e-4/px^2)": 6.08,
+      "cam acc max (1e-4/px^2)": 38.88
+    }
+  ],
+  "seams": [
+    {
+      "at": "desk->preflight",
+      "ratio": 2.3394408786863647
+    },
+    {
+      "at": "preflight->takeoff",
+      "ratio": 1.9658069043408233
+    },
+    {
+      "at": "takeoff->formation",
+      "ratio": 1.6878281464580627
+    },
+    {
+      "at": "formation->storm",
+      "ratio": 1.0629461097612272
+    },
+    {
+      "at": "storm->beacon",
+      "ratio": 1.2179951061619756
+    },
+    {
+      "at": "beacon->no-fly",
+      "ratio": 1.1354758951247474
+    },
+    {
+      "at": "no-fly->city",
+      "ratio": 1.2108414784247052
+    },
+    {
+      "at": "city->copilot",
+      "ratio": 1.4315283093129616
+    },
+    {
+      "at": "copilot->landing",
+      "ratio": 1.1288885642459934
+    }
+  ],
+  "spread": 1.3098623641175973,
+  "vhSpread": 3.2637872390147264,
+  "v6Spread": 1.9786383777617436,
+  "maxSeam": 2.3394408786863647,
+  "accP95": 0.0007210955013120389,
+  "maxAcc": 0.012020054882879631
+}

@@ -810,6 +810,13 @@ export class City {
     this.group.add(this.people.group);
   }
 
+  // --- BatchFleet: the first two dart landings count as the batch's window deliveries ---
+  get batchWindows(): { t: number; at: Vector3 }[] {
+    return this.planeLandings.slice(0, 2).map((l) => ({ t: l.tEnd, at: l.to.clone().add(this.group.position) }));
+  }
+  get crowd(): Pedestrians | null { return this.people; }
+  // --- end BatchFleet ---
+
   dispose(): void {
     this.kitCity?.dispose();
     this.trees?.dispose();

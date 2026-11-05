@@ -102,6 +102,12 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | lighthouse to city (0.59 to 0.71) | fog draws in as the sea goes and the night cloud deck thickens into a bank across the gap; the city is switched on inside it and powers up in a wave (street lamps first, then windows, glass and neon) while a mist stands on its streets and thins as the flight dives in; the lightning carries across and lands on the roofs |
 | copilot to the airfield (0.82 to 0.9) | the descent goes through cloud: fog closes while the starfield is left behind, the airfield is switched on inside it, and the edge lights, the threshold bars and PAPI, then the approach rabbit come up as the runway appears |
 
+The seams are also continuous in SPEED now: the flight line is linear per chapter in story-t, so the world
+used to change speed at every seam (2.3x at desk to preflight, 2x at preflight to takeoff); the pace warp
+(see Scroll feel) gives each stretch of story-t the pixels that make the world's speed per pixel continuous
+across them (worst seam 1.06x). Beats keyed to story-t (holds, titles, the delivery, the cuts) are untouched:
+only how much scroll each stretch of t gets has changed.
+
 ## Loading and frame cost
 
 | What | How |
@@ -113,6 +119,85 @@ arrives forms out of the veil (all keyed to story-t, so a scrub replays them exa
 | Town trees | the rings of the flight line say which tree model a lot MAY use (ultra ~50k triangles, hero ~15k, detail ~2.4k, lite ~700, lean ~90), and `KitCity.updateTrees` picks the model by camera distance each frame (ultra within 10 units, hero 24, detail 50, lite 90, lean beyond; phones 24/50), and a tree beyond 28 units that the lens cannot see is not drawn at all (repacked on a 2-unit move or a 3-degree turn), so only the trees near the lens are dense. Triangles in the town frame at the window exit: trees about 3.4M before, about 0.95M now |
 | Resolution | the frame-time governor runs on every tier (high: 0.6–1× of the device ratio, steps down above 21 ms and back up after 8 s of headroom) |
 | Loading | meshopt decoding on two workers; the sky HDRI is preloaded; the nav island hydrates on idle |
+| Load readiness | `load/Readiness.ts` puts every model and texture request (three's DefaultLoadingManager) on a gate at the story-t where it is first needed (town 0.09, biplane 0.32, sea and lighthouse 0.46, city 0.6, office T_S, airliner 0.83). The scrub spring's target is held short of the first closed gate (never behind the frame, released after 12 s whatever happens) and a small "loading the next leg" cue shows. Nothing registered means open |
+| One clock | the engine renders from `gsap.ticker`, registered after Lenis' tick: each frame is Lenis, ScrollTrigger, the progress, then the render (it had its own requestAnimationFrame, in no fixed order with Lenis). A hidden tab resets the frame clock. Under reduced motion it draws only while the spring moves |
+| ?perf | `debug/Perf.ts`: p50/p95/p99 frame time over 600 frames, frames over 33 ms by the seam they fell near, the governor's scale and tier, world units per 100 px, v/h, the spring's error and the input kind; `window.__perf.snapshot()` |
+
+## Scroll feel
+
+How a pixel of scroll becomes motion (`scroll/ScrollDirector.ts`, `scroll/spring.ts`, `rig/pace.ts`).
+
+**Pace warp.** Scroll progress -> `detourMap` (linear t, as before) -> `paceT` -> story-t; the inverse is
+`progressOf(paceLin(t), W)` (sub-page presets, the rail's ticks, jumps). The warp asks for a world speed per
+pixel of `h^0.6 / dwell`, h the camera's height over what is under it (desk top, the town's ground at -3.2,
+the formation deck at 21, the sea at 7, the city at 0, the airfield at 0.5; at most 5 in the canyon),
+clamped 0.8..14; blended 65/35 with today's authored balance in log space; clamped to 0.5..2x of today's
+pixels and never faster than today where the camera already accelerates hard (above today's 95th
+percentile); Gaussian-smoothed (0.012 in t); normalised separately on [0, T_S] and [T_S, 1] so 0, T_S and
+1 stay put and the total length is unchanged. Dwell (x the pixels): each pinned title +0.35 over its
+middle, the delivery +0.3, touchdown +0.3, the launch +0.2. The office clock has its own (`paceU`): slope 1
+within 0.03 of both cuts (MAX_U_RATE and the flares are unchanged), 0.65 over the received card.
+The flight line's arc-length table went from three's default 200 divisions to 4096: the dart's speed
+rippled +-10% every ~1.6 units and dipped/spiked at seams (positions move by at most 0.4 units, along the
+same line).
+
+`node --experimental-transform-types scripts/check-pace.mjs` (900 px viewport, 10980 px stage; `--baseline`
+for the linear map; `scripts/pace-baseline.json` is the measurement before any of this):
+
+| chapter | px before -> after | world / 100 px | v/h | cam acc p95 (1e-4/px^2) |
+| :-- | --: | --: | --: | --: |
+| desk | 892 -> 837 | 1.02 -> 1.06 | 1.15 -> 1.20 | 0.53 -> 1.98 |
+| preflight | 791 -> 705 | 2.58 -> 2.95 | 0.42 -> 0.48 | 6.67 -> 7.26 |
+| takeoff | 892 -> 1337 | 5.59 -> 3.69 | 1.53 -> 1.01 | 8.54 -> 4.18 |
+| formation | 990 -> 821 | 2.88 -> 3.53 | 0.41 -> 0.50 | 5.15 -> 6.49 |
+| storm | 1188 -> 968 | 2.99 -> 3.61 | 0.45 -> 0.54 | 3.67 -> 6.20 |
+| beacon | 990 -> 861 | 3.53 -> 4.12 | 0.27 -> 0.32 | 6.87 -> 7.93 |
+| no-fly | 791 -> 624 | 3.90 -> 4.88 | 0.28 -> 0.35 | 8.67 -> 7.69 |
+| city | 1188 -> 1548 | 3.54 -> 2.75 | 1.44 -> 1.11 | 5.14 -> 3.15 |
+| copilot | 993 -> 740 | 4.19 -> 5.53 | 0.40 -> 0.52 | 17.44 -> 28.76 |
+| landing | 1188 -> 1460 | 4.72 -> 3.86 | 3.47 -> 2.83 | 6.08 -> 2.09 |
+
+Worst seam speed ratio 2.34 -> 1.06; spread of v/h^0.6 across chapters 198% -> 150%; of world speed
+131% -> 124%; camera acceleration p95 over the whole flight 7.21 -> 6.95 (the single worst spike, in the
+formation climb, 120 -> 173). A spread of world speed under 35% is not reachable with a height-aware
+target and 35% of today's balance kept; the script asserts that the spreads shrink and the p95 does not grow.
+
+**Spring.** `spring.ts`: exact critically damped (zeta 1, up to 1.4 above 0.4 progress/s) solution in
+fixed 1/120 s substeps; on crossing the target it lands and stops (no swing back); snap only under 1.5e-5
+of the story (~0.16 px) and nearly still. Replaced K 120 / C 17.5 (zeta 0.80, one Euler step a frame),
+which came back after a key jump and snapped the last 0.0004 (4.4 px) in one frame. The detour's speed
+cap runs after the step. `node --experimental-strip-types scripts/check-spring.mjs [--old]` replays input
+through a model of Lenis at 60 Hz, 144 Hz and a jittered clock: overshoot 0.07-0.33% with a reversal on
+every key jump before, 0 and none now; settle within 0.36 s of the scroll stopping (0.8 s when the move
+crosses the detour, which the cap holds back on purpose); last frame's move under 0.25 px (2.4 px before).
+
+**Input.** Lenis' `virtual-scroll` classifies the device: a wheel notch (line mode, or a whole number >= 50
+px) gets lerp 0.075 and spring w 9; a trackpad (fractional or small deltas, held for 300 ms) lerp 0.14 and
+w 13; touch stays native (syncTouch off) with w 12. Space, Page Up/Down, the arrows, Home and End are eased
+`lenis.scrollTo` jumps (0.9 or 0.15 of the viewport, 0.6 + 2.4 x the share of the story, 0.6..1.8 s,
+easeInOutCubic) with w 16; keys aimed at a field, button or link are left alone.
+
+**Camera at speed.** vp = |d dart| / dt / h, smoothed; s = smoothstep(vp, 4, 18) x (1 - detour weight):
+the lens opens up to 3.5 degrees, turbulence x(1 + 0.6 s), the contrail reaches 0.8..1.6x as far back, and
+on HIGH a zoom blur of up to 0.12 above vp 8..25. The look target damps at 10/s (was 6), the dart's bank
+is low-passed at 12/s. At rest (1.2 s, eased in over 1.5 s) the camera drifts 0.04 units on a 7 s noise
+and the lens breathes +-0.3 degrees. None of it under reduced motion, where the spring is a stiff w 20.
+
+**Chrome.** A first-load "scroll" cue (gone after 40 px), the progress rail's chapter ticks (placed through
+the pace warp; click or Enter jumps there), the sound toggle; in the canvas-only mode too, faded out 2.5 s
+after the last input. With `?copy=1` the copy reveals shorten from 600 to 250 ms with speed.
+Phones: the canvas is `100lvh` (the URL bar no longer resizes it), `overscroll-behavior: none`,
+`ignoreMobileResize`, height-only resizes under 120 px on touch screens are ignored; the HUD, rail and
+toggle keep to the safe area.
+
+**Wind** (`audio/Wind.ts`, off by default, remembered): brown noise through a band-pass at 300 + 1500 s Hz
+at gain 0.02 + 0.10 s, a 250 ms whoosh on a sharp gain in speed, rain hiss in the storm, a 0.1 Hz swell at
+sea, a low hum over the city. No files; the AudioContext is made on the first switch-on; suspended in a
+hidden tab; never under reduced motion.
+
+Needs a real device to judge: the feel itself (wheel, trackpad, touch momentum, 120 Hz screens), whether
+the input classifier guesses right on a given mouse, the lvh/URL bar behaviour on iOS and Android, and the
+wind's mix.
 
 ## Pinned titles
 
@@ -139,6 +224,14 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 | Toy props and crowding | Faceted icosphere canopies are welded lumpy foliage masses; about a third of the people; lighter contact shadows; SSAO 1.6; duller car paint |
 | Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
 | Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
+
+## Birds at the window
+
+The flock that leaves the study window (t 0.055 to 0.3) is rock pigeons with a few starlings, and a black-headed gull in the squad that crosses the lens as the plane clears the window (`src/webgl/actors/Birds.ts`). They are modelled and baked in Blender (`blender/make_birds.py`, see `blender/README.md`, "Birds"; nothing external, see `public/models/birds/CREDITS.md`): a body with its eye, beak and tucked feet, and wings and tail of layered feathers (primaries, secondaries, coverts, alula, scapulars, rectrices) as alpha-tested cards on one baked atlas, lit by the scene's sun, sky and environment like everything else.
+
+- *Flight.* A shader rig: per bird the CPU writes elevation, fold, twist and load; the vertex shader turns each wing about its shoulder, elbow and wrist (weights blended across each joint, so the membrane and coverts stretch). The downstroke is extended and pronated with the primaries bending under the load, the upstroke flexes elbow and wrist. Birds glide now and then (pigeons in a raised V), bob with the stroke, point along their velocity and bank into turns (lift balances gravity plus the turn), fanning the tail. Pigeons beat at about 6 Hz, starlings 10, the gull 3.
+- *Shading.* The neck's green-purple sheen turns with the view (a mask in the ORM's B), feather undersides are paler, the low sun glows through thin feathers, and tucked feather roots carry their own occlusion.
+- *Cost.* Three instanced draws (one per species) on both tiers; 13 birds are about 22k triangles on HIGH and 3.5k on phones (the lean set: one card per wing surface). The update writes 13 matrices and 26 vec4s a frame. The paths and timing are the paper-plane birds' (the stream on absolute time, the squad keyed to t); `?probe` with `window.__birdTime` freezes their clock for inspection.
 
 ## Lived-in yards
 
@@ -184,6 +277,10 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 **Cars:** all nine vehicles are generated (`blender/make_cars.py`): a high-poly build is baked into a hero tier (21 to 25k triangles, occlusion, road-grime and normal maps) for cars within 12 units on HIGH, a mid tier (the old close-up model with baked occlusion) out to 28 units, and the lean shells beyond and on LOW (see blender/README.md). No downloaded vehicle was realistic and licensed for this use; the survey is in `public/models/cars/CREDITS.md`.
 
 **IT office props:** the night office level's furniture and kit are generated (`blender/make_it_office.py`, see "IT office props" in blender/README.md): thirteen props in `public/models/office/office-props.glb`, each a root node named in `manifest.json` (size in metres, the emissive materials the engine drives, triangle counts), all on one baked 2048 px atlas. Every prop is modelled procedurally and built twice, a high-poly twin with real bevels, procedural PBR materials and wear, and the lean mesh that ships with the twin baked onto it. No downloaded model is used; the survey is in `public/models/office/CREDITS.md`.
+
+**Street pass through the city.** The flight now runs at street level down the canyon road, as it does through the town: the dive (`pathPoints.mjs`, six points in the city zone) drops to about lamp height at x 185, keeps 1.1-1.4 units over the lanes for some sixteen units, between the lamps (their arms reach 0.5 out from z -2.05 and 2.05), through the traffic and the crowd, then pulls up into the copilot climb. The city zone has more points, so `CH_START_INDEX` moved for the last two chapters and `npm run bake:rings` was rerun. The detour's tower is still picked at runtime.
+
+**Shafts over the town.** `actors/LightShafts.ts`: long additive ribbons that turn about their own axis to face the lens (a beam billboard), laid along the sun's direction over the town from the study window to the end of the street pass (t 0.082-0.235): a soft profile across the width, streaks that drift, fades at the cloud end, into the rooftop haze and close to the lens; 12 on HIGH, 6 on phones, one draw call. They are in the world, so the houses and trees cut them, unlike the screen-space rays (`post/GodRays.ts`) that smear toward the sun's pixel.
 
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 

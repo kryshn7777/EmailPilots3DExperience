@@ -57,7 +57,18 @@ const { title, description } = Astro.props;
       <span id="hud-chapter">CH 01 / 10 · THE DESK</span>
       <span id="hud-alt">ALT 0000</span>
     </div>
-    <div id="scroll-progress" aria-hidden="true"><i></i></div>
+    <!-- the progress rail; page.ts adds a tick per chapter (jump to it) -->
+    <div id="scroll-progress"><i aria-hidden="true"></i><nav class="rail" aria-label="Chapters"></nav></div>
+    <!-- scroll feel: the first-load cue, the loading cue and the sound toggle (page.ts, webgl/audio/Wind.ts) -->
+    <div class="scroll-cue" id="scroll-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
+    <div class="load-cue" id="load-cue" role="status" aria-live="polite"></div>
+    <button class="sound-toggle" id="sound-toggle" type="button" aria-pressed="false" aria-label="Wind sound">
+      <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M3 8h3l4-3v10l-4-3H3z" fill="currentColor" stroke="none"></path>
+        <path class="wave" d="M13 7.5a3.5 3.5 0 0 1 0 5M15.5 5a7 7 0 0 1 0 10" stroke-linecap="round"></path>
+      </svg>
+      <span data-label>Sound off</span>
+    </button>
 
     <div id="cursor" aria-hidden="true"></div>
 
