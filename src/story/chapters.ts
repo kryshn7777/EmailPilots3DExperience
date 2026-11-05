@@ -130,7 +130,7 @@ export const CHAPTERS: Chapter[] = [
     // the window opens on a tower district standing in an overcast deck, so
     // the haze is cloud-coloured and reaches far: the old near-black fog at
     // 60 units cut every neighbour down to a silhouette
-    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffd8aa', sunIntensity: 0.85, sunDir: [0.55, 0.2, 0.4], key: 1.25, fogColor: '#6c788f', fogNear: 40, fogFar: 520, envIntensity: 0.65, cloud: 0.6, wet: 0.35, bounce: 0.9,
+    grade: { zenith: '#141b2e', horizon: '#3b496b', sunColor: '#ffd8aa', sunIntensity: 0.85, sunDir: [0.55, 0.2, 0.4], key: 1.25, fogColor: '#6c788f', fogNear: 40, fogFar: 520, envIntensity: 0.85, cloud: 0.6, wet: 0.35, bounce: 1.15,
       filmic: 1, exposure: 1.1, sat: 0.92, bloom: 0.5, bloomThreshold: 1.0, balance: [0.94, 1.0, 1.14], rays: 1.35,
       // fog belongs to the distance: clear streets below the window, the far town
       // sinking into the horizon (the mist term thickens it along the ground only)

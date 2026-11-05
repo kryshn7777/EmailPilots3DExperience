@@ -538,7 +538,7 @@ if (roofOn < 0.5) {
     float px = max(fwidth(w.x), fwidth(w.y));
     vec2 lot = floor(vRoofL.xy * 4.0 + 0.5) * 0.25;
     // every house its own upkeep: some scrubbed, some left to the weather
-    float dirtK = 0.3 + 1.5 * rHash(lot + 51.3);
+    float dirtK = 0.3 + 0.9 * rHash(lot + 51.3);
     float grime = (1.0 - smoothstep(0.0, 0.5, w.y)) * (0.55 + 0.45 * rNoise(vec2(w.x * 2.3, 0.0) + lot));
     diffuseColor.rgb *= 1.0 - 0.24 * grime * dirtK;
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.96, 0.92, 0.82), grime * 0.5);
@@ -546,7 +546,7 @@ if (roofOn < 0.5) {
     diffuseColor.rgb *= 1.0 - 0.07 * streak * dirtK;
     // mildew creeping up the foot of the walls, in blotches rather than a line
     float mildew = smoothstep(0.58, 0.86, rFbm(vec2(w.x * 1.3, w.y * 2.6) + lot * 1.9)) * (1.0 - smoothstep(0.1, 1.8, w.y)) * (dirtK - 0.5);
-    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.74, 0.86, 0.7), clamp(mildew, 0.0, 1.0) * 0.7);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.74, 0.86, 0.7), clamp(mildew, 0.0, 1.0) * 0.45);
     // a repainted or patched section here and there, squared off, a shade off the rest
     vec2 pcell = floor(w / vec2(2.6, 2.2) + lot * 3.1);
     float pk = rHash(pcell + 9.7);
@@ -555,7 +555,7 @@ if (roofOn < 0.5) {
       vec2 po = vec2(0.15 + 0.2 * rHash(pcell + 1.3), 0.15 + 0.25 * rHash(pcell + 2.9));
       vec2 pe = vec2(0.45 + 0.4 * rHash(pcell + 4.1), 0.4 + 0.45 * rHash(pcell + 5.3));
       float inP = step(po.x, pf.x) * step(po.y, pf.y) * step(pf.x, po.x + pe.x) * step(pf.y, po.y + pe.y);
-      diffuseColor.rgb *= mix(1.0, 0.9 + 0.22 * rHash(pcell + 6.1), inP);
+      diffuseColor.rgb *= mix(1.0, 0.95 + 0.1 * rHash(pcell + 6.1), inP);
     }
     #ifdef WALL_PHOTO
     {
@@ -572,7 +572,10 @@ if (roofOn < 0.5) {
       vec2 dq = wp / 1.3;
       vec3 p1 = texture2D(uWallDetail, dq).rgb;
       vec3 p2 = texture2D(uWallDetail, vec2(dq.y, -dq.x) * 0.43 + 0.21).rgb;
-      diffuseColor.rgb *= mix(vec3(1.0), mix(p1, p2, 0.4) * 2.0, 0.55);
+      // brightness only, and a light touch: the photograph's own tint (lichen, rust) turned a clean clapboard wall
+      // into dirty stripes. Fine grain, not weather.
+      float grain = dot(mix(p1, p2, 0.4), vec3(0.3333)) * 2.0;
+      diffuseColor.rgb *= mix(1.0, clamp(grain, 0.6, 1.4), 0.3);
       #ifdef ROOF_FINE
       float vis2 = 1.0 - smoothstep(0.012, 0.035, px);
       if (vis2 > 0.0) {
