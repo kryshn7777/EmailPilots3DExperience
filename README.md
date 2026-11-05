@@ -140,6 +140,14 @@ The town read as a game for a handful of reasons, each one fixed where it lives:
 | Procedural toy props (icosphere shrubs, cone evergreens, ball canopies) | `blender/make_buildings.py` `YARD_PLANTS`: the tree generator at hedge scale (`hero_trees.PARAMS` shrub, shrub-red, arborvitae, ornamental), borrowing the town's leaf cards and bark so the atlas is unchanged (`--reuse-maps`); `Yards.loadModels` swaps them in on the lots the flight passes close by (about 0.5M triangles), the procedural plants staying elsewhere and until they load |
 | Miniature look from the lens | Background blur, chromatic aberration and lens flare cut back |
 
+## Birds at the window
+
+The flock that leaves the study window (t 0.055 to 0.3) is rock pigeons with a few starlings, and a black-headed gull in the squad that crosses the lens as the plane clears the window (`src/webgl/actors/Birds.ts`). They are modelled and baked in Blender (`blender/make_birds.py`, see `blender/README.md`, "Birds"; nothing external, see `public/models/birds/CREDITS.md`): a body with its eye, beak and tucked feet, and wings and tail of layered feathers (primaries, secondaries, coverts, alula, scapulars, rectrices) as alpha-tested cards on one baked atlas, lit by the scene's sun, sky and environment like everything else.
+
+- *Flight.* A shader rig: per bird the CPU writes elevation, fold, twist and load; the vertex shader turns each wing about its shoulder, elbow and wrist (weights blended across each joint, so the membrane and coverts stretch). The downstroke is extended and pronated with the primaries bending under the load, the upstroke flexes elbow and wrist. Birds glide now and then (pigeons in a raised V), bob with the stroke, point along their velocity and bank into turns (lift balances gravity plus the turn), fanning the tail. Pigeons beat at about 6 Hz, starlings 10, the gull 3.
+- *Shading.* The neck's green-purple sheen turns with the view (a mask in the ORM's B), feather undersides are paler, the low sun glows through thin feathers, and tucked feather roots carry their own occlusion.
+- *Cost.* Three instanced draws (one per species) on both tiers; 13 birds are about 22k triangles on HIGH and 3.5k on phones (the lean set: one card per wing surface). The update writes 13 matrices and 26 vec4s a frame. The paths and timing are the paper-plane birds' (the stream on absolute time, the squad keyed to t); `?probe` with `window.__birdTime` freezes their clock for inspection.
+
 ## Lived-in yards
 
 A neighbourhood where every lawn is clean reads as a model. `actors/YardClutter.ts` adds what households leave lying around, on the lots `Yards` already dresses:

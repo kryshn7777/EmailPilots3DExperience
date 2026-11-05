@@ -26,6 +26,7 @@ python blender/make_ship.py && npm run compress:models      # the lighthouse cha
                                                  # (--render DIR: Cycles previews, VIEWS=side,bridge,... picks them)
 python blender/make_it_office.py && npm run compress:models # the night IT office's 13 props in one GLB on one baked atlas (see "IT office props")
                                                  # (--render DIR: Cycles high-poly vs shipped comparisons; --debug DIR: the maps as PNGs)
+python blender/make_birds.py && npm run compress:models    # the window's pigeons, starlings and gull: feathered HIGH cards, LOW wing cards, two baked atlases (see "Birds")
 ```
 
 `python blender/make_buildings.py --set homes --only home-tudor --debug /tmp/maps`
@@ -433,3 +434,32 @@ edges on the sun side).
   `Rooftops.ts`.
 - Modules are exported at fixed scale (`SCALE` in `homes.py`) or normalised to a
   target size (`target` in `archetypes.py`); the lot maths depends on which.
+
+## Birds
+
+The birds outside the study window (`src/webgl/actors/Birds.ts`) are rock pigeons, starlings and a
+black-headed gull, modelled procedurally: `bld/birds.py` describes each species once (a lofted
+body and head from cross-sections, beak with cere, eye, tucked feet, the wing's leading-edge
+membrane and every feather: primaries with emarginations, secondaries and tertials, greater,
+median and primary coverts, alula, scapulars, rectrices and tail coverts, each with its vane
+outline, camber, shingle tilt and colour pattern), and `make_birds.py` builds it three times:
+
+| tier | what | triangles (pigeon / starling / gull) |
+| --- | --- | --- |
+| source (never ships) | dense vanes with a raised rachis, barbs and body feather tips in the bump, 110x72 body | 139k / 104k / 148k |
+| HIGH | the body at ~260 triangles, every feather an alpha-tested card (2-3 segments, a rachis column) sharing its type's atlas slot | 1,740 / 1,468 / 1,820 |
+| LOW (phones) | ~130-triangle body, each wing one top and one underside card, the tail the same | 268 each |
+
+Cycles bakes the HIGH atlas (1024: colour with the vanes' cut-out in alpha, ORM with the neck's
+iridescence mask in B, tangent normals) from the source's body in place and from a flat source
+feather per feather type onto its slot; the LOW atlas (512, colour and ORM) is the whole spread
+wing and fanned tail baked onto their cards. Every vertex carries `_rig` (part, thin, flex) and
+`_aux` (feather-root occlusion) for the runtime's shader rig.
+
+```sh
+python blender/make_birds.py [--render DIR] [--debug DIR]   # ~1.5 min (+5 min of renders)
+npm run compress:models
+```
+
+`--render DIR` writes the source next to both shipped tiers for each species from the side, above
+and below (`compare-*.png`); `--debug DIR` the maps as PNGs.

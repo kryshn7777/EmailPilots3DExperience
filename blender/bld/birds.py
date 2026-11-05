@@ -199,7 +199,7 @@ def closed_loft(P, cap_front=True, cap_back=True):
 def vane_width(u, w, notch=0.0, tip=0.78, base=0.10, taper=0.0):
     """half-width of one vane along the rachis (u 0 root .. 1 tip), as a fraction of the length"""
     u = np.asarray(u, float)
-    rise = (0.35 + 0.65 * ss(0.0, base * 2.2, u)) * (1 - taper * np.clip((u - 0.3) / 0.7, 0, 1) ** 1.3)
+    rise = (0.55 + 0.45 * ss(0.0, base * 2.2, u)) * (1 - taper * np.clip((u - 0.3) / 0.7, 0, 1) ** 1.3)
     t = np.clip((u - tip) / (1 - tip), 0, 1)
     cap = np.sqrt(np.clip(1 - t ** 2.2, 0, 1))
     cut = 1 - notch * ss(0.52, 0.66, u) * (1 - 0.3 * ss(0.85, 1.0, u))
@@ -693,7 +693,8 @@ def sheet_geo(sp, tier, side):
     le = np.array(sp['le'])
     tpar = np.linspace(0, 1, n_sp)
     k = np.linspace(0, 1, len(le))
-    chord = np.interp(tpar, k, sp['chord'])
+    # the underwing coverts reach further back than the upper ones: they hide the remiges' roots
+    chord = np.interp(tpar, k, sp['chord']) * (1.0 if side > 0 else 1.6)
     thick = np.interp(tpar, k, sp['thick'])
     cs = np.linspace(0, 1, n_ch + 1)
     rows = []

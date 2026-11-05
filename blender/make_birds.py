@@ -95,7 +95,7 @@ def island_dims(sp, types, key, hi):
         return math.pi * sp['feet']['r'], sp['feet']['len']
     if key in ('sheet_top', 'sheet_bot'):
         le = np.array(sp['le'])
-        return float(np.linalg.norm(np.diff(le, axis=0), axis=1).sum()), max(sp['chord'])
+        return float(np.linalg.norm(np.diff(le, axis=0), axis=1).sum()), max(sp['chord']) * (1.6 if key == 'sheet_bot' else 1.0)
     if key in ('wing_top', 'wing_bot', 'tail_top', 'tail_bot'):
         bb = hi['lo_bbox'][key.split('_')[0]]
         return bb[2] - bb[0], bb[3] - bb[1]
