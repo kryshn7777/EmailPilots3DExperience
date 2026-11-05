@@ -55,6 +55,7 @@ import { Beacon } from './actors/Beacon';
 import { Biplane } from './actors/Biplane';
 import { PinnedTitles } from './actors/PinnedTitles';
 import { Birds } from './actors/Birds';
+import { LightShafts } from './actors/LightShafts';
 import { City } from './actors/City';
 import { Clouds } from './actors/Clouds';
 import { Copilot } from './actors/Copilot';
@@ -174,6 +175,7 @@ export class Engine {
   private storm: Storm;
   private biplane: Biplane;
   private birds: Birds;
+  private shafts: LightShafts;
   private pinned: PinnedTitles;
   private bloomFx: BloomEffect | null = null;
   /** how much the grade asks of the sun shafts (1 is the default strength) */
@@ -456,6 +458,7 @@ export class Engine {
     this.lightning = new Lightning({ light: this.quality.tier === 'high', reflect: this.quality.tier === 'high' });
     this.biplane = new Biplane(this.path);
     this.birds = new Birds(rand);
+    this.shafts = new LightShafts(rand, this.quality.tier === 'high');
     this.pinned = new PinnedTitles();
     this.beacon = new Beacon(new Vector3(...BEACON_ANCHOR), this.raycast, this.tooltip, this.quality);
     this.beacon.bindSky(this.sky);
@@ -500,6 +503,7 @@ export class Engine {
       this.lightning.group,
       this.biplane.group,
       this.birds.group,
+      this.shafts.group,
       this.pinned.group,
       this.beacon.group,
       this.wingPlanes.group,
@@ -1384,6 +1388,7 @@ export class Engine {
     );
     this.biplane.update(t, time, this.storm.flash);
     this.birds.update(time, t);
+    this.shafts.update(time, t, this.sunDirWorld, this.sun.color, this.sunLevel);
     this.wingPlanes.update(
       this.rig.planeWorldPos,
       this.rig.currentSide,
@@ -1637,6 +1642,7 @@ export class Engine {
     this.storm.dispose();
     this.biplane.dispose();
     this.birds.dispose();
+    this.shafts.dispose();
     this.pinned.dispose();
     this.beacon.dispose();
     this.wingPlanes.dispose();

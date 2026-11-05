@@ -272,6 +272,8 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 
 **Street pass through the city.** The flight now runs at street level down the canyon road, as it does through the town: the dive (`pathPoints.mjs`, six points in the city zone) drops to about lamp height at x 185, keeps 1.1-1.4 units over the lanes for some sixteen units, between the lamps (their arms reach 0.5 out from z -2.05 and 2.05), through the traffic and the crowd, then pulls up into the copilot climb. The city zone has more points, so `CH_START_INDEX` moved for the last two chapters and `npm run bake:rings` was rerun. The detour's tower is still picked at runtime.
 
+**Shafts over the town.** `actors/LightShafts.ts`: long additive ribbons that turn about their own axis to face the lens (a beam billboard), laid along the sun's direction over the town from the study window to the end of the street pass (t 0.082-0.235): a soft profile across the width, streaks that drift, fades at the cloud end, into the rooftop haze and close to the lens; 12 on HIGH, 6 on phones, one draw call. They are in the world, so the houses and trees cut them, unlike the screen-space rays (`post/GodRays.ts`) that smear toward the sun's pixel.
+
 **Credits:** the photographs are ambientCG textures (https://ambientcg.com), released under CC0 1.0, taken from the public repository github.com/itz019/tls-textures.
 
 ## City life (the night city's clutter)
