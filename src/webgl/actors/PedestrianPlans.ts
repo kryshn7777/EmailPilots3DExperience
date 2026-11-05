@@ -175,10 +175,12 @@ const canyonGreen = (time: number): boolean => time % 14 < 4.6;
  * groups. Drawn at 1.35x, like the city's cars.
  */
 export function cityCrowd(
-  plazas: { x0: number; x1: number; z0: number; z1: number }[],
+  plazas: { x0: number; x1: number; z0: number; z1: number; cafe?: boolean }[],
   quality: Quality,
   /** people CityLife stands about its props: the coffee cart's queue, the bus stops, a smoke by a door */
   extra: Stand[] = [],
+  /** the restaurant terrace's diners and its waiter (CafeTerrace), and the height of its chairs' seats */
+  cafe: { stands: Stand[]; walks: Walk[]; seat: number } | null = null,
 ): CrowdPlan {
   const high = quality.tier === 'high';
   const k = 1.35;
@@ -232,7 +234,7 @@ export function cityCrowd(
     if (p.x1 < x0 || p.x0 > x1) continue;
     const back = side * (FACE + depth - 0.42);
     const stroll = depth >= 2.3 && len >= 3;
-    if (stroll) {
+    if (stroll && !p.cafe) {
       const n = high ? Math.max(1, Math.floor(len / 3.5)) : len > 6 ? 1 : 0;
       if (n) walks.push({ points: [[p.x0 + 0.4, back], [p.x1 - 0.4, back]], width: 0.5, ends: 'turn', pause: [1, 6], count: n });
     }
@@ -249,8 +251,9 @@ export function cityCrowd(
       for (let j = 0; j < n; j++) {
         const a = (j / n) * Math.PI * 2 + rand() * 0.4;
         const r = 0.24 * k;
-        // face the middle of the group
-        stands.push({
+        // face the middle of the group (the terrace has its own people: the draws are made all the same,
+        // so every other plaza's groups stay where they were)
+        if (!p.cafe) stands.push({
           x: gx + Math.cos(a) * r, z: gz + Math.sin(a) * r, yaw: Math.atan2(Math.sin(a), -Math.cos(a)),
           mood: rand() < 0.15 ? 'phone' : 'chat', group,
         });
@@ -258,5 +261,7 @@ export function cityCrowd(
     }
   }
   stands.push(...extra);
-  return { walks, stands, look: 'night', scale: k, far: high ? 55 : 35, seed: 6151 };
+  // the terrace's people go last, so nobody else's dress (drawn in order from the seed) changes
+  if (cafe) { walks.push(...cafe.walks); stands.push(...cafe.stands); }
+  return { walks, stands, look: 'night', scale: k, far: high ? 55 : 35, seed: 6151, ...(cafe ? { seat: cafe.seat } : {}) };
 }
