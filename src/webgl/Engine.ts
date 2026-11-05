@@ -102,6 +102,11 @@ import { mulberry32 } from './util';
 // office detour (rig/detour.ts)
 import { Office, OFFICE_GRADE } from './actors/Office';
 import { MAX_U_RATE, T_S, detourMap, detourStart, insideAt, progressOf } from './rig/detour';
+// --- scroll feel ---
+import gsap from 'gsap';
+import { step as springStep, capDetour, type SpringState } from './scroll/spring';
+import { buildPace, paceInputs, type Pace } from './rig/pace';
+// --- end scroll feel ---
 
 interface EngineOptions {
   reducedMotion: boolean;
@@ -190,6 +195,49 @@ export class Engine {
   private sunLevel = 0;
   private blurLevel = 0;
   private scrubVel = 0;
+  // --- scroll feel ---
+  private spring: SpringState = { x: 0, v: 0 };
+  /** gsap.ticker callback: registered after Lenis' (ScrollDirector), so a frame is Lenis -> ScrollTrigger -> onProgress -> render */
+  private tick = (): void => {
+    if (this.disposed) return;
+    if (!this.active) return;
+    // reduced motion: draw only while the spring is still moving (or something asked for a frame)
+    if (this.options.reducedMotion && !this.needsFrame()) {
+      this.lastTime = performance.now();
+      return;
+    }
+    this.dirty = false;
+    this.renderFrame();
+  };
+  private dirty = true;
+  private needsFrame(): boolean {
+    if (this.dirty || this.scrubVel !== 0) return true;
+    const target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
+    return Math.abs(target - this.renderP) > 1e-7;
+  }
+  /** a hidden tab: the first frame back must not read the pause as one long frame */
+  private onVisibility = (): void => {
+    if (document.visibilityState === 'visible') this.lastTime = performance.now();
+  };
+  /**
+   * The pace warp (rig/pace.ts): scroll -> linear t (detourMap) -> story-t. Built once at init from the
+   * flight line and the camera (a few ms).
+   */
+  private pace!: Pace;
+  /** scroll progress (0..1) to story-t and the detour clock, through the pace warp */
+  private mapScroll(p: number): { t: number; u: number; active: boolean } {
+    const m = detourMap(p, this.detourW);
+    return { t: this.pace.paceT(m.t), u: m.active ? this.pace.paceU(m.u) : m.u, active: m.active };
+  }
+  /** the scroll progress that shows story-t `t` (outside the detour) */
+  progressForT(t: number): number {
+    return progressOf(this.pace.paceLin(t), this.detourW);
+  }
+  /** An eased jump to story-t `t` (the progress rail's ticks). */
+  jumpToT(t: number): void {
+    this.director?.jumpToProgress(this.progressForT(t));
+  }
+  // --- end scroll feel ---
   private city: City;
   private copilot: Copilot;
   private landing: Landing;
@@ -232,7 +280,6 @@ export class Engine {
   private maneuverPulse = 0;
   /** 1 at night, 0 in daylight: how brightly the town's lamps burn */
   private lampLevel = 1;
-  private rafId = 0;
   private startTime = performance.now();
   private lastTime = this.startTime;
   private disposed = false;
@@ -406,6 +453,9 @@ export class Engine {
     if (this.clouds.volume) this.scene.add(this.clouds.volume);
 
     this.rig = new CameraRig(this.path, this.camera, this.plane, { reducedMotion: this.options.reducedMotion });
+    // --- scroll feel ---
+    this.pace = buildPace(paceInputs(this.path, this.rig));
+    // --- end scroll feel ---
 
     this.composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -511,11 +561,11 @@ export class Engine {
     const clean = path.replace(/\/+$/, '') || '/';
     this.idlePreset = ROUTE_PRESETS[clean] ?? null;
     this.measureDetour();
-    const t = this.idlePreset ? this.idlePreset.t : detourMap(this.scrollP, this.detourW).t;
+    const t = this.idlePreset ? this.idlePreset.t : this.mapScroll(this.scrollP).t;
     // jumping t across chapters must not fire seam beats or drag the trail
     this.prevT = t;
     this.trail.reset();
-    if (this.options.reducedMotion) this.renderFrame();
+    this.dirty = true;
   }
 
   /** Page-transition flourish: the plane banks hard while the DOM swaps. */
@@ -552,7 +602,6 @@ export class Engine {
       reducedMotion: this.options.reducedMotion,
       onProgress: (p) => {
         this.scrollP = p;
-        if (this.options.reducedMotion) this.renderFrame();
       },
     });
 
@@ -562,11 +611,10 @@ export class Engine {
     this.renderFrame();
     this.warming = false;
 
-    if (this.options.reducedMotion) {
-      this.renderFrame();
-    } else {
-      this.loop();
-    }
+    // --- scroll feel --- one clock: gsap.ticker, after Lenis' own tick (added by ScrollDirector above)
+    gsap.ticker.add(this.tick);
+    document.addEventListener('visibilitychange', this.onVisibility);
+    // --- end scroll feel ---
 
     this.scheduleWarm();
   }
@@ -1037,43 +1085,23 @@ export class Engine {
     const time = (now - this.startTime) / 1000;
     // office detour: the spring runs on scroll PROGRESS; story-t and the detour clock come from it
     const W = this.detourW;
-    const target = this.idlePreset ? progressOf(this.idlePreset.t, W) : this.scrollP;
-    // mass-spring scrub: the world has WEIGHT — it leans into motion,
-    // carries momentum, and settles with a breath of overshoot (ζ≈0.85).
-    // A plain exponential chase tracked fine but felt weightless.
+    const target = this.idlePreset ? this.progressForT(this.idlePreset.t) : this.scrollP;
+    // --- scroll feel --- the scrub spring (scroll/spring.ts): fixed 1/120 s substeps, critically
+    // damped (more so while fast), no overshoot, and a snap only under ~0.16 px. Under reduced motion a
+    // stiff one (w 20) instead of a jump, so a scrollbar drag or a key still reads as one movement.
     const err = Math.abs(target - this.renderP);
-    if (this.options.reducedMotion) {
-      this.renderP = target;
-      this.scrubVel = 0;
-    } else {
-      // Softer and less damped than before: K 170/C 25 sat at ζ≈0.96, which
-      // is a spring that stops dead on arrival. ζ≈0.80 lets the world lean
-      // past the target and settle back, so the flight carries its own
-      // momentum a few frames beyond the scroll instead of being pinned to it.
-      const K = 120; // stiffness: response ≈ quarter of a second
-      const C = 17.5; // damping: ζ≈0.80 — weight, with a breath of overshoot
-      this.scrubVel += (target - this.renderP) * K * dt;
-      this.scrubVel *= Math.exp(-C * dt);
-      let next = MathUtils.clamp(this.renderP + this.scrubVel * dt, 0, 1);
-      // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
-      // always play under their flare (keyed on u) instead of being stepped over between two frames
-      if (W > 0 && !this.idlePreset) {
-        const ps = detourStart(W);
-        const lo = Math.min(this.renderP, next);
-        const hi = Math.max(this.renderP, next);
-        const cap = MAX_U_RATE * W * dt;
-        if (hi > ps && lo < ps + W && hi - lo > cap) {
-          next = this.renderP + Math.sign(next - this.renderP) * cap;
-          this.scrubVel = (next - this.renderP) / Math.max(dt, 1e-4);
-        }
-      }
-      this.renderP = next;
-    }
-    if (err < 0.0004 && Math.abs(this.scrubVel) < 0.004) {
-      this.renderP = target;
-      this.scrubVel = 0;
-    }
-    const mapped = detourMap(this.renderP, W);
+    this.spring.x = this.renderP;
+    this.spring.v = this.scrubVel;
+    const omega = this.options.reducedMotion ? 20 : (this.director?.omega ?? 11);
+    springStep(this.spring, target, dt, { omega });
+    this.spring.x = MathUtils.clamp(this.spring.x, 0, 1);
+    // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
+    // always play under their flare (keyed on u) instead of being stepped over between two frames
+    if (W > 0 && !this.idlePreset) capDetour(this.spring, this.renderP, detourStart(W), W, MAX_U_RATE, dt);
+    this.renderP = this.spring.x;
+    this.scrubVel = this.spring.v;
+    // --- end scroll feel ---
+    const mapped = this.mapScroll(this.renderP); // scroll feel: through the pace warp
     this.renderT = this.idlePreset ? this.idlePreset.t : mapped.t;
     this.detourU = this.idlePreset ? 0 : mapped.u;
     this.inside = mapped.active && !this.idlePreset && insideAt(this.detourU) && !!this.office.scene?.exit;
@@ -1416,12 +1444,6 @@ export class Engine {
     this.godRays.set(this.sunUv, this.idlePreset ? strength * 0.6 : strength, this.rayColor, 1.5 * this.rayBoost, this.idlePreset ? 0 : flare * 0.8);
   }
 
-  private loop = (): void => {
-    if (this.disposed) return;
-    if (this.active) this.renderFrame();
-    this.rafId = requestAnimationFrame(this.loop);
-  };
-
   private active = true;
 
   /**
@@ -1484,7 +1506,7 @@ export class Engine {
     if (this.cinema) this.cinema.pixelRatio = dpr;
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    if (this.options.reducedMotion) this.composer.render();
+    this.dirty = true;
   };
 
   private onContextLost = (event: Event): void => {
@@ -1496,7 +1518,8 @@ export class Engine {
   dispose(): void {
     this.disposed = true;
     clearTimeout(this.warmTimer);
-    cancelAnimationFrame(this.rafId);
+    gsap.ticker.remove(this.tick);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.resize);
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost);
     this.director?.dispose();
