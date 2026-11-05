@@ -22,7 +22,14 @@ export class FlightPath {
     // their AUTHORED zones. Compute each zone boundary's arc-t, then remap
     // story-t chapter-by-chapter. Without this, chapter windows drift far
     // past their scenery (the original desk was left behind at t≈0.01).
-    const divisions = 512;
+    //
+    // --- scroll feel --- the arc-length table is fine enough that the dart's speed per unit t is
+    // constant within a chapter: three's default (200 divisions) interpolates t linearly inside each
+    // division, so the speed rippled by about +-10% every ~1.6 units, and the zone boundaries (measured
+    // here on a different table) put a dip-and-spike in the speed at every seam (0.78: 290 -> 487 world
+    // per unit t). The positions this moves are within ~0.05 units of the old ones.
+    const divisions = 4096;
+    this.curve.arcLengthDivisions = divisions;
     const lengths = this.curve.getLengths(divisions);
     const total = lengths[divisions]!;
     const n = POINTS.length - 1;
