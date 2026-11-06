@@ -92,9 +92,11 @@ in the paths that run every frame (labels are built once, the HUD writes the DOM
 changes).
 
 Measured on LOW (390 x 800, `?probe`, `renderer.info` over every pass, the fleet's objects removed vs.
-present, against the build before this work): t 0.31 the fleet draws 2 calls (was 1), t 0.415 2 (was 0:
-the bomber and its bolt), t 0.72 the frame totals 189 calls before and after (City's two instanced draws
-replace its envelope and PaperPlane meshes); at most +3.1k triangles at any of the listed t.
+present, `?batchseed=7`, against the merged flight line before this work): the fleet's own draws at t 0.31
+are 2 (was 1), at 0.415 2 (was 0: the bomber and its bolt), at 0.72 23 (was 23: City's two instanced draws
+replace its envelope and PaperPlane meshes), at 0.745 4 (was 4), at 0.84 2 (was 0: the columns and the
+window darts of the wave); at most +1.8k triangles at any of them. The rows of the copilot climb's wave
+that City finds no window for in frame rise as slim columns off roofs at least 30 units out.
 
 ## Checks
 

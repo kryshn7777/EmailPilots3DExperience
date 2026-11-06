@@ -128,7 +128,7 @@ const COLUMN: Partial<Record<FleetKind, { h: number; r: number; gain: number; of
 /** the far columns: the sea horizon's even beat, the skyline ahead, and the window wave when City cannot show it */
 const SEA_COLUMN = { h: 34, r: 0.75, gain: 0.8, off: [0.508, 0.52] as [number, number] };
 const SKY_COLUMN = { h: 26, r: 0.9, gain: 0.95, off: [0.684, 0.698] as [number, number] };
-const WAVE_COLUMN = { h: 20, r: 0.6, gain: 1.0, off: [0.858, 0.872] as [number, number] };
+const WAVE_COLUMN = { h: 12, r: 0.35, gain: 1.0, off: [0.858, 0.872] as [number, number] };
 /** where on screen (NDC x) each of the sea's four columns rises: either side of the lighthouse, never on it */
 const SEA_NDC = [-0.7, 0.58, -0.5, 0.78];
 
@@ -863,7 +863,9 @@ export class BatchFleet {
       const win = d.row!.window!;
       // the canyon camera sees few of the plazas: try the scheduled landing and a few moments either
       // side of it (inside the row's window of the campaign), and take the first with someone in view
-      const times = [0, -0.004, 0.003, -0.008, 0.002].map((k) => d.row!.land + k).filter((l) => l >= win[0] && l <= win[1]);
+      // (the flight leaves the street for the climb at about 0.73: a later phone tries the early end of its window first)
+      const order = d.row!.land > 0.735 ? [-0.008, -0.004, 0, 0.002] : [0, -0.004, 0.003, -0.008, 0.002];
+      const times = order.map((k) => d.row!.land + k).filter((l) => l >= win[0] && l <= win[1]);
       let choice: { at: Vector3; yaw: number; view: number } | undefined;
       for (const land of times) {
         const optionsFor = (list: typeof holders): { at: Vector3; yaw: number; view: number }[] => list
@@ -955,11 +957,26 @@ export class BatchFleet {
     const rows = ROWS_OF('envelope', 'window', 'wave');
     const left = this.city.planFleet(rows, (t) => this.modelCamera(t, aspect), rand);
     const groundY = this.city.group.position.y;
+    const roofs = this.city.roofs;
+    const used: Vector3[] = [];
     left.forEach((n, k) => {
       const r = row(n);
+      const off: [number, number] = r.land < CITY_SHOWN[1] ? [r.land + 0.03, r.land + 0.045] : WAVE_COLUMN.off;
+      // a slim column off a roof the camera sees below the climb (a skyline lit up one delivery at a time)...
+      const camPos = this.modelCamera(r.land, aspect).position.clone();
+      const options = roofs
+        .filter((p) => !used.some((u) => u.distanceTo(p) < 6) && p.distanceTo(camPos) > 30)
+        .map((p) => ({ at: p, view: this.view(r.land, p, aspect) }));
+      const choice = this.pick(options, rand);
+      if (choice && choice.view < 0.95) {
+        used.push(choice.at);
+        this.setColumn(r, choice.at, WAVE_COLUMN, off);
+        return;
+      }
+      // ...or, with no roof in frame, through a point the camera sees, from the ground under it
       const nx = [-0.55, 0.5, -0.25, 0.65, -0.7, 0.3, -0.45, 0.6][k % 8]!;
-      const h = this.projectedColumn(r.land, nx, -0.35, 70, groundY, aspect, this.p0);
-      this.setColumn(r, this.p0, { ...WAVE_COLUMN, h: Math.max(h, WAVE_COLUMN.h) }, r.land < CITY_SHOWN[1] ? [r.land + 0.03, r.land + 0.045] : WAVE_COLUMN.off);
+      const h = this.projectedColumn(r.land, nx, -0.35, 45, groundY, aspect, this.p0);
+      this.setColumn(r, this.p0, { ...WAVE_COLUMN, h: Math.max(h, WAVE_COLUMN.h) }, off);
       this.columns[n - 1]!.chip.copy(this.inView);
     });
   }
