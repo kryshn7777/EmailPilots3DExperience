@@ -33,6 +33,8 @@ import {
 } from '../bake/RoomTextures';
 import { asset } from '../asset';
 import type { Tier } from '../quality';
+import { RECEIVED_T } from '../../story/chapters';
+import { CAMPAIGN, HERO, HERO_REPLY_T } from '../../story/fleet';
 import { DESK_TOP, ENDING_BEATS, HOUSE } from '../rig/endingPoints.mjs';
 import { requestCompile } from '../warm';
 import { Beanbag } from './Beanbag';
@@ -55,21 +57,23 @@ import { createLaptop, type Laptop } from './Laptop';
  * +x into the house; interior x 0.25..10.25, z -5..5, ceiling 3.6.
  */
 
-/** the recipient and her message (§3 CH10; the sample campaign's last person; B's fleet table has the same row) */
+/**
+ * The recipient and her message: the sample campaign's last row (src/story/fleet.ts: her name, her clock, the
+ * sender) and the lines of direction §3 CH10 (the opening, her reply). The campaign is labelled SAMPLE on screen.
+ */
 export const CARA = {
-  name: 'Cara',
+  name: HERO.name,
   subject: '',
-  snippet: 'Hi Cara, saw you just…',
+  snippet: `Hi ${HERO.name}, saw you just…`,
   reply: 'Re: Yes, Thursday works.',
-  from: 'you@yourdomain.com',
-  time: '12:25',
-  label: 'Q3 OUTREACH · SAMPLE CAMPAIGN',
+  from: CAMPAIGN.from,
+  time: HERO.clock,
+  label: `${CAMPAIGN.name.toUpperCase()} · ${CAMPAIGN.label}`,
 };
 
 /** when the screen flips to EMAIL RECEIVED, when the message opens, and when Cara's reply is typed and sent */
-const RECEIVED_T = 0.99; // = chapters.ts RECEIVED_T (the camera engineer exports it; local until then)
 const OPEN_T = 0.9935;
-const REPLY_FROM = 0.995;
+const REPLY_FROM = HERO_REPLY_T;
 const REPLY_TO = 0.9985;
 
 const WALL = 0.25;

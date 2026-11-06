@@ -124,8 +124,9 @@ beside it. No door. HIGH 4.6k triangles, LOW 0.6k, one draw each (`house-color/-
 - `bake/RoomTextures.arrivalScreens(opts?)`: with no options, the original two states (the office detour's default,
   unchanged). With `{ name, subject, snippet, reply?, from?, time?, label? }`: one recipient's inbox in large type
   (it has to read on a phone): `idle`, `received` (a big EMAIL RECEIVED banner), `open`, and `reply` (typed by
-  progress). Cara's copy is `CARA` in RecipientRoom.ts: `Hi Cara, saw you just…`, `Re: Yes, Thursday works.`, from
-  `you@yourdomain.com` at 12:25, labelled `Q3 OUTREACH · SAMPLE CAMPAIGN` (§0, §3 CH10). Nothing else on it is text.
+  progress). Cara's copy is `CARA` in RecipientRoom.ts, from the fleet table (`story/fleet.ts`: her name and clock,
+  the sender, the campaign's SAMPLE label) and §3 CH10's lines: `Hi Cara, saw you just…`, `Re: Yes, Thursday works.`,
+  from `you@yourdomain.com` at 12:25, labelled `Q3 OUTREACH · SAMPLE CAMPAIGN`. Nothing else on it is text.
 
 ## The camera (`src/webgl/rig/endingShot.ts`)
 
@@ -133,23 +134,41 @@ beside it. No door. HIGH 4.6k triangles, LOW 0.6k, one draw each (`house-color/-
 over the chase last, blended by `weight` (0 at 0.88, 1 from 0.889). Shots: a chase down the descent; the low pass,
 0.6 over the dart, looking ahead and up at the tower; the camera runs on and stops short of the hall (it never moves
 back) while the dart dives into the bell-mouth; it tilts up with the light in the tube (portrait: a tall frame, the
-lens at about 67 degrees); a crane up the tower's sunward side to the main dish as the dart bursts out; a wide chase
+lens at about 70 degrees); a crane up the tower's north-west side to the main dish as the dart bursts out past its
+rim (the dart only ever moves away from the lens or left to right); a wide chase
 over the crest and down at the house with sky above it (the pinned title's spot) and the lit window below; down to
 the window and through it behind the dart; the push into the screen, the bars opening. Phones keep a minimum
 horizontal field, and the final push stands further back so the message spans the frame.
 
 ## Integration (other owners' files)
 
-- `rig/CameraRig.ts` (C): apply `endingPose` last, blended by its weight: compute `const ew = endingPose(t,
-  this.camera.aspect, this.ending).weight` before the camera section, then `camPos.lerp(e.camPos, ew)` after the
-  detour's lerp, `lookAtPoint.lerp(e.look, ew)` after the detour's, `roll = lerp(roll, e.roll, ew)`,
-  `lens = lerp(lens, e.fov, ew)`, `cine.bars = lerp(bars, e.bars, ew)`; delete the `touchdown` and `arrival` beats.
-- `story/chapters.ts` (C): `RECEIVED_T = 0.990` for the confetti (replacing `TOUCHDOWN_T`), `UNFOLD_WINDOW = {
-  start: 0.976, end: 0.986 }` (the dart unfolds into the letter during the flare, before the window).
-- `Engine.ts` (C): the dart is swallowed by the screen it reaches at 0.9895: `absorbed = smoothstep(t, 0.9855,
-  0.9895)` (was 0.982 to 0.998, which would leave it half-size behind the screen). The contrail and the air trail
-  off once it is in (`t < 0.9895` on the trail's condition, `airTrail.mesh.visible = false` from 0.9895): the line runs
-  on behind the screen, and the trail seen end-on through the screen is a bright dot in the middle of the message.
+Already in (WP-C, merged): `CameraRig` lays `endingPose` over everything last (and `mainPose` includes it, so the
+pace warp sees this camera); `chapters.ts` exports `RECEIVED_T = 0.99` (the confetti) and `UNFOLD_WINDOW = { start:
+0.976, end: 0.986 }`; the copilot's line ends at H on its tangent and `CH_START_INDEX[9]` is `ENDING_POINTS[0]`.
+
+Still wanted:
+
+- `Engine.ts` (C): swallow the dart in the screen it reaches at 0.9895: `absorbed = smoothstep(t, 0.9855, 0.9895)`
+  (today 0.982 to 0.998). Hide the contrail and the air trail once it is in (`t < RECEIVED_T` on the trail's
+  condition; `airTrail.mesh.visible = false` from `RECEIVED_T`): the last stretch of the line runs straight at the
+  final camera, and the trails seen end-on are a bright dot in the middle of the message on HIGH.
+- `actors/Office.ts` (C's office): Lena's screen, one line: `private screens = arrivalScreens({ name: OFFICE_ROW.name,
+  subject: '', snippet: 'Hi Lena, saw your team just shipped…', from: CAMPAIGN.from, time: OFFICE_ROW.clock, label:
+  CAMPAIGN.name.toUpperCase() + ' · ' + CAMPAIGN.label })` (imports from `story/fleet`; the snippet is direction
+  §3's office line, A may move it into `DETOUR_COPY`); the office's `idle` and `received` keys are unchanged.
+- `load/Readiness.ts` (C): gate the two new model folders with the airliner's: `[/\/models\/(airliner|comm-tower|
+  recipient-room)\//, 0.83]`.
+- `rig/pace.ts` (C), and why `scripts/check-line.mjs` now fails two rows: the ending's line is 186 units (the stub's
+  56) because the beat timetable needs it (see "Why the tower stands at x 336.7"); the warp asks pixels for it by
+  its speed and normalises 0.80 to 1.0 as one block, so the copilot chapter pays: 993 px with the stub, 654 with this
+  line (check-pace: landing 1557 px, about 12 world units per 100 px; the seams stay smooth, 1.02). Camera
+  acceleration over 0.74 to 0.90 then fails: as shot p95 19.5e-4 (stub 6.1), the chase alone 17.9e-4 (stub 5.0).
+  With this camera off it is 16.9 / 8.8, and the shortest line this geometry allows (no low pass, about 140 units)
+  still fails (16.3 / 7.9), so no line meeting the beats can pass while the copilot pays for the ending's pixels.
+  The fix is in the warp: give 0.88 to 1.0 its own pixels rather than the copilot's (e.g. a spacer of scroll for
+  CH10 like the detour's, or a fixed normalisation point at 0.88 with the seam smoothed), or let the ending run
+  faster per pixel by capping its ratio (`RATIO_MAX` about 1 for t > 0.88). The direction's dwells (the rise 0.940
+  to 0.955, received 0.986 to 0.998) match this line's beats.
 - `Engine.ts` (C), the fog, an observation rather than a request: the town's `leave` override (`fog.near/far`
   lerped to 12 / 70 by `smoothstep(t, 0.3, 0.335)`) never switches off, so every later chapter, the ending included,
   is held at 12..70 instead of its grade's (landing 25..200). Over the tower's crest that makes the country below one
@@ -157,11 +176,3 @@ horizontal field, and the final push stands further back so the message spans th
   ground, the tree lines and the house back, but the dawn sky then washes out to cream (the haze volume seems to key
   on the same distances), so the two want tuning together in the landing grade. The ending ships, and was shot, with
   today's 12..70.
-- `rig/pathPoints.mjs` (C): the copilot's last point on H's tangent (C's line already ends that way);
-  `CH_START_INDEX[9]` = the index of `ENDING_POINTS[0]`.
-- `load/Readiness.ts` (C): gate the two new model folders with the airliner's: `[/\/models\/(airliner|comm-tower|
-  recipient-room)\//, 0.83]`.
-- `rig/pace.ts` (C): the ending's line is 186 units (the old one 56), so the pace warp gives CH10 more pixels; its
-  `RATIO_MAX` clamp (2x today's) may bite in the low pass: let it reach about 2.6x over 0.90 to 0.94, or accept a
-  faster world there. The dwells the direction lists (the rise 0.940 to 0.955, received 0.986 to 0.998) match this
-  line's beats.
