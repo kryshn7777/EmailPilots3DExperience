@@ -37,6 +37,7 @@ import type { Quality } from '../quality';
 import { dequantized, KitCity } from './KitCity';
 import { litByLamps } from './CityLife';
 import type { Stand, Walk } from './Pedestrians';
+import { FLEET } from '../../story/fleet';
 
 /** a metre in the night city (its people and cars are drawn 1.35 times the town's 0.33 a metre) */
 const K = 0.33 * 1.35;
@@ -44,11 +45,13 @@ const K = 0.33 * 1.35;
 export const CAFE_SEAT = 0.46 * K;
 const TOP = 0.74 * K;
 /**
- * The terrace's own mail: a dart of the batch peels off the flight at `from` and lands on a street-side
- * table at `land` (story-t), where the camera, just down in the canyon, has the terrace ahead on its left.
- * BatchFleet flies it and counts it; the terrace answers the landing (the ping, the envelope, the wave).
+ * The terrace's own mail: Marco's row of the sample campaign (src/story/fleet.ts, #23, café owner). A dart
+ * peels off the flight at `from` and lands on a street-side table at `land` (story-t), where the camera,
+ * just down in the canyon, has the terrace ahead on its left. BatchFleet flies it and counts it; the
+ * terrace answers the landing (the ping, the envelope, the wave).
  */
-export const CAFE_DELIVERY = { from: 0.695, land: 0.714 } as const;
+const CAFE_ROW = FLEET.find((r) => r.kind === 'cafe')!;
+export const CAFE_DELIVERY = { from: CAFE_ROW.land - 0.019, land: CAFE_ROW.land } as const;
 
 type Rect = { x0: number; x1: number; z0: number; z1: number };
 interface Item { k: string; x: number; z: number; yaw: number; y?: number }
