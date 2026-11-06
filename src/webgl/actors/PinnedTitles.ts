@@ -70,8 +70,8 @@ interface Spot extends Placement {
  * hold a readable title through the whole of it (the camera pans at the desk, pitches down out of the window).
  * `over` spots are drawn over the scene: on a phone they stand where houses, trees or the desk would bite them.
  *
- * City and copilot are fitted on the final city-to-copilot line (WP-C). Landing is provisional: its camera
- * changes with the new ending (WP-D), and it is re-sampled and refitted after that merges.
+ * City and copilot are fitted on the final city-to-copilot line (WP-C), landing on the communications-tower
+ * ending (WP-D).
  */
 const SPOTS: Record<string, Spot> = {
   desk: {
@@ -134,10 +134,12 @@ const SPOTS: Record<string, Spot> = {
     // over the skyline: on a phone the towers below the climb stand in front of its lower half
     portrait: { to: 0.838, pos: [243.38, 19.5, -7.84], width: 14.6, face: [212.2, 19.5, 2.21], over: true },
   },
-  // provisional: fitted to the ending as it flies before WP-D's tower and house (the stub's taxi into the study)
+  // in the dawn sky beyond the small house, as the dart dives out of its arc over the tower toward the one lit
+  // window (fitted on WP-D's ending: the camera chases the dive at about -22 degrees), above the roof; crisp in the
+  // dawn haze and drawn over it, so the roof's peak never bites the sub
   landing: {
-    from: 0.958, to: 0.985, pos: [276.18, 0.79, 10.88], width: 4.0, face: [274.77, 0.79, 4.91], over: true,
-    portrait: { pos: [275.48, 0.66, 8.16], width: 1.25, face: [274.78, 0.66, 4.92], over: true },
+    from: 0.958, to: 0.985, pos: [404.94, 6.08, -0.35], width: 33, face: [354.27, 6.08, -0.85], fog: false, over: true,
+    portrait: { pos: [426, 5.16, -10.03], width: 49, face: [354.27, 5.16, -0.85], over: true },
   },
 };
 
