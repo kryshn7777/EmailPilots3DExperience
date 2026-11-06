@@ -15,9 +15,10 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * The IT office's furniture: where every prop stands (metres, room-local: the window wall is z = 0,
- * the room runs x -7..7, z 0..10, 3 m high), primitive stand-ins for each prop, and the batcher that
- * merges everything sharing a material into one draw.
+ * The IT office's furniture: where every prop stands (metres, room-local: the window wall the dart comes in by is
+ * z = 0, the window wall it leaves by is z = 10, the room runs x -7..7, 3 m high), primitive stand-ins for each
+ * prop, and the batcher that merges everything sharing a material into one draw. The dart's line runs straight
+ * across at x -0.7 (officeShot.ts OFFICE_LINE), right over the live laptop, so nothing tall stands on it.
  *
  * The real props are modelled in Blender and exported to `public/models/office/office-props.glb`
  * with `manifest.json` beside it: `{ file, nodes: [{ name, size: [w, h, d], emissive?: [...] }] }`,
@@ -74,11 +75,12 @@ function buildLayout(): { props: Placement[]; laptops: LaptopPlacement[] } {
   const props: Placement[] = [];
   const laptops: LaptopPlacement[] = [];
   for (const pod of [POD_A, POD_B, POD_C]) props.push({ name: 'desk_pod', x: pod.x, z: pod.z });
-  // what is on each desk: m monitor, mm two, l open laptop (dark), c shut laptop
+  // what is on each desk: m monitor, mm two, l open laptop (dark), c shut laptop. (Pod C's seat 0 is the live
+  // laptop's, under the dart's line: only the laptop and its lamp on it.)
   const desks: [typeof POD_A, number, string][] = [
-    [POD_A, 1, 'm c'], [POD_A, 2, 'mm'], [POD_A, 3, 'l'],
+    [POD_A, 0, 'mm'], [POD_A, 1, 'c'], [POD_A, 2, 'mm'], [POD_A, 3, 'l'],
     [POD_B, 0, 'm'], [POD_B, 1, 'l'], [POD_B, 2, 'c'], [POD_B, 3, 'm'],
-    [POD_C, 0, 'm l'], [POD_C, 1, 'm'], [POD_C, 3, 'mm'],
+    [POD_C, 1, 'm'], [POD_C, 2, 'm l'], [POD_C, 3, 'mm'],
   ];
   for (const [pod, i, what] of desks) {
     const s = seat(pod, i);
@@ -97,8 +99,9 @@ function buildLayout(): { props: Placement[]; laptops: LaptopPlacement[] } {
       }
     }
   }
-  // the one that is on: pod A, the window side's left desk, its screen toward the window
-  const hero = seat(POD_A, 0);
+  // the one that is on: pod C, the window side's left desk, its screen toward the window the dart comes in by,
+  // right under the dart's line (officeShot.ts OFFICE_LINE.x = HERO_SEAT.x)
+  const hero = seat(POD_C, 0);
   laptops.unshift({ x: hero.x, z: hero.z + 0.1, ry: 0, lid: 1, y: 'desk', on: true });
   props.push({ name: 'desk_lamp', x: hero.x - 0.55, z: hero.z + 0.12, y: 'desk', ry: -0.5 });
   // chairs: every seat, turned and pushed about the way people leave them; the hero's is pushed aside
@@ -107,7 +110,7 @@ function buildLayout(): { props: Placement[]; laptops: LaptopPlacement[] } {
       const s = seat(pod, i);
       const k = n + i;
       const jitter = ((k * 37) % 11) / 11 - 0.5;
-      const aside = pod === POD_A && i === 0 ? 0.55 : 0;
+      const aside = pod === POD_C && i === 0 ? 0.55 : 0;
       props.push({
         name: 'chair_office',
         x: s.x + jitter * 0.3 + aside,
@@ -116,9 +119,9 @@ function buildLayout(): { props: Placement[]; laptops: LaptopPlacement[] } {
       });
     }
   }
-  // the server corner: two racks, cable trays overhead to the desks
-  props.push({ name: 'rack_42u', x: 5.1, z: 9.42 }, { name: 'rack_42u', x: 5.75, z: 9.42 });
-  for (const [x, z, ry] of [[3.3, 9.2, 0], [0.3, 9.2, 0], [5.4, 7.4, PI / 2], [5.4, 4.4, PI / 2]] as const) {
+  // the server corner, on the right wall by the far windows: two racks, cable trays overhead to the desks
+  props.push({ name: 'rack_42u', x: 6.45, z: 8.35, ry: PI / 2 }, { name: 'rack_42u', x: 6.45, z: 9.05, ry: PI / 2 });
+  for (const [x, z, ry] of [[5.4, 7.4, PI / 2], [5.4, 4.4, PI / 2], [3.6, 7.9, 0]] as const) {
     props.push({ name: 'cable_tray', x, z, y: 'ceiling', ry });
   }
   // the IT bench along the right wall, a laptop open on it
@@ -127,12 +130,15 @@ function buildLayout(): { props: Placement[]; laptops: LaptopPlacement[] } {
   laptops.push({ x: 6.62, z: 5.6, ry: PI / 2, lid: 0.85, y: 0.9 });
   // ceiling panels on a 3 x 3 grid
   for (const x of [-4.2, 0, 4.2]) for (const z of [2.2, 5.0, 7.8]) props.push({ name: 'ceiling_light_panel', x, z, y: 'ceiling' });
-  // the left wall: filing, the printer in the corner; the back wall: whiteboard, coffee
+  // the left wall: filing, the whiteboard, the printer in the corner; under the far windows a coffee counter
   for (const z of [5.8, 6.45, 7.1]) props.push({ name: 'filing_cabinet', x: -6.64, z, ry: -PI / 2 });
   props.push({ name: 'printer', x: -5.9, z: 9.35 });
-  props.push({ name: 'whiteboard', x: -2.2, z: 9.95, y: 0.95 });
-  props.push({ name: 'coffee_station', x: 2.3, z: 9.6 });
-  props.push({ name: 'plant_pot', x: -6.35, z: 0.75 }, { name: 'plant_pot', x: 6.35, z: 0.75 }, { name: 'plant_pot', x: -0.7, z: 9.45 });
+  props.push({ name: 'whiteboard', x: -6.95, z: 8.55, y: 0.95, ry: -PI / 2 });
+  props.push({ name: 'coffee_station', x: 2.6, z: 9.55 });
+  props.push(
+    { name: 'plant_pot', x: -6.35, z: 0.75 }, { name: 'plant_pot', x: 6.35, z: 0.75 },
+    { name: 'plant_pot', x: -2.3, z: 9.45 }, { name: 'plant_pot', x: 4.9, z: 9.5 },
+  );
   return { props, laptops };
 }
 
