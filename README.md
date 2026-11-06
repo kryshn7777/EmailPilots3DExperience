@@ -55,21 +55,11 @@ Guardrails (FEATURES.md Appendix B and the scene direction's honesty rules): no 
 
 Engineering notes for the other systems: the fleet (`docs/fleet.md`), the flight line and the office crossing (`docs/flight-line.md`), and the ending (`docs/ending.md`).
 
-## The office detour
+## The office crossing and the flight line
 
-Above the night city, early in the copilot climb, the dart flies into the glass of the tower beside it; the story cuts to an open-plan IT office on one of its floors, an envelope follows the dart in and is swallowed by the one laptop that is on ("Email delivered"), and the dart leaves through the facade, climbs into the night sky over the city, dives, and rejoins the flight toward the airliner.
-
-It is a scroll detour, not a chapter: story-t stops at `T_S` = 0.79 while a sub-timeline `u` runs 0..1 over one extra 120vh spacer (`[data-detour]` in `Experience.astro`), then t continues, so every chapter keeps its numbers. `src/webgl/rig/detour.ts` maps scroll progress `p` to `(t, u)`: with `W` the spacer's share of the timeline (measured at runtime, 120/1220 = 0.098 on the home page) and `Ps = T_S (1 - W)` (0.712), `t = p / (1 - W)` before `Ps`, `t = T_S` and `u = (p - Ps) / W` inside, `t = (p - W) / (1 - W)` after. The Engine springs `p`, not t, and caps how fast a flick may run `u` so each cut always plays under its flare; `node --experimental-strip-types scripts/check-detour.mjs` tests the mapping. The HUD's progress bar follows `p` (`flight:progress`); its chapter readout says DETOUR while `u` runs.
-
-| u | What happens | Where |
-|---|---|---|
-| 0 - 0.08 | off the main line at P(0.79) on its tangent, into the tower nearest it that stands 3+ above the dart (picked from the city's lots at runtime, the entry put on the real glass by a ray) | city |
-| 0.08 | white flare, cut | |
-| 0.08 - 0.66 | establishing shot from the window; the envelope after the dart into the live laptop; the screen flips idle to received and the card comes up; the dart circles and heads back out | office |
-| 0.66 | flare, cut | |
-| 0.66 - 1 | the dart bursts out of the facade (glass shards), climbs to about y 40, turns, dives and joins the line on its tangent: at u = 1 camera and dart are the main rig's | city |
-
-The camera and dart come from `rig/officeShot.ts` (keyframes like `studyShot.ts`, pure in `u`), laid over the chase camera last by `CameraRig.detour`, whose weight is 0 at both ends. The office (`src/webgl/actors/Office.ts`) is its own stage 200 below the world, drawn at twice life size (props in metres, `ROOM_K` = 2) so the dart at 0.45 scale is in proportion; while the camera is in it the Engine hides every other group and lays `OFFICE_GRADE` over the chapter grade. Its window shows the real city, rendered once from the tower's facade into a texture when the city has streamed in. The furniture (`OfficeProps.ts`) is batched by material: the models from `public/models/office/` (`manifest.json`: `{ file, nodes: [{ name, size, emissive }] }`, one root node per prop, origin at the floor centre, Y up, metres) wherever a node of that name exists, primitive stand-ins of the same names otherwise. Light: a desk-lamp spot (shadowed on HIGH), the live screen's spill, glowing monitors, panels and rack LEDs, and the scene's sun and sky light turned into a soft ceiling light.
+The dart flies one line from the city canyon to the hand-off to the ending, straight through the IT-office tower
+(in by its west face, out by its east face); story-t runs through the office (T_S to T_E) and the office's own
+clock is u. How it is authored, timed, shot and checked: `docs/flight-line.md`.
 
 ## Sky, clouds, sun and sea
 

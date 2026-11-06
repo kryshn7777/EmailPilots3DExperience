@@ -70,8 +70,8 @@ interface Spot extends Placement {
  * hold a readable title through the whole of it (the camera pans at the desk, pitches down out of the window).
  * `over` spots are drawn over the scene: on a phone they stand where houses, trees or the desk would bite them.
  *
- * Copilot and landing are provisional: their cameras change with the new city-to-copilot line and the new
- * ending (WP-C, WP-D); both are re-sampled and refitted after those merge.
+ * City and copilot are fitted on the final city-to-copilot line (WP-C). Landing is provisional: its camera
+ * changes with the new ending (WP-D), and it is re-sampled and refitted after that merges.
  */
 const SPOTS: Record<string, Spot> = {
   desk: {
@@ -123,11 +123,14 @@ const SPOTS: Record<string, Spot> = {
   city: {
     // over the street: the canyon's traffic and lamps would take bites out of it
     from: 0.688, to: 0.742, pos: [199.14, 1.78, 0.55], width: 10.5, face: [185.86, 1.78, 1.18], over: true,
-    portrait: { to: 0.732, pos: [205.82, 1.43, 1.17], width: 12.348, face: [182.55, 1.43, 0.84], over: true },
+    // down the canyon, toward the IT-office tower the line climbs into (refitted on WP-C's line)
+    portrait: { to: 0.732, pos: [217.88, 0.75, -0.49], width: 21.134, face: [182.57, 0.75, 1.06], over: true },
   },
+  // in the sky ahead of the climb out of the tower's east face, toward the crest (fitted on WP-C's line: the
+  // camera holds off the tower for the burst, then chases the dart up the 24 degree climb)
   copilot: {
-    from: 0.8, to: 0.85, pos: [222.79, 22.6, 0.95], width: 6.25, face: [211.95, 22.6, -0.5],
-    portrait: { to: 0.838, pos: [222.04, 23.71, 1.01], width: 5.484, face: [212.49, 23.71, -0.5] },
+    from: 0.8, to: 0.85, pos: [243.23, 24.45, -4.45], width: 22.427, face: [215.46, 24.45, 1.7],
+    portrait: { to: 0.838, pos: [243.38, 19.5, -7.84], width: 16.434, face: [212.2, 19.5, 2.21] },
   },
   landing: {
     from: 0.958, to: 0.985, pos: [274.8, 1.13, 6.99], width: 1.639, face: [272.7, 1.13, 3.69],

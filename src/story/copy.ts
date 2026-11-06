@@ -182,10 +182,21 @@ export const AUTH_CARD = {
 export const BANNER = 'ONE BY ONE';
 
 /**
- * The IT office (the detour through the tower, webgl/actors/Office.ts): forty screens with the old way on
- * them, one laptop lit warm with a personal note drafted on this PC. Lena is fleet.ts OFFICE_ROW.
+ * The IT office (the crossing through the tower, webgl/actors/Office.ts): forty screens flicker red with the old
+ * way on them, one laptop lit warm with a personal note drafted on this PC. Lena is fleet.ts OFFICE_ROW.
+ * `bar`, `title` and `sub` are the office card's (the same HUD card as the lighthouse's; `.delivery__sub` in
+ * global.css styles the sub line).
  */
 export const DETOUR_COPY = {
+  bar: 'IT OFFICE · DESK 07',
+  title: `DELIVERED · ${OFFICE_ROW.name}`,
+  sub: 'Personalised on this PC.',
+  /** the card's log, if it shows one */
+  rows: [
+    ['TO', `${OFFICE_ROW.name.toUpperCase()} · ${OFFICE_ROW.role.split(',')[0]!.toUpperCase()}`],
+    ['DRAFTED', 'ON THIS PC'],
+    ['TO THE CLOUD', '0 BYTES'],
+  ],
   /** every monitor flickers red with it for a moment, then dies */
   bcc: ['Dear all,', 'BCC: +231'],
   /** the one warm laptop (RoomTextures.arrivalScreens opts) */
@@ -195,17 +206,6 @@ export const DETOUR_COPY = {
     snippet: `Hi ${OFFICE_ROW.name}, saw your team just shipped…`,
   },
   badge: '✨ drafted on this PC · 0 bytes to the cloud',
-  /** the office card (the same HUD card as the lighthouse's) */
-  card: {
-    bar: `INBOX // IT OFFICE · ${OFFICE_ROW.clock}`,
-    title: `DELIVERED · ${OFFICE_ROW.name}`,
-    sub: 'Personalised on this PC.',
-    rows: [
-      ['TO', `${OFFICE_ROW.name.toUpperCase()} · ${OFFICE_ROW.role.split(',')[0]!.toUpperCase()}`],
-      ['DRAFTED', 'ON THIS PC'],
-      ['TO THE CLOUD', '0 BYTES'],
-    ],
-  },
 } as const;
 
 // ---- after the flight -----------------------------------------------------------------------------
