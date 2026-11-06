@@ -27,10 +27,15 @@ import type { CameraRig } from './CameraRig';
  * cancelled by the pixel density rho = s' * sigma).
  *
  * `paceLin` is the cumulative integral of rho, normalised once over the whole flight but the detour's own stretch
- * of story-t (T_S..T_E, which is the spacer's), so 0 and 1 stay fixed and every chapter lends the ending's long
- * line a little of its scroll. The spacer then sits at linear story-t `gap`, where the warp reaches T_S (it was
- * at T_S when [0, T_S] and [T_E, 1] were normalised apart, which made the ending take all its pixels from the
- * copilot's chapter).
+ * of story-t (T_S..T_E, which is the spacer's), so 0 and 1 stay fixed. The detour's spacer then sits at linear
+ * story-t `gap`, where the warp reaches T_S (it used to sit at T_S itself, with [0, T_S] and [T_E, 1] normalised
+ * apart: that made the ending's long line take all its pixels out of the copilot's chapter).
+ *
+ * The ending (story-t 0.88 on, docs/ending.md) is 186 world units against 297 for the whole flight before it, and
+ * it has its own spacer of scroll (`[data-ending]`, HOME_STAGE.endingVh, its share set by the Engine): the flight
+ * before it keeps the pixels it would have with the ending at its linear share, and the ending gets that share plus
+ * the spacer, its own density scaled by one factor with the step at 0.88 smoothed like everything else (so the
+ * world speed per pixel carries across the seam). See `layout` in buildPace.
  *
  * Inside the detour (story-t T_S..T_E, its own spacer of scroll) the office clock `u` has its own pace (paceU):
  * outside the two cuts the dart is on the flight line in the city, and there the pixels per unit u are matched
@@ -52,10 +57,11 @@ const SMOOTH_T = 0.012;
 const RATIO_MIN = 0.5;
 const RATIO_MAX = 2.0;
 /**
- * From the hand-off at the crest on (the communications-tower ending, endingPoints.mjs) the line is about three
- * times as fast per unit of story-t as the rest of the flight (186 world units in 0.12 of t), so it may take up to
- * this many times today's pixels: otherwise the clamp leaves it at twice today's and it runs at twice the world
- * speed per pixel of the rest of the flight. The pixels come from every chapter (the normalisation is global).
+ * From the hand-off at the crest on (the communications-tower ending, endingPoints.mjs) the line is about four
+ * times as fast per unit of story-t as the copilot's (186 world units in 0.12 of t), so its density may run up to
+ * this many times today's before the clamp: it shapes the ending's pixels among its own beats, and, on a page with
+ * no ending spacer, sets how much it takes from every other chapter's (otherwise the clamp left it at twice today's,
+ * about 12 world units per 100 px).
  */
 const ENDING_FROM = 0.88;
 const ENDING_RATIO_MAX = 4.0;

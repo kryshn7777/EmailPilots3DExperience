@@ -16,12 +16,13 @@ U-turn), climbed it to y 40 over the city, swung it north, dived and joined the 
 | :-- | :-- | :-- |
 | the line | `src/webgl/rig/pathPoints.mjs` (`LINE`, `cityLine()`) | built from numbers that mean something: the canyon's z (0.7), where the climb leaves the street (x 197.2), its two bends (radius 6 up, 8 down), the tower straight's pitch (24 deg) and how far before the west face it starts (5), its z on the west face (-2.35), the crest's radius (25) and the straight descent into H. Height is arcs and straights in x; the sideways move toward the tower is one smooth heading ramp in x (`driftX`..`driftFull`..`driftEase`); x only grows. It is sampled into control points densely enough that the Catmull-Rom through them is that line. |
 | the tower | `pathPoints.mjs` `DETOUR_TOWER` | the city lot at (217.11, -2.72), 2.9 deep, 1.94 wide, 22.9 tall; fixed offline (it used to be picked at runtime) |
-| the hand-off | `pathPoints.mjs` `HANDOFF` | H = (250, 19, -3.5) at t 0.88, flying (0.883, -0.469, 0). The ending's points (`endingPoints.mjs`, docs/ending.md) start at H; while that file is still the day-0 stub (the old landing line, which starts behind H), `pathPoints.mjs` leads from H onto the stub's runway so the branch still flies to the end |
-| the timing | `pathPoints.mjs` `PATH_KNOTS`, `rig/FlightPath.ts` | story-t at control points. Between plain knots the speed is constant (as every chapter always was); across a knot with a mode it eases (cubic Hermite in arc length). The chapter starts are knots, except the copilot's: from the end of the canyon run (x 194, t 0.72238, the old line's pace kept) the line is timed by the tower, so the dart is ON the west face at T_S + cutIn D_T and on the east face at T_S + cutOut D_T exactly, and at H at 0.88 |
+| the hand-off | `pathPoints.mjs` `HANDOFF` | H = (250, 19, -3.5) at t 0.88, flying (0.883, -0.469, 0). The ending's points (`endingPoints.mjs`, docs/ending.md) start at H (the shim that led from H onto the day-0 stub is inert now) |
+| the timing | `pathPoints.mjs` `PATH_KNOTS`, `rig/FlightPath.ts` | story-t at control points. Between plain knots the speed is constant (as every chapter always was); across a knot with a mode it eases (cubic Hermite in arc length). The chapter starts are knots, except the copilot's: from the end of the canyon run (x 194, t 0.72238, the old line's pace kept) the line is timed by the tower, so the dart is ON the west face at T_S + cutIn D_T and on the east face at T_S + cutOut D_T exactly, and at H at 0.88. H is a plain knot (see "The ending's scroll") |
 | the detour's clock | `rig/detour.ts` | story-t runs T_S -> T_E = T_S + D_T across the detour's spacer (T_S 0.79, D_T 0.012), u = (t - T_S) / D_T |
 | the office | `rig/officeShot.ts`, `actors/Office.ts`, `OfficeProps.ts`, `OfficeWalls.ts` | between the cuts: one straight, level, constant-speed crossing over the live laptop; a side-tracking dolly |
 | the camera | `rig/CameraRig.ts` (`BEATS`), `story/chapters.ts` | the push to the glass, the burst watched from beside the tower, the copilot chase; the ending's own camera (`endingShot.ts`) laid on last |
-| the pace | `rig/pace.ts` | the office clock's pace matches the line's speed per pixel either side of the detour |
+| the pace | `rig/pace.ts` | one warp of scroll -> story-t over the whole flight; the office clock's pace matches the line's speed per pixel either side of the detour; the ending's own spacer goes to the ending |
+| the stage | `components/Experience.astro`, `pace.ts` `HOME_STAGE` | ten chapters of 120vh, the detour's spacer (120vh) after the copilot's chapter, the ending's (240vh) after the last: 1560vh, a 1460vh scroll |
 
 ## The beats, in order
 
@@ -47,8 +48,10 @@ Story-t no longer stops. Across the spacer (`[data-detour]`, W of the scroll):
     p >  Pe          t = T_E + (p - Pe) (1 - D_T) / (1 - W)
 
 with Ps = T_S (1 - W) / (1 - D_T), Pe = Ps + W. `progressOf` is its exact inverse. `scripts/check-detour.mjs`.
-On top, the pace (`rig/pace.ts`): outside the detour the warp of story-t, normalised on [0, T_S] and [T_E, 1];
-inside it the office clock's own pace, `paceU`. Its density (pixels per unit u) is the main warp's at T_S
+That is the plain map (no pace). With the pace (`rig/pace.ts`) the same map runs on the warp's linear story-t, and
+the spacer sits where the warp reaches T_S, at linear story-t `gap` (`detourMap(p, W, pace.gap)`,
+`pace.spacerStart(W)`): outside the detour the warp of story-t, normalised once over the whole flight but the
+detour; inside it the office clock's own pace, `paceU`. Its density (pixels per unit u) is the main warp's at T_S
 before the cut (so the dart keeps the line's speed per pixel right up to the glass: the run-in is a few pixels of
 scroll and the cut is a hard flash), one even density through the office (about 1.33: the room is crossed at one
 speed per pixel, and u never runs faster than the scroll there, so `MAX_U_RATE` keeps both flares on screen: 16
@@ -57,12 +60,49 @@ acceleration per pixel (the speed's square on a smoothstep in u), so the burst i
 `__engine.progressFor({ t })` and `__engine.progressFor({ u })` give the scroll for any frame (the screenshot
 tools address office frames by u).
 
+## The ending's scroll (WP-D's ending merged)
+
+The ending's line (docs/ending.md) is 186 world units from H to the screen, against 297 for the whole flight
+before it (the day-0 stub was 56), at one constant speed per unit t (its beats are keyed to that). Three things
+changed here for it:
+
+- **H is a plain timing knot.** It was `'right'` (the copilot's line arrived at H at the ending's speed per unit
+  t). With the stub that was about the copilot's own speed; with this ending it is 1552 per unit t against the
+  copilot's 405, and the Hermite that matches it made the dart all but stop at 0.83 (32 per unit t) and then race
+  into H: the copilot chapter got 20 px for 0.01 of t, camera acceleration 122e-4 per px^2. Now the copilot flies
+  at one speed and the speed per unit t steps up at H; the pace keeps the speed per pixel smooth across the step,
+  and the chase measures its lag and look-ahead across H in distance at the copilot's speed
+  (`CameraRig.along`), so it stays the same distance behind the dart instead of dropping back four times as far in
+  a few pixels.
+- **The pace is normalised over the whole flight**, not on [0, T_S] and [T_E, 1] apart (which made the ending
+  take all its pixels from the copilot's chapter: 993 px with the stub, 654 with this line, and about 12 world
+  units per 100 px in the ending). Centred on the flight before the ending; the ending's density may run to 4x
+  today's before the clamp. The office clock is unchanged; the detour's spacer moved to `gap`.
+- **The ending has its own scroll** (`[data-ending]`, 240vh, after the last chapter, inside `#experience` so the
+  landing content after the flight follows straight on). The Engine measures its share like the detour's
+  (`pace.setEndingShare`); the flight before 0.88 keeps the pixels it would have with the ending at its linear
+  share, and the ending gets that share plus the spacer: its density times one factor, the step at 0.88 smoothed
+  like the rest of the warp. No page length works without it: the ending needs about 3,300 px at a 900 px viewport
+  to sit inside the flight's spread of world speed per pixel, and taking those from the chapters before it raises
+  the flight's camera acceleration p95 from 6.2 to 10.7e-4 per px^2 (its limit is 7.6). Why 240vh and not 200:
+  at 200 the ending runs at 6.2 world units per 100 px and the spread across chapters is 142% (limit 131%).
+  Without the spacer (another page, or `check-pace --no-ending-spacer`) the pace falls back to taking the ending's
+  pixels from every chapter alike.
+
+The town's fog (12/70, held since the town left at 0.335 and under which every later chapter was shot) now opens
+out to the landing grade's own (25/200) over t 0.884 - 0.93 (`DAWN_FOG` in Engine.ts), so the country, the tree
+lines and the house read in the dawn instead of one flat beige haze; the sky keeps its gradient.
+
 ## The checks
 
 `node --experimental-transform-types scripts/check-line.mjs` measures every row of the scene direction's table
 (§4.2) on the line, the office shot, the camera rig and the pace, without rendering, and prints each with the
 direction's limit, the limit this line is held to, and the measurement. `check-detour`, `check-pace`,
-`check-spring` and `check-citygen` run alongside.
+`check-spring`, `check-citygen` and `check-ending` run alongside. `check-pace` holds the flight's camera
+acceleration (to 0.889) to the pre-pace baseline and reports the ending's own camera (rig/endingShot.ts, which has
+the frame to itself from 0.889 and is checked by `check-ending`) apart: p95 15.3e-4, max 72.9e-4 per px^2 at the
+hand-overs (0.90, 0.95, 0.96, 0.97, 0.98), well above the chase's; that is WP-D's to widen if the moves read
+abrupt.
 
 ### What the direction asked and what is possible
 
@@ -101,7 +141,18 @@ the check says so:
 | pitch rate after the pull-up (the crest) | 8.6 deg/unit (86 deg pushover in 10 units) | 3.97 deg/unit (radius 25) |
 | the straight through the tower | none | yaw 0.04 deg, pitch 0.21 deg over 4.4 before to 4.1 after |
 | camera look heading in the city across the detour | 180 deg swings | 26 deg range, never reversed |
-| copilot camera acceleration (check-pace, p95 / max) | 28.8e-4 / 136.6e-4 /px^2 | 7.9e-4 / 18.5e-4 |
-| camera acceleration t 0.74-0.90, as shot (p95 / max) | - | 6.1e-4 / 12.0e-4 |
-| world speed per px across city -> copilot, copilot -> landing | 1.04, 1.014 | 1.024, 1.013 |
+| copilot camera acceleration (check-pace, p95 / max) | 28.8e-4 / 136.6e-4 /px^2 | 7.3e-4 / 13.1e-4 |
+| camera acceleration t 0.74-0.90, as shot (p95 / max) | - | 4.5e-4 / 11.0e-4 |
+| world speed per px across city -> copilot, copilot -> landing | 1.04, 1.014 | 1.025, 1.032 |
 | world speed per px across the detour's edges | (story-t stopped) | 1.002, 1.002 |
+
+With the ending merged (`check-pace`, 900 px viewport): "WP-D's merge" is the tree as merged, "after" this work.
+
+| | WP-D's merge | after |
+| :-- | --: | --: |
+| copilot chapter, px | 654 | 872 |
+| ending (0.88 - 1), px / world units per 100 px (mean, max) | 1546 / about 12 | 3361 / 5.54, 7.23 |
+| world speed spread across chapters (limit 131%) | 246% | 126% |
+| v/h^0.6 spread (limit 158%) | - | 125% |
+| flight camera acceleration p95, to 0.889 (limit 7.57e-4) | - | 7.03e-4 |
+| camera acceleration t 0.74-0.90, as shot / the chase (p95, limit 6.95e-4) | 19.5e-4 / 17.3e-4 | 4.5e-4 / 4.7e-4 |

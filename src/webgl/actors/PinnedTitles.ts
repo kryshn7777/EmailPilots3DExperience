@@ -109,7 +109,8 @@ const SPOTS: Record<string, Spot> = {
   // tower, while the tower is still lost in the fog, and goes as the camera's turn carries it off the frame.
   ocean: {
     from: 0.452, to: 0.512, pos: [169, 13.6, -45], width: 25, face: [114.94, 13.6, 1.42], fog: false,
-    portrait: { from: 0.452, to: 0.492, pos: [129.75, 20.52, -1.54], width: 7.53, face: [111.71, 20.52, 0.83] },
+    // (fitted 8 px inside the right gutter: the sub's last word ran off the frame at 0.48)
+    portrait: { from: 0.452, to: 0.492, pos: [126.5, 18.77, -1.13], width: 6.278, face: [111.89, 18.77, 0.91] },
   },
   beacon: {
     // drawn over the tower, whose lantern railing would otherwise cut through DELIVERY
@@ -132,7 +133,8 @@ const SPOTS: Record<string, Spot> = {
   copilot: {
     from: 0.8, to: 0.85, pos: [243.23, 24.45, -4.45], width: 22.427, face: [215.46, 24.45, 1.7],
     // over the skyline: on a phone the towers below the climb stand in front of its lower half
-    portrait: { to: 0.838, pos: [251.71, 22.15, -15.24], width: 21.5, face: [210.6, 22.15, 2.29], over: true },
+    // (refitted when the copilot's line went back to one speed into H: it no longer slows to a crawl at 0.83)
+    portrait: { to: 0.838, pos: [255.52, 25.76, -11.58], width: 20.566, face: [212.39, 25.76, 2.19], over: true },
   },
   // in the dawn sky beyond the small house, as the dart dives out of its arc over the tower toward the one lit
   // window (fitted on WP-D's ending: the camera chases the dive at about -22 degrees), above the roof; crisp in the

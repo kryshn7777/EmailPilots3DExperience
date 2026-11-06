@@ -126,9 +126,11 @@ interface IdlePreset {
 }
 
 /** Non-home routes park the world at a story moment and orbit it slowly. */
+/** story-t over which the ending's dawn opens the town's held fog (12/70) out to the landing grade's own */
+const DAWN_FOG: [number, number] = [0.884, 0.93];
+
 const ROUTE_PRESETS: Record<string, IdlePreset> = {
   '/features': { t: 0.3, orbitRadius: 7, orbitHeight: 1.6, orbitSpeed: 0.12 },
-  '/pricing': { t: 0.53, orbitRadius: 9, orbitHeight: 2.6, orbitSpeed: 0.08 },
   '/download': { t: 0.985, orbitRadius: 4.5, orbitHeight: 1.3, orbitSpeed: 0.05 },
 };
 
@@ -675,8 +677,12 @@ export class Engine {
     }
     const end = stage.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
     this.detourW = end > 1 ? MathUtils.clamp(spacer.offsetHeight / end, 0, 0.5) : 0;
+    // the ending's own scroll (Experience.astro `[data-ending]`): the pace gives it to the ending (rig/pace.ts)
+    const ending = stage.querySelector<HTMLElement>('[data-ending]');
+    const endingE = ending && end > 1 ? MathUtils.clamp(ending.offsetHeight / end, 0, 0.5) : 0;
     // the office clock's pace matches the line's speed either side of the detour, which depends on its share
     this.pace?.setDetourShare(this.detourW);
+    this.pace?.setEndingShare(endingE);
     // scroll feel: where each chapter starts on the scroll, for the rail's ticks (they move with the pace)
     if (this.pace) window.dispatchEvent(new CustomEvent('flight:rail', { detail: CHAPTERS.map((c) => this.progressForT(c.t0)) }));
   }
@@ -1238,7 +1244,9 @@ export class Engine {
     const heroOpen = this.idlePreset ? 1 : MathUtils.smoothstep(t - HERO_RELEASE, STAGE.openFrom, STAGE.openTo);
     this.plane.group.visible = this.idlePreset !== null || t > HERO_RELEASE + STAGE.openFrom;
     // the dart is swallowed by the arrival screen it flies into
-    const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.982, 0.998);
+    // swallowed by the screen it reaches at 0.9895 (rig/endingPoints.mjs ENDING_BEATS.screen): the half-size dart
+    // would otherwise cover the laptop's message at 0.988
+    const absorbed = this.idlePreset ? 0 : MathUtils.smoothstep(t, 0.9855, 0.9895);
     // the dart dissolves into the lamp as it reaches the lantern, and re-forms on the far side
     const intoLamp = this.idlePreset ? 1 : MathUtils.smoothstep(this.rig.planeWorldPos.distanceTo(this.lanternCentre), 0.5, 4.2);
     this.delivered = 1 - intoLamp;
@@ -1356,9 +1364,14 @@ export class Engine {
     const leave = MathUtils.smoothstep(t, 0.3, 0.335);
     // the town's haze leaves with it (the grade alone would keep it lit over an empty frame until 0.385)
     if (this.volume) this.volume.intensity = t < 0.45 ? 1 - leave : 1;
-    if (leave > 0) {
-      this.fog.near = MathUtils.lerp(this.fog.near, 12, leave);
-      this.fog.far = MathUtils.lerp(this.fog.far, 70, leave);
+    // The 12/70 the town leaves behind holds over every later chapter (each was shot under it) until the ending's
+    // dawn opens out of it, from the hand-off down to the runway: the country, the tree lines and the house read
+    // under the landing grade's own fog, not one flat beige haze.
+    const dawn = MathUtils.smoothstep(t, DAWN_FOG[0], DAWN_FOG[1]);
+    const hold = leave * (1 - dawn);
+    if (hold > 0) {
+      this.fog.near = MathUtils.lerp(this.fog.near, 12, hold);
+      this.fog.far = MathUtils.lerp(this.fog.far, 70, hold);
     }
     if (this.inside) this.applyOfficeGrade();
     this.rooftops.update(time, this.lampLevel, this.rig.planeWorldPos, this.camera.position, this.camera);
@@ -1429,7 +1442,7 @@ export class Engine {
     // the delivery readout, pinned to the lamp
     this.camera.updateMatrixWorld();
     this.updateGodRays();
-    this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
+    this.deliveryPopup.update(!this.idlePreset && t > 0.528 && t < 0.586, this.beacon.lantern, this.camera);
     this.office.update(this.detourU, this.inside, this.camera, !this.idlePreset && !this.warming);
     // --- BatchFleet: the card counts the whole campaign; the office's toast reads the detour clock ---
     this.batchHud.update(this.fleet.state(t, this.batch.state(t), this.camera.aspect, this.detourU), this.camera, !this.idlePreset && !this.warming);
@@ -1450,13 +1463,16 @@ export class Engine {
 
     this.flock.update(t, time, this.path, this.camera);
 
-    if (t > CONTRAIL_FROM) {
+    // (and none once the dart is in the screen: the line's last stretch runs straight at the final camera, and the
+    // trails seen end-on were a bright dot in the middle of the message)
+    if (t > CONTRAIL_FROM && t < RECEIVED_T) {
       this.trail.visible = true;
       this.trail.update(t, this.path, this.plane.group.position, MathUtils.lerp(0.8, 1.6, this.feelSpeed)); // scroll feel
     } else {
       this.trail.visible = false;
     }
     this.airTrail.update(t, time, this.path, this.plane.group.position);
+    if (t >= RECEIVED_T) this.airTrail.mesh.visible = false;
 
     // The sun's shadow map and the reflection probe are whole-scene passes, and neither shows a change
     // from one frame to the next: shadows trail the plane by one frame, reflections refresh at half rate.

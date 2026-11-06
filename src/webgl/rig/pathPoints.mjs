@@ -304,7 +304,11 @@ export const CH_START_INDEX = [0, 3, 6, 14, 17, 22, 27, 30, CITY_LINE.west, CITY
  * it, 'right' of the stretch after it, 'mean' blends the two. The chapter starts are knots (CHAPTERS' t0, copied:
  * scripts/check-line.mjs asserts they agree) except the copilot's: from the end of the canyon run to the hand-off
  * the line is timed by the tower instead, so the dart reaches its west face at T_S + cutIn·D_T and its east face at
- * T_S + cutOut·D_T exactly (rig/detour.ts), and H at 0.88.
+ * T_S + cutOut·D_T exactly (rig/detour.ts), and H at 0.88. H is a plain knot: the ending's line (186 units in 0.12
+ * of t, ENDING_BEATS keyed to its constant speed) is about four times as fast per unit t as the copilot's, and a
+ * Hermite matching that speed at H made the copilot all but stop at 0.83 (32 units per t) before racing into H.
+ * The step in speed per unit t is the pace warp's to hide (rig/pace.ts: the world speed per pixel is smooth across
+ * it), and the chase measures its lag and look-ahead across H in distance (CameraRig.along).
  * @type {[number, number, ('left' | 'right' | 'mean')?][]}
  */
 export const PATH_KNOTS = [

@@ -50,6 +50,8 @@ import {
   OFFICE_LINE, ROOM_K, detourPose, envelopePose, type DetourPose, type DetourScene, type EnvelopePose,
 } from '../rig/officeShot';
 import { envelopeTextures } from './Envelopes';
+import { DETOUR_COPY } from '../../story/copy';
+import { CAMPAIGN, OFFICE_ROW } from '../../story/fleet';
 import { buildOfficeWalls } from './OfficeWalls';
 import {
   Batcher, LAYOUT, PROP_SIZES, ROOM, meshesUnder, placementMatrix, standIn, type PropName, type StandInMaterial,
@@ -88,11 +90,8 @@ const STAGE_Y = -200;
 const LAPTOP_SCALE = 0.225;
 const IDLE_GLOW = 0.55;
 
-/**
- * The office card's words. TODO(WP-A): take these from copy.ts `DETOUR_COPY` once it exists (the scene direction
- * puts the detour's copy there); until then they are the direction's text, kept here, honest (no placement claim).
- */
-const CARD_COPY = { bar: 'IT OFFICE · DESK 07', title: 'DELIVERED · Lena', sub: 'Personalised on this PC.' };
+/** the office card's words, the red flicker's and Lena's screen's: story/copy.ts DETOUR_COPY */
+const CARD_ROWS = DETOUR_COPY.rows.map(([k, v]) => `<li><span>${k}</span><b>${v}</b></li>`).join('');
 
 /** the delivered card, the same HUD card as the lighthouse's (`.delivery` in global.css) */
 class OfficeCard {
@@ -114,11 +113,12 @@ class OfficeCard {
       </svg>
       <div class="delivery__panel">
         <div class="delivery__bar">
-          <span>${CARD_COPY.bar}</span>
+          <span>${DETOUR_COPY.bar}</span>
           <span class="delivery__live">LIVE</span>
         </div>
-        <div class="delivery__title" data-text="${CARD_COPY.title}">${CARD_COPY.title}</div>
-        <div class="delivery__foot"><span>${CARD_COPY.sub}</span></div>
+        <div class="delivery__title" data-text="${DETOUR_COPY.title}">${DETOUR_COPY.title}</div>
+        <div class="delivery__sub">${DETOUR_COPY.sub}</div>
+        <ul class="delivery__log">${CARD_ROWS}</ul>
       </div>`;
     this.panel = this.el.querySelector<HTMLDivElement>('.delivery__panel')!;
     document.body.appendChild(this.el);
@@ -210,7 +210,13 @@ export class Office {
   private propsBuilt = false;
   private laptopsBuilt = false;
   private envelope: Mesh;
-  private screens = arrivalScreens();
+  // Lena's screen: the note drafted on this PC, from the sample campaign, at her row's clock
+  private screens = arrivalScreens({
+    ...DETOUR_COPY.screen,
+    from: CAMPAIGN.from,
+    time: OFFICE_ROW.clock,
+    label: CAMPAIGN.name.toUpperCase() + ' · ' + CAMPAIGN.label,
+  });
   private screenMaterial: MeshStandardMaterial;
   private showing: 'idle' | 'received' = 'idle';
   private screenLight: PointLight;
@@ -262,7 +268,7 @@ export class Office {
     }));
 
     // the envelope, as BatchSend makes it: air-mail paper, lit a little from within
-    const faces = envelopeTextures();
+    const faces = envelopeTextures(OFFICE_ROW.name); // Lena's name on it
     this.keep(faces.front, faces.back);
     this.textures.push(faces.front, faces.back);
     const paper = (map?: CanvasTexture): MeshStandardMaterial => this.own(new MeshStandardMaterial({
@@ -1112,10 +1118,10 @@ function blastTexture(): CanvasTexture {
   ctx.fillRect(0, 0, W, 34);
   ctx.fillStyle = '#ffb3b3';
   ctx.font = 'bold 20px monospace';
-  ctx.fillText('BCC: +231', 16, 24);
+  ctx.fillText(DETOUR_COPY.bcc[1], 16, 24);
   ctx.fillStyle = '#ff5a5a';
   ctx.font = 'bold 58px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Dear all,', 24, 128);
+  ctx.fillText(DETOUR_COPY.bcc[0], 24, 128);
   ctx.fillStyle = 'rgba(255,140,140,0.55)';
   for (let i = 0; i < 6; i++) ctx.fillRect(24, 160 + i * 20, 300 + ((i * 97) % 160), 8);
   ctx.strokeStyle = '#ff3b3b';

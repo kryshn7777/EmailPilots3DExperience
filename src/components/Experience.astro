@@ -17,6 +17,12 @@
  * Office detour: one more stretch of scroll (`[data-detour]`, 120vh) after the copilot chapter.
  * Story-t holds still while it scrolls by and the detour's own clock runs instead (the Engine maps
  * the scroll to both, rig/detour.ts, from this spacer's share of the timeline). No copy of its own.
+ *
+ * The ending's own scroll: one more spacer (`[data-ending]`, 240vh) after the last chapter. The ending's line (the
+ * runway, the tower, the house) is long, and the pace warp gives it this stretch of scroll on top of its share, so
+ * it neither rushes nor takes its pixels from the chapters before it (the Engine measures the spacer's share of the
+ * timeline; rig/pace.ts HOME_STAGE, setEndingShare). No copy of its own. It is inside `#experience`, so the
+ * timeline ends with it and the landing content after the flight follows straight on.
  */
 import { HOME_CHAPTERS } from '../story/copy';
 ---
@@ -37,11 +43,16 @@ import { HOME_CHAPTERS } from '../story/copy';
           <p class="chapter__body">{c.sub}</p>
         </div>
       </section>
-    )).flatMap((section, i) => (HOME_CHAPTERS[i]!.id === 'copilot' ? [section, <div class="detour" data-detour aria-hidden="true" />] : [section]))
+    )).flatMap((section, i) =>
+      HOME_CHAPTERS[i]!.id === 'copilot' ? [section, <div class="detour" data-detour aria-hidden="true" />]
+      : i === HOME_CHAPTERS.length - 1 ? [section, <div class="ending" data-ending aria-hidden="true" />]
+      : [section])
   }
 </div>
 
 <style>
   /* office detour: a chapter's height of scroll with nothing in it */
   .detour { height: 120vh; }
+  /* the ending's own scroll (rig/pace.ts HOME_STAGE.endingVh): nothing in it either */
+  .ending { height: 240vh; }
 </style>

@@ -34,7 +34,7 @@ const GATES: [RegExp, number][] = [
   [/\/models\/(ocean|lighthouse|ship)/, 0.46], // the run in to the lighthouse
   [/\/models\/(city-kit|city-props|city-rings|cars|people)/, 0.6], // the city below the no-fly zones
   [/\/models\/office\//, T_S], // the office detour
-  [/\/models\/airliner\//, 0.83],
+  [/\/models\/(airliner|comm-tower|recipient-room)\//, 0.83],
 ];
 
 const HOLD_LIMIT_MS = 12000;

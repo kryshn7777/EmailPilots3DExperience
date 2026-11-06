@@ -34,6 +34,13 @@ import { detectQuality, type Quality } from '../quality';
 import type { FlightPath } from '../rig/FlightPath';
 import { requestCompile } from '../warm';
 
+/**
+ * The pass, story-t: the crossing line runs from `from` to `to` over this window. At 0.335 - 0.47 the banner swept
+ * across the lens over 0.405 - 0.423, over the strike on the BCC bomber at the middle gate (0.415, Storm.ts) and the
+ * phone's title; 0.01 earlier it has crossed by about 0.413, so the strike and the title read.
+ */
+const PASS: [number, number] = [0.325, 0.46];
+
 /** prop hub and tow hook in model space, as blender/make_biplane.py prints them (the GLB's `prop_hub` Empty wins) */
 const HUB = new Vector3(0.878, 0, 0);
 const TOW = new Vector3(-0.939, -0.024, 0);
@@ -283,7 +290,7 @@ export class Biplane {
   /** `flash` is the storm's lightning (0..1); without it the biplane reads it off the storm's light */
   update(t: number, time: number, flash?: number): void {
     if (!this.group.visible) return;
-    const u = MathUtils.clamp((t - 0.335) / (0.47 - 0.335), 0, 1);
+    const u = MathUtils.clamp((t - PASS[0]) / (PASS[1] - PASS[0]), 0, 1);
     this.group.position.lerpVectors(this.from, this.to, u);
     this.group.position.y += Math.sin(time * 1.3) * 0.3;
     this.group.rotation.set(
