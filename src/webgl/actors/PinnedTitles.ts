@@ -130,11 +130,13 @@ const SPOTS: Record<string, Spot> = {
   // camera holds off the tower for the burst, then chases the dart up the 24 degree climb)
   copilot: {
     from: 0.8, to: 0.85, pos: [243.23, 24.45, -4.45], width: 22.427, face: [215.46, 24.45, 1.7],
-    portrait: { to: 0.838, pos: [243.38, 19.5, -7.84], width: 16.434, face: [212.2, 19.5, 2.21] },
+    // over the skyline: on a phone the towers below the climb stand in front of its lower half
+    portrait: { to: 0.838, pos: [243.38, 19.5, -7.84], width: 14.6, face: [212.2, 19.5, 2.21], over: true },
   },
+  // provisional: fitted to the ending as it flies before WP-D's tower and house (the stub's taxi into the study)
   landing: {
-    from: 0.958, to: 0.985, pos: [274.8, 1.13, 6.99], width: 1.639, face: [272.7, 1.13, 3.69],
-    portrait: { pos: [275.57, -0.33, 8.21], width: 1.61, face: [272.7, -0.33, 3.69], over: true },
+    from: 0.958, to: 0.985, pos: [276.18, 0.79, 10.88], width: 4.0, face: [274.77, 0.79, 4.91], over: true,
+    portrait: { pos: [275.48, 0.66, 8.16], width: 1.25, face: [274.78, 0.66, 4.92], over: true },
   },
 };
 
@@ -441,6 +443,11 @@ function lockup(copy: PinnedTitle, L: Layout, res: number, logo: HTMLImageElemen
   ctx.textBaseline = 'alphabetic';
   ctx.shadowColor = 'rgba(2, 6, 18, 0.5)';
   ctx.shadowBlur = 26;
+  // the small type (kicker, sub, note) is outlined in the night colour too, so it reads over a lit lantern, a sunlit
+  // street or a white flare as well as over the dark
+  ctx.strokeStyle = 'rgba(2, 6, 18, 0.62)';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 7;
   const cx = w / 2;
 
   // the kicker: centred, between two short rules, in the beam colour
@@ -449,6 +456,7 @@ function lockup(copy: PinnedTitle, L: Layout, res: number, logo: HTMLImageElemen
   let y = PAD + kickerCap;
   let x = cx - kickerW / 2;
   [...kicker].forEach((ch, k) => {
+    ctx.strokeText(ch, x, y);
     ctx.fillText(ch, x, y);
     x += kickerGlyphs[k]! + L.kickerTrack;
   });
@@ -480,6 +488,7 @@ function lockup(copy: PinnedTitle, L: Layout, res: number, logo: HTMLImageElemen
     ctx.textAlign = 'center';
     y += gap * 1.15 + subSize * 0.74;
     for (const line of subLines) {
+      ctx.strokeText(line, cx, y);
       ctx.fillText(line, cx, y);
       y += subLead;
     }
@@ -495,6 +504,7 @@ function lockup(copy: PinnedTitle, L: Layout, res: number, logo: HTMLImageElemen
       px += markW + markGap;
     }
     [...note].forEach((ch, k) => {
+      ctx.strokeText(ch, px, base);
       ctx.fillText(ch, px, base);
       px += noteGlyphs[k]! + noteTrack;
     });
