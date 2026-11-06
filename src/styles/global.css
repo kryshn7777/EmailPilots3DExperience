@@ -1039,6 +1039,16 @@ body.is-clean[data-route='/'].is-landing .site-header {
   text-shadow: 0 0 10px var(--neon), 0 0 28px rgb(0 240 255 / 0.55);
 }
 
+/* a line under the title (the office card: "Personalised on this PC.", story/copy.ts DETOUR_COPY) */
+.delivery__sub {
+  margin: -2px 0 9px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8dffb8;
+  text-shadow: 0 0 8px rgb(141 255 184 / 0.6);
+}
+
 /* the glitch: two offset copies, cyan and magenta, sliced and jittered now and then */
 .delivery__title::before,
 .delivery__title::after {
@@ -1465,6 +1475,11 @@ body.is-clean[data-route='/'].is-landing .site-header {
   min-height: 100svh;
   padding: 16svh 16px max(2.5rem, env(safe-area-inset-bottom));
   background: linear-gradient(to bottom, transparent 0, rgb(5 7 15 / 0.35) 30%, rgb(5 7 15 / 0.82) 72%, var(--void) 100%);
+}
+
+/* the footer follows the END directly: no gap for the canvas to show through between them */
+body[data-route='/'] .site-footer {
+  margin-top: 0;
 }
 
 .landing__block {

@@ -145,7 +145,7 @@ const TEAL = '#7fe8d8';
 
 /**
  * Type sizes on the 1800 px text block. On a phone the whole lockup is about 360 px across (a fifth of the
- * canvas), so the kicker and the sub are drawn bigger there to stay readable (about 12 and 17 px on screen).
+ * canvas), so the kicker and the sub are drawn bigger there to stay readable (about 12 and 18 px on screen).
  */
 const LAYOUT = {
   landscape: { kicker: 46, kickerTrack: 12, sub: 64, subLead: 1.22, heavyMax: 330, thin: 132 },

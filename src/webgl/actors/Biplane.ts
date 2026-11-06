@@ -56,8 +56,9 @@ function dequantized(source: BufferGeometry): BufferGeometry {
 }
 
 /**
- * The vintage banner tow: a Stearman-style biplane dragging an "EMAIL PILOTS" cloth banner across
- * the storm approach, near the warning gates. Its position is a pure function of scroll-t moving
+ * The vintage banner tow: a Stearman-style biplane dragging a "ONE BY ONE" cloth banner across
+ * the storm approach, near the warning gates: the storm's lesson (don't BCC a hundred people), its text
+ * from story/copy.ts BANNER via CanvasTextures.bannerTexture. Its position is a pure function of scroll-t moving
  * AGAINST the flight direction, so it crosses the paper plane head-on and scrubs perfectly in
  * reverse. Prop spin, bob, and the cloth ripple run on absolute time.
  *

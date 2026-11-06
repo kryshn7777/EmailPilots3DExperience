@@ -98,7 +98,7 @@ export function createLaptopScreen(): LaptopScreen {
     ctx.roundRect(x, y, w, h, r);
   };
 
-  /** a field: the `{{token}}` in teal until it resolves, then its value in white on a soft teal underline */
+  /** a field: the `{{token}}` in teal until it resolves, then its value in white on a soft teal pill */
   const field = (x: number, y: number, token: string, value: string | null, size: number, flash: number): number => {
     ctx.font = `700 ${size}px monospace`;
     const text = value ?? token;
@@ -135,7 +135,7 @@ export function createLaptopScreen(): LaptopScreen {
   };
 
   /** one queued envelope at depth `z` (0 = the front of the tunnel), with its name tab */
-  const envelope = (z: number, name: string, calm: boolean): void => {
+  const envelope = (z: number, name: string): void => {
     const VX = 618;
     const VY = 96;
     const FX = 618;
@@ -184,7 +184,6 @@ export function createLaptopScreen(): LaptopScreen {
       ctx.fillText(name, tx + size * 0.45, ty + size * 1.0);
     }
     ctx.restore();
-    void calm;
   };
 
   const draw = (t: number, calm: boolean): void => {
@@ -225,7 +224,7 @@ export function createLaptopScreen(): LaptopScreen {
     for (let i = QUEUE.length - 1; i >= 0; i--) {
       const z = i - q;
       if (z < -1 || z > 40) continue;
-      envelope(z, QUEUE[i]!, calm);
+      envelope(z, QUEUE[i]!);
     }
     ctx.restore();
     ctx.fillStyle = DIM;
@@ -240,10 +239,10 @@ export function createLaptopScreen(): LaptopScreen {
     // ---- title bar
     ctx.fillStyle = '#131b30';
     ctx.fillRect(0, 0, W, 56);
-    plain(22, 37, DESK_SCREEN.app, 24, ICE, 800);
-    ctx.font = '600 17px monospace';
+    const appW = plain(22, 37, DESK_SCREEN.app, 24, ICE, 800);
+    ctx.font = '600 16px monospace';
     ctx.fillStyle = '#b9c9e2';
-    ctx.fillText(`${DESK_SCREEN.campaign} · ${DESK_SCREEN.recipients}`, 196, 35);
+    ctx.fillText(`${DESK_SCREEN.campaign} · ${DESK_SCREEN.recipients}`, 22 + appW + 18, 35);
     // the sample label, in the waiting orange
     ctx.font = '700 13px monospace';
     const lw = ctx.measureText(DESK_SCREEN.label).width + 18;
