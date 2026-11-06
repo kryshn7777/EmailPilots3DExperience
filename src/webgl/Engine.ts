@@ -87,6 +87,7 @@ import { HERO_RELEASE, STAGE, launchPulse, planeScale } from './rig/launch';
 import { CameraRig } from './rig/CameraRig';
 import { FlightPath } from './rig/FlightPath';
 import { BEACON_ANCHOR, CITY_ANCHOR, COPILOT_ANCHOR, LANTERN, PANEL_ANCHOR } from './rig/pathPoints.mjs';
+import { LANDING_ANCHOR } from './rig/endingPoints.mjs';
 import { setCompiler } from './warm';
 import { Raycast } from './interact/Raycast';
 import { Tooltip } from './interact/Tooltip';
@@ -471,7 +472,7 @@ export class Engine {
     // fixed roll-out point, not a story-t sample: the flight now turns off
     // the runway into the arrival office, so sampling near t=1 would drag the
     // whole airfield along with the turn
-    this.landing = new Landing(new Vector3(270, 0.5, 0), this.quality);
+    this.landing = new Landing(new Vector3(...LANDING_ANCHOR), this.quality);
     this.burst = new PaperBurst(rand);
     this.confetti = new PaperBurst(rand);
     this.traffic = new Traffic(this.path);

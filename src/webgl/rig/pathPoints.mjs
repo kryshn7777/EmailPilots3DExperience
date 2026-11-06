@@ -1,6 +1,8 @@
 // The flight spline's control points, plain ESM so Node bake scripts can
 // import them without a TS loader. FlightPath.ts maps these to Vector3s;
-// keep the two consumers in sync by editing ONLY this file.
+// keep the two consumers in sync by editing ONLY this file (and endingPoints.mjs for CH10).
+import { ENDING_POINTS } from './endingPoints.mjs';
+
 export const PATH_POINTS = [
   // CH1 desk — starts ON the laptop screen (mid-send), dips over the letter
   [-0.62, 1.75, 0],
@@ -84,17 +86,9 @@ export const PATH_POINTS = [
   [210, 10, -2],
   [220, 20, 0],
   [230, 26, 2],
-  // CH10 landing — long descent, touchdown, then the delivery itself: right
-  // off the runway, up the apron, in through the arrival office door and
-  // into the screen. The last point IS the laptop display.
-  [240, 16, 0],
-  [250, 6, 0],
-  [258, 1.2, 0],
-  [266, 0.55, 0],
-  [271, 0.5, 1.6],
-  [275, 0.55, 7],
-  [277.6, 0.8, 13],
-  [278, 1.05, 19.1],
+  // CH10 landing — authored in endingPoints.mjs (the ending owns its own line; its first point is the
+  // hand-off from this chapter)
+  ...ENDING_POINTS,
 ];
 
 /** First control-point index of each chapter's zone (matches the blocks). */
