@@ -927,23 +927,313 @@ function drawMail(ctx: Ctx, W: number, H: number, state: 'idle' | 'received', ra
   }
 }
 
-/** Both states of the arrival laptop's display, 1.48:1 (the Blender laptop's panel). */
-export function arrivalScreens(): { idle: CanvasTexture; received: CanvasTexture } {
+/**
+ * One recipient's own inbox, for `arrivalScreens(opts)`: the message from the sender is the whole story, so the
+ * layout is big and plain (it has to read on a phone with the screen filling the frame). `idle` waits (the list's
+ * other rows are blank bars: nothing on it is invented); `received` has the message at the top, open, under a large
+ * EMAIL RECEIVED banner; `open` is the same without the banner and with a reply box; `reply` types `opts.reply`
+ * into that box (`progress` 0..1) and marks it sent at 1.
+ */
+export interface ArrivalOpts {
+  /** the recipient, e.g. 'Cara' */
+  name: string;
+  /** the subject line; '' shows the label instead */
+  subject: string;
+  /** the opening line of the message, e.g. 'Hi Cara, saw you just…' */
+  snippet: string;
+  /** the recipient's reply, typed in the `reply` state */
+  reply?: string;
+  /** the sender (default 'you@yourdomain.com') and the clock time shown on the message */
+  from?: string;
+  time?: string;
+  /** a small tag over the message (e.g. the sample campaign's label) */
+  label?: string;
+}
+
+type LetterState = 'idle' | 'received' | 'open' | 'reply';
+
+function drawLetter(ctx: Ctx, W: number, H: number, state: LetterState, o: ArrivalOpts, progress: number): void {
+  const from = o.from ?? 'you@yourdomain.com';
+  const time = o.time ?? 'now';
+  const arrived = state !== 'idle';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#0b1019';
+  ctx.fillRect(0, 0, W, H);
+  // chrome
+  ctx.fillStyle = '#121a28';
+  ctx.fillRect(0, 0, W, 64);
+  for (const [i, c] of ['#ff5f57', '#febc2e', '#28c840'].entries()) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(32 + i * 28, 32, 9, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#dbe6fb';
+  ctx.font = `700 30px ${SANS}`;
+  ctx.fillText('Inbox', 136, 33);
+  if (arrived) {
+    ctx.fillStyle = '#4c9dff';
+    rr(ctx, 232, 18, 34, 30, 15);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `800 20px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('1', 249, 33);
+    ctx.textAlign = 'left';
+  }
+  if (o.label) {
+    ctx.font = `700 17px ${SANS}`;
+    const lw = ctx.measureText(o.label).width + 28;
+    ctx.fillStyle = 'rgba(25, 200, 167, 0.16)';
+    rr(ctx, W - lw - 22, 17, lw, 32, 16);
+    ctx.fill();
+    ctx.fillStyle = '#5ee9cb';
+    ctx.fillText(o.label, W - lw - 8, 33);
+  }
+
+  // the list: the one message (once it is in), blank rows under it
+  const LW = 360;
+  ctx.fillStyle = '#0d131f';
+  ctx.fillRect(0, 64, LW, H - 64);
+  ctx.fillStyle = '#1b2539';
+  ctx.fillRect(LW - 1, 64, 1, H - 64);
+  const ROW = 104;
+  let y = 64;
+  if (arrived) {
+    ctx.fillStyle = 'rgba(70,140,255,0.22)';
+    ctx.fillRect(0, y, LW - 1, ROW);
+    ctx.fillStyle = '#4c9dff';
+    ctx.fillRect(0, y, 6, ROW);
+    ctx.fillStyle = 'hsl(168 55% 40%)';
+    ctx.beginPath();
+    ctx.arc(52, y + 52, 28, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `800 28px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(from[0]!.toUpperCase(), 52, y + 53);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#f2f6ff';
+    ctx.font = `700 21px ${SANS}`;
+    ctx.fillText(fit(ctx, from, LW - 160), 96, y + 34);
+    ctx.fillStyle = '#c4d4f2';
+    ctx.font = `500 21px ${SANS}`;
+    ctx.fillText(fit(ctx, o.subject || o.snippet, LW - 112), 96, y + 70);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#8fb6ff';
+    ctx.font = `600 19px ${SANS}`;
+    ctx.fillText(time, LW - 18, y + 34);
+    ctx.textAlign = 'left';
+    y += ROW;
+  }
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = '#1b2539';
+    ctx.fillRect(18, y + ROW - 1, LW - 36, 1);
+    ctx.fillStyle = '#18233a';
+    ctx.beginPath();
+    ctx.arc(52, y + 52, 26, 0, TAU);
+    ctx.fill();
+    rr(ctx, 96, y + 30, 150 + ((i * 53) % 70), 14, 7);
+    ctx.fill();
+    ctx.fillStyle = '#141d30';
+    rr(ctx, 96, y + 60, 200 - ((i * 37) % 60), 12, 6);
+    ctx.fill();
+    y += ROW;
+  }
+
+  // the reading pane
+  const PX = LW;
+  const PW = W - PX;
+  if (!arrived) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2c3a56';
+    ctx.font = `500 30px ${SANS}`;
+    ctx.fillText('No new mail', PX + PW / 2, H / 2);
+    ctx.textAlign = 'left';
+  } else {
+    const x0 = PX + 40;
+    let ty = 112;
+    if (o.subject) {
+      ctx.fillStyle = '#eaf1ff';
+      ctx.font = `800 36px ${SANS}`;
+      ctx.fillText(fit(ctx, o.subject, PW - 80), x0, ty);
+      ty += 62;
+    }
+    ctx.fillStyle = 'hsl(168 55% 40%)';
+    ctx.beginPath();
+    ctx.arc(x0 + 26, ty + 4, 26, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `800 26px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(from[0]!.toUpperCase(), x0 + 26, ty + 5);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d4e0f8';
+    ctx.font = `700 23px ${SANS}`;
+    ctx.fillText(fit(ctx, from, PW - 150), x0 + 66, ty - 10);
+    ctx.fillStyle = '#7d8eae';
+    ctx.font = `500 20px ${SANS}`;
+    ctx.fillText(`to ${o.name}  ·  ${time}`, x0 + 66, ty + 18);
+    ty += 74;
+    // the opening line, large, then grey lines for the rest of the letter
+    ctx.fillStyle = '#e4ecfb';
+    ctx.font = `600 38px ${SANS}`;
+    ctx.fillText(fit(ctx, o.snippet, PW - 80), x0, ty);
+    ty += 46;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = '#1e2a40';
+      rr(ctx, x0, ty + i * 30, PW - 80 - (i === 3 ? 190 : (i * 47) % 90), 14, 7);
+      ctx.fill();
+    }
+    // the reply box: waits empty in `open`, types the reply in `reply`, then reads sent
+    if ((state === 'open' || state === 'reply') && o.reply) {
+      const bx = x0 - 8;
+      const bw = PW - 64;
+      const by = H - 200;
+      const bh = 150;
+      const typed = state === 'reply' ? Math.floor(Math.min(progress, 1) * o.reply.length + 1e-6) : 0;
+      const sent = state === 'reply' && progress >= 1;
+      ctx.fillStyle = sent ? '#0d2a26' : '#111a2a';
+      rr(ctx, bx, by, bw, bh, 22);
+      ctx.fill();
+      ctx.strokeStyle = sent ? '#19e0bb' : '#2a3b5c';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = sent ? '#5ee9cb' : '#6f83a8';
+      ctx.font = `700 20px ${SANS}`;
+      ctx.fillText(sent ? `↩ ${o.name} replied` : `Reply from ${o.name}`, bx + 26, by + 32);
+      ctx.fillStyle = '#f4f8ff';
+      ctx.font = `700 40px ${SANS}`;
+      const text = o.reply.slice(0, typed);
+      ctx.fillText(text, bx + 26, by + 92);
+      if (!sent && state === 'reply') {
+        // the caret
+        const cw = ctx.measureText(text).width;
+        ctx.fillStyle = '#4c9dff';
+        ctx.fillRect(bx + 30 + cw, by + 70, 4, 44);
+      }
+      // the send chip, top right of the box (clear of the reply's line)
+      const cw2 = 118;
+      ctx.fillStyle = sent ? '#19c8a7' : typed > 0 ? '#1466ff' : '#22304a';
+      rr(ctx, bx + bw - cw2 - 16, by + 12, cw2, 38, 19);
+      ctx.fill();
+      ctx.fillStyle = sent ? '#04221c' : '#ffffff';
+      ctx.font = `800 20px ${SANS}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(sent ? 'Sent ✓' : 'Send', bx + bw - cw2 / 2 - 16, by + 32);
+      ctx.textAlign = 'left';
+    }
+  }
+  // status bar
+  ctx.fillStyle = '#0e1523';
+  ctx.fillRect(0, H - 34, W, 34);
+  ctx.fillStyle = arrived ? '#4ade80' : '#f59e0b';
+  ctx.beginPath();
+  ctx.arc(22, H - 17, 6, 0, TAU);
+  ctx.fill();
+
+  if (state === 'received') {
+    // the banner: large, across the middle of the screen, glowing
+    const bw = 700;
+    const bh = 150;
+    const bx = (W - bw) / 2;
+    const by = H / 2 - bh / 2 - 10;
+    const glow = ctx.createRadialGradient(W / 2, by + bh / 2, 40, W / 2, by + bh / 2, 520);
+    glow.addColorStop(0, 'rgba(60, 255, 214, 0.42)');
+    glow.addColorStop(1, 'rgba(60, 255, 214, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#062722';
+    rr(ctx, bx, by, bw, bh, 28);
+    ctx.fill();
+    ctx.strokeStyle = '#19e0bb';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.fillStyle = '#19e0bb';
+    rr(ctx, bx + 32, by + 33, 84, 84, 20);
+    ctx.fill();
+    ctx.fillStyle = '#04221c';
+    ctx.font = `800 52px ${SANS}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('✉', bx + 74, by + 77);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d6fff6';
+    ctx.font = `900 62px ${SANS}`;
+    ctx.fillText('EMAIL RECEIVED', bx + 144, by + 70);
+    ctx.fillStyle = '#7fd9c6';
+    ctx.font = `600 23px ${SANS}`;
+    ctx.fillText(fit(ctx, `${from} · ${time}`, bw - 170), bx + 146, by + 116);
+  }
+}
+
+/** A laptop display canvas, 1.48:1 (the Blender laptop's panel). */
+function screenCanvas(W: number, H: number): [HTMLCanvasElement, Ctx, CanvasTexture] {
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const t = new CanvasTexture(canvas);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
+  return [canvas, ctx, t];
+}
+
+/** a faint pixel grid: a screen reads as a screen up close */
+function scanlines(ctx: Ctx, W: number, H: number): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+}
+
+export interface ArrivalScreens {
+  idle: CanvasTexture;
+  received: CanvasTexture;
+  /** with `opts.reply`: the message open, the reply box waiting */
+  open?: CanvasTexture;
+  /** with `opts.reply`: the reply being typed; `draw(progress)` redraws it (only when the typed length changes) */
+  reply?: { texture: CanvasTexture; draw(progress: number): void };
+}
+
+/**
+ * The arrival laptop's display, 1.48:1 (the Blender laptop's panel). With no options: the original two states
+ * (the office detour's default). With `opts`: one recipient's inbox (see `drawLetter`), plus the open and reply
+ * states when `opts.reply` is given.
+ */
+export function arrivalScreens(opts?: ArrivalOpts): ArrivalScreens {
   const W = 1024;
   const H = 692;
-  const make = (state: 'idle' | 'received'): CanvasTexture => {
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d')!;
-    drawMail(ctx, W, H, state, mulberry32(state === 'idle' ? 11 : 23));
-    // a faint pixel grid and a vignette make a screen read as a screen up close
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
-    const t = new CanvasTexture(canvas);
-    t.colorSpace = SRGBColorSpace;
-    t.anisotropy = 8;
+  if (!opts) {
+    const make = (state: 'idle' | 'received'): CanvasTexture => {
+      const [, ctx, t] = screenCanvas(W, H);
+      drawMail(ctx, W, H, state, mulberry32(state === 'idle' ? 11 : 23));
+      scanlines(ctx, W, H);
+      return t;
+    };
+    return { idle: make('idle'), received: make('received') };
+  }
+  const make = (state: LetterState, progress = 0): CanvasTexture => {
+    const [, ctx, t] = screenCanvas(W, H);
+    drawLetter(ctx, W, H, state, opts, progress);
+    scanlines(ctx, W, H);
     return t;
   };
-  return { idle: make('idle'), received: make('received') };
+  const out: ArrivalScreens = { idle: make('idle'), received: make('received') };
+  if (opts.reply) {
+    out.open = make('open');
+    const [, ctx, texture] = screenCanvas(W, H);
+    let shown = -1;
+    const reply = opts.reply;
+    const draw = (progress: number): void => {
+      const p = Math.min(Math.max(progress, 0), 1);
+      const key = p >= 1 ? reply.length + 1 : Math.floor(p * reply.length + 1e-6);
+      if (key === shown) return;
+      shown = key;
+      drawLetter(ctx, W, H, 'reply', opts, p);
+      scanlines(ctx, W, H);
+      texture.needsUpdate = true;
+    };
+    draw(0);
+    out.reply = { texture, draw };
+  }
+  return out;
 }

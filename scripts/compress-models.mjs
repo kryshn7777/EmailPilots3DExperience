@@ -1,5 +1,5 @@
-// Compresses the buildings', trees', biplane's, ship's, cars', props', office and people GLBs in place (public/models/city-kit, homes, ship,
-// cars, biplane, airliner, city-props, yard-props, office, people, birds):
+// Compresses the buildings', trees', biplane's, ship's, cars', props', office, people and ending GLBs in place (public/models/city-kit, homes,
+// ship, cars, biplane, airliner, city-props, yard-props, office, people, birds, cafe, comm-tower, recipient-room):
 // welds identical vertices, quantizes them (KHR_mesh_quantization) and packs the buffers with
 // meshopt (EXT_meshopt_compression), which KitCity decodes with three's MeshoptDecoder.
 //
@@ -18,7 +18,8 @@ import { meshopt, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
 const DIRS = ['public/models/city-kit', 'public/models/homes', 'public/models/biplane', 'public/models/airliner', 'public/models/ship', 'public/models/cars',
-  'public/models/city-props', 'public/models/yard-props', 'public/models/office', 'public/models/people', 'public/models/birds', 'public/models/cafe'];
+  'public/models/city-props', 'public/models/yard-props', 'public/models/office', 'public/models/people', 'public/models/birds', 'public/models/cafe',
+  'public/models/comm-tower', 'public/models/recipient-room'];
 const force = process.argv.includes('--force');
 
 await MeshoptDecoder.ready;
@@ -49,7 +50,10 @@ for (const dir of DIRS) {
       // the birds' feather cards sample slots a few texels wide in a 1024 atlas: 14-bit UVs, 10-bit normals
       : dir.endsWith('/birds') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
       // the café terrace's props sample 256 px tiles of one 1024 atlas: 14-bit UVs too
-      : dir.endsWith('/cafe') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
+      : dir.endsWith('/cafe') ? { quantizeNormal: 10, quantizeTexcoord: 14 }
+      // the ending's tower and house sample 256 px cells of their atlases, and the tower's glass tube carries its
+      // arc length in uv.y for the light streak: 14-bit UVs, 10-bit normals
+      : dir.endsWith('/comm-tower') || dir.endsWith('/recipient-room') ? { quantizeNormal: 10, quantizeTexcoord: 14 } : {};
     await doc.transform(weld(), meshopt({ encoder: MeshoptEncoder, level: 'high', ...extra }));
     await io.write(path, doc);
     const size1 = statSync(path).size;

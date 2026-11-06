@@ -1,0 +1,38 @@
+{
+ "units": "world units; Y up; origin on the ground at the middle of the window wall's outer face; +x into the house",
+ "window": {
+  "z0": -1.2,
+  "z1": 1.2,
+  "y0": 0.9,
+  "y1": 2.5
+ },
+ "wall": 0.25,
+ "depth": 10.5,
+ "half": 5.25,
+ "eave": 3.9,
+ "ridge": 8.001749539160267,
+ "side_window": {
+  "x": 6.5,
+  "half": 0.8,
+  "y0": 1.0,
+  "y1": 2.6
+ },
+ "tiers": {
+  "high": {
+   "file": "house.glb",
+   "tris": 4596,
+   "maps": [
+    "house-color.webp",
+    "house-emissive.webp"
+   ]
+  },
+  "low": {
+   "file": "house-lean.glb",
+   "tris": 604,
+   "maps": [
+    "house-lean-color.webp",
+    "house-lean-emissive.webp"
+   ]
+  }
+ }
+}
