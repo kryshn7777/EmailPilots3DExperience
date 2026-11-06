@@ -53,16 +53,16 @@ interface Beat {
   followFrom?: number;
 }
 
-/**
- * Off the tower's far face, where the camera waits for the dart to burst out (see the 'burst' beat): north of the
- * tower over the canyon, a little short of its east face and a little above the exit, so the lens still looks the
- * way the dart flies (about 30 degrees off it) and the dart comes out past the tower's corner in front of it.
- */
 /** how far either side (story-t) the chase camera's frame averages the line's heading from the canyon to H */
 const CHASE_SMOOTH = 0.005;
 /** how long (story-t) a following hold takes to come up to its share of the dart's speed */
 const FOLLOW_EASE = 0.025;
 
+/**
+ * Off the tower's far face, where the camera waits for the dart to burst out (see the 'burst' beat): north of the
+ * tower over the canyon, short of its east face and a little above the exit, so the lens still looks the way the
+ * dart flies (under 30 degrees off it) and the dart comes out past the tower's corner in front of it.
+ */
 const BURST_CAM: [number, number, number] = [
   DETOUR_TOWER.x + DETOUR_TOWER.hx - 8.5,
   DETOUR_TOWER.entryY + 2.3,
@@ -103,10 +103,9 @@ const BEATS: Beat[] = [
   // just past it, not into the tower: on a phone the dart was out at the frame's edge)
   { id: 'glass', at: [0.758, 0.784, AT_GLASS, AT_GLASS], lag: 0.82, side: 0.2, ahead: 0.35, fov: 0.88, bars: 0.35 },
   // out of the far face: after the cut the camera is off the tower's north side (BURST_CAM) and watches the dart
-  // burst out past the corner, shards first, then dollies after it as it climbs away, and settles into the chase
-  // once the chase position is clear of the tower
-  // (it holds still while the dart bursts out slowly, and sets off after it once the dart is back at the line's
-  // speed, at the end of the detour)
+  // burst out past the corner, shards first; it holds still while the dart bursts out slowly, sets off after it
+  // as the dart picks up the line's speed (at the end of the detour), and settles into the chase well clear of the
+  // tower
   { id: 'burst', at: [OUT_GLASS, OUT_GLASS, 0.814, 0.866], holdAt: BURST_CAM, follow: 1, followFrom: OUT_GLASS + 0.004, fov: 0.92, bars: 0.35 },
 ];
 

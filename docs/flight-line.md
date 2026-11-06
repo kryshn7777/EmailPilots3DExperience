@@ -32,8 +32,9 @@ U-turn), climbed it to y 40 over the city, swung it north, dived and joined the 
 | 0.78 - 0.791 (u 0 - 0.08) | straight at the lit west face; the dart hits the glass at speed | the chase; white flare, cut |
 | u 0.08 - 0.66 | the office: every monitor flickers red on the same `Dear all, BCC: +231` (u 0.10 - 0.135) and dies; the dart crosses the room in one straight level line at one speed (x -0.7, y 1.55 m, z 0 -> 10 m), over the one live laptop; the envelope drops out of its belly at u 0.33 and goes into the screen by 0.45; the screen flips to received at 0.47; the card `DELIVERED · Lena` 0.48 - 0.64 | a dolly beside the dart (1.05 m to its right, 1.85 m up, 1.55 m behind), looking ahead and, over the laptop, down at the screen |
 | u 0.66 | the dart reaches the far window: flare, cut | |
-| u 0.66 - 1 (t 0.798 - 0.802) | the dart and the glass shards burst out of the EAST face, slow at first, picking up to the line's speed by u 0.99 | `burst`: off the tower's north side over the canyon (x 211.6, y 19.8, z 2.35), dollying after the dart (follow 0.65); the dart comes out past the tower's far corner |
-| 0.802 - 0.84 | the same climb carries on (24 deg), the copilot docks on the far wing (from 0.806), the camera settles into the chase as the chase position clears the tower (by 0.84) | the copilot chase: close (lag 0.011), high and out to the canyon side (offsetSide 2.3) |
+| u 0.66 - 1 (t 0.798 - 0.802) | the dart and the glass shards burst out of the EAST face, slow at first, picking up to the line's speed by u 0.99 | `burst`: held off the tower's north side over the canyon (x 210.1, y 20.3, z 2.35), looking under 30 deg off the flight; the shards and then the dart come out past the tower's far corner |
+| 0.802 - 0.866 | the same climb carries on (24 deg), the copilot docks on the far wing (from 0.806) | the held camera sets off after the dart at its speed (eased in over 0.025 t), then settles into the chase (0.814 - 0.866), which is well clear of the tower by then |
+| 0.82 - 0.88 | the copilot chase | close (lag 0.011), a little high and to the canyon side (offsetSide 1.0), so a phone keeps the dart in frame |
 | 0.82 - 0.86 | one crest, radius 25, top (234.4, 24.0) | |
 | 0.86 - 0.88 | one straight descent at -28 deg into H | |
 
@@ -85,13 +86,22 @@ the check says so:
 
 ### Numbers (before -> after)
 
-See the WP-C report for the full table; the headline rows:
+"Before" is the line and the detour as they were (the scene direction's audit, `scratchpad/direction/tools`, and
+`check-pace` on the commit before this work); "after" is `check-line` / `check-pace` on this one.
 
 | row | before | after |
 | :-- | --: | --: |
-| x reversal (city -> H) | the detour reversed x 215 -> 195 | none |
-| office: the dart's heading in the room | a full circle | constant (0.0 deg) |
-| largest yaw rate outside the pull-up | 7.1 deg/unit | 0.4 |
-| total yaw variation | 40 + 86 deg | 24 deg, one change of direction |
-| crest pushover | 8.6 deg/unit | <= 4 (radius 25) |
-| copilot camera acceleration p95 (check-pace) | 28.8e-4 /px^2 | about 6 - 8e-4 |
+| x reversal, city -> H | the detour reversed x 215 -> 195 and looped back | none |
+| the dart's heading in the office | a full circle (106 -> 177 -> -12 -> -177 -> -77 deg) | constant, 0.0 deg spread |
+| the dart's speed across the office | stop, circle, turn | constant per u and per pixel (0.0%) |
+| the dart off the flight line outside the office | up to about 25 units | 0 (the office owns no frame outside its cuts) |
+| largest yaw rate outside the pull-up, t 0.745-0.88 | 7.1 deg/unit | 0.40 deg/unit |
+| yaw rate inside the pull-up | an S-jink, up to 8.3 deg/unit, both ways twice | 5.1 deg/unit, out and back once |
+| total yaw variation, the drift's start -> H | 40 deg (the jink), +86 after | 24.2 deg, one change of direction |
+| pitch rate after the pull-up (the crest) | 8.6 deg/unit (86 deg pushover in 10 units) | 3.97 deg/unit (radius 25) |
+| the straight through the tower | none | yaw 0.04 deg, pitch 0.21 deg over 4.4 before to 4.1 after |
+| camera look heading in the city across the detour | 180 deg swings | 26 deg range, never reversed |
+| copilot camera acceleration (check-pace, p95 / max) | 28.8e-4 / 136.6e-4 /px^2 | 7.9e-4 / 18.5e-4 |
+| camera acceleration t 0.74-0.90, as shot (p95 / max) | - | 6.1e-4 / 12.0e-4 |
+| world speed per px across city -> copilot, copilot -> landing | 1.04, 1.014 | 1.024, 1.013 |
+| world speed per px across the detour's edges | (story-t stopped) | 1.002, 1.002 |
