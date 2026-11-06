@@ -119,9 +119,9 @@ export class Flock {
   }
 
   update(t: number, time: number, path: FlightPath, camera: Camera): void {
-    // over the town only: not inside the room, and gone again by the time the fog closes over the
-    // district (it used to follow the plane the whole way to the arrival office)
-    const show = MathUtils.smoothstep(t, 0.155, 0.195) * (1 - MathUtils.smoothstep(t, 0.27, 0.31));
+    // over the town only: not inside the room, and gone by 0.27, before the campaign's V rises out of the
+    // cloud sea, so other people's mail never mixes with ours (it used to follow the plane to the arrival office)
+    const show = MathUtils.smoothstep(t, 0.155, 0.195) * (1 - MathUtils.smoothstep(t, 0.24, 0.27));
     this.group.visible = show > 0.01;
     if (!this.group.visible) return;
 

@@ -9,14 +9,14 @@
  * Honesty (direction §0, FEATURES.md Appendix B; the same guardrails as copy.ts):
  *  - the names, roles, clock times and "0 bounces" are the site's own hero mock-up, so on screen the
  *    campaign is always labelled SAMPLE CAMPAIGN;
- *  - no price, no tier, no trial, no placement promise; opens are not tracked, by design;
+ *  - no price and no plan names, no placement promise; opens are not tracked, by design;
  *  - "spam" only for the folder / the filters, never for what the user sends.
  *
  * Pure: no three, no DOM, no allocation in the per-frame functions (`delivered`, `clockAt`,
  * `nextRow`, `cardAt` writes into the object it is given). It runs under
  * `node --experimental-strip-types` (scripts/check-fleet.mjs tests it).
  */
-import { T_S } from '../webgl/rig/detour';
+import { D_T, T_S } from '../webgl/rig/detour';
 
 export type FleetKind =
   /** a scout or a V wingtip that lands on a lawn in the town */
@@ -60,13 +60,13 @@ export interface FleetRow {
 }
 
 /**
- * Where in the office detour (its clock u, 0..1) Lena's envelope goes into the live laptop. Her row's
- * `land` is T_S, the detour's story-t, for the table's order and the clock; the landing itself is
- * keyed on u (see `landed`).
+ * Where in the office detour (its clock u, 0..1) Lena's envelope goes into the live laptop. Story-t runs
+ * through the detour (t = T_S + D_T u, rig/detour.ts), so her row simply lands at T_S + D_T * OFFICE_U.
  */
 export const OFFICE_U = 0.45;
+const OFFICE_T = T_S + D_T * OFFICE_U;
 /**
- * The hero's received moment. MUST match `RECEIVED_T` in src/story/chapters.ts (WP-C adds it); the
+ * The hero's received moment. MUST match `RECEIVED_T` in src/story/chapters.ts (check-fleet compares); the
  * screen flips to EMAIL RECEIVED and the confetti fires there.
  */
 export const HERO_RECEIVED_T = 0.99;
@@ -113,6 +113,9 @@ export const REPLY = {
   /** it passes the ghosts; they unfold and flutter down */
   cancel: 0.329,
   ghosts: ['Follow-up · day 3', 'Follow-up · day 7'],
+  /** the one chip over both ghosts, then once the reply has passed them */
+  waiting: '2 follow-ups · day 3 · day 7',
+  cancelled: '✕ 2 follow-ups cancelled',
 } as const;
 
 /** The 42, in landing order (direction §4.1's table). */
@@ -148,7 +151,7 @@ export const FLEET: readonly FleetRow[] = [
   { n: 29, name: 'Chloe', role: 'decision-maker', kind: 'envelope', land: 0.756, clock: '11:23', where: 'a window in the canyon' },
   { n: 30, name: 'Diego', role: 'early user', kind: 'envelope', land: 0.766, clock: '11:26', where: 'a window in the canyon' },
   { n: 31, name: 'Elif', role: 'candidate', kind: 'window', land: 0.772, clock: '11:31', where: 'a window in the canyon' },
-  { n: 32, name: 'Lena', role: 'IT lead, working late', kind: 'office', land: T_S, clock: '11:37', where: 'the IT office' },
+  { n: 32, name: 'Lena', role: 'IT lead, working late', kind: 'office', land: OFFICE_T, clock: '11:37', where: 'the IT office' },
   { n: 33, name: 'Felix', role: 'prospect', kind: 'window', land: 0.806, clock: '11:41', where: 'the city below the climb' },
   { n: 34, name: 'Grace', role: 'client', kind: 'wave', land: 0.812, clock: '11:47', where: 'the skyline' },
   { n: 35, name: 'Hana', role: 'hiring manager', kind: 'wave', land: 0.818, clock: '11:50', where: 'the skyline' },
@@ -186,13 +189,11 @@ export function landOf(r: FleetRow, landings?: Landings): number {
 }
 
 /**
- * Has row `r` landed at story-t `t` (detour clock `u`)? The office row is keyed on u inside the
- * detour (u > 0): landed from OFFICE_U. Outside it (u = 0) it is landed once t is past T_S, which
- * holds for both detour mappings (t frozen at T_S while u runs, or t running T_S -> T_E with
- * u = (t - T_S) / D_T): either way t > T_S with u = 0 only happens after the office.
+ * Has row `r` landed at story-t `t` (detour clock `u`)? Every row by its time; inside the detour
+ * (0 < u < 1) the office row is read off u itself (the same moment, t = T_S + D_T u, without rounding).
  */
 export function landed(r: FleetRow, t: number, u = 0, landings?: Landings): boolean {
-  if (r.kind === 'office') return u > 0 && u < 1 ? u >= OFFICE_U : t > T_S;
+  if (r.kind === 'office' && u > 0 && u < 1) return u >= OFFICE_U;
   return t >= landOf(r, landings);
 }
 
@@ -246,8 +247,7 @@ const ROW_MIN = FLEET.map((r) => minutes(r.clock));
 
 /**
  * The campaign clock at story-t `t`, in minutes after midnight (fractional): CAMPAIGN.start until
- * takeoff, then piecewise-linear through every row's (land, clock), held at the last. Lena's knot is
- * at T_S, so the clock stands at her minute through the office whichever way the detour maps t.
+ * takeoff, then piecewise-linear through every row's (land, clock), held at the last.
  */
 export function clockAt(t: number, _u = 0, landings?: Landings): number {
   let pt = CLOCK_FROM;
@@ -334,6 +334,13 @@ export function chipLabel(r: FleetRow, isLanded: boolean): string {
 export function slotLabel(r: FleetRow): string {
   return `${r.name} · ${r.clock}`;
 }
+/** the same, built once per row (index n - 1), for the per-frame callers */
+export const CHIP_FLYING: readonly string[] = FLEET.map((r) => chipLabel(r, false));
+export const CHIP_LANDED: readonly string[] = FLEET.map((r) => chipLabel(r, true));
+export const CHIP_SLOT: readonly string[] = FLEET.map((r) => slotLabel(r));
+/** a landed chip with the campaign clock ('✓ Noor · 10:03') and one with the role ('✓ Marco · café owner') */
+export const CHIP_DONE: readonly string[] = FLEET.map((r) => `✓ ${r.name} · ${r.clock}`);
+export const CHIP_ROLE: readonly string[] = FLEET.map((r) => `✓ ${r.name} · ${r.role}`);
 
 /** The flight report at the crest (rows revealed one per REPORT.step from REPORT.from). */
 export const REPORT = {
@@ -412,9 +419,9 @@ let capStr = '';
 
 /**
  * What the fleet card shows at story-t `t` (detour clock `u`), written into `out`. Pure in its
- * arguments: a special moment (the reply, the storm, the beacon, the skip, the copilot, the report,
- * the tower, the end) wins, then a fresh delivery's green toast, then the ambient line (the
- * desk, the pre-flight, the orange countdown, the ocean's daily cap).
+ * arguments: a special moment (the reply, the storm, the beacon, the skip, the ocean's daily cap,
+ * the copilot, the report, the tower, the end) wins, then a fresh delivery's green toast, then the
+ * ambient line (the desk, the pre-flight, the orange countdown).
  */
 export function cardAt(t: number, u = 0, out: CardState = newCardState(), landings?: Landings): CardState {
   const inOffice = u > 0 && u < 1;
@@ -452,20 +459,15 @@ export function cardAt(t: number, u = 0, out: CardState = newCardState(), landin
   if (t >= 0.8) return put(out, CARD.copilot, CARD.copilot, 'info');
   // the no-fly zone: the 43rd is refused
   if (t >= SKIPPED.t && t < SKIPPED.t + 0.016) return put(out, CARD.skip, CARD.skipShort, 'bad');
-  // the beacon: the three auth rings
-  if (t >= 0.532 && t < 0.547) return put(out, CARD.auth, CARD.auth, 'ok');
+  // the beacon: the beam locks on, the dart goes through the lamp and three auth rings stamp out of it
+  if (t >= 0.54 && t < 0.559) return put(out, CARD.auth, CARD.auth, 'ok');
   // the storm: the bomber is struck, ours flies through
   if (t >= 0.424 && t < 0.448) return put(out, CARD.bccGreen, CARD.bccGreenShort, 'ok');
   if (t >= 0.403 && t < 0.424) return put(out, CARD.bccRed, CARD.bccRed, 'bad');
   // the formation: Hugo's reply cancels his follow-ups
   if (t >= REPLY.rise && t < REPLY.rise + 0.007) return put(out, CARD.reply, CARD.reply, 'reply');
 
-  // a fresh delivery
-  const last = lastLanded(t, u, landings);
-  if (last && last.kind !== 'office' && last.kind !== 'hero' && t < landOf(last, landings) + TOAST_HOLD) {
-    return put(out, TOASTS[last.n - 1]!, TOASTS_SHORT[last.n - 1]!, 'ok');
-  }
-  // the ocean: the cadence against the daily cap
+  // the ocean: the cadence against the daily cap (the horizon's columns carry the names on their chips)
   if (t >= 0.452 && t < 0.515) {
     out.meter = n / CAMPAIGN.cap;
     out.meterKind = 'cap';
@@ -474,6 +476,11 @@ export function cardAt(t: number, u = 0, out: CardState = newCardState(), landin
       capStr = CARD.dailyCap(n);
     }
     return put(out, capStr, capStr, 'wait');
+  }
+  // a fresh delivery
+  const last = lastLanded(t, u, landings);
+  if (last && last.kind !== 'office' && last.kind !== 'hero' && t < landOf(last, landings) + TOAST_HOLD) {
+    return put(out, TOASTS[last.n - 1]!, TOASTS_SHORT[last.n - 1]!, 'ok');
   }
   if (t < 0.098) return put(out, CARD.desk, CARD.desk, 'info');
   if (t < 0.131) return put(out, CARD.preflightCheck, CARD.preflightCheck, 'info');

@@ -157,6 +157,8 @@ const SHIP_DECK_SCRATCH = new Vector3();
 const SEA_FADE_DELAY = 0.012;
 /** seconds for the lamp to come full circle */
 const BEAM_PERIOD = 7;
+/** the sweep's tilt below level (it rakes the sea and crosses the lens), radians */
+const BEAM_TILT = -0.26;
 
 /**
  * The sea fog the tower and the freighter come out of: an extinction by DISTANCE. Each fragment's
@@ -476,7 +478,7 @@ export class Beacon {
     this.beam.rotation.z = Math.PI / 2;
     this.beam.position.x = 23;
     this.beamPivot.position.y = 12.2 * TOWER_SCALE;
-    this.beamPivot.rotation.z = -0.26;
+    this.beamPivot.rotation.z = BEAM_TILT;
     this.beamPivot.add(this.beam);
     this.group.add(this.beamPivot);
     this.mirrored(this.beamPivot);
@@ -851,7 +853,18 @@ varying vec3 vBeamWorld;
     return load;
   }
 
-  // --- BatchFleet: where on the freighter a batch dart lands ---
+  // --- BatchFleet: the lock-on, and where on the freighter a batch dart lands ---
+  private lock = 0;
+  private lockAim = new Vector3();
+  /**
+   * The domain check (direction §3, CH 06b): the beam stops sweeping and swings onto `aim` (world; the
+   * hero dart on its way in) by `weight`, 0..1. BatchFleet sets it every frame before update(), pure in t.
+   */
+  lockOn(weight: number, aim: Vector3): void {
+    this.lock = MathUtils.clamp(weight, 0, 1);
+    this.lockAim.copy(aim);
+  }
+
   /**
    * World position of `spot` (the model's metres: bow +x, y up, see SHIP_DECK_SPOTS) on the freighter
    * at story-t `t`: its place and heading on SHIP_TRACK, without the swell (pure in t).
@@ -888,7 +901,24 @@ varying vec3 vBeamWorld;
     // page is moving: no scroll keyframes, no beat staged for the lens. The beam crosses the plane
     // and the camera as often as the lamp comes round to them.
     this.beamYaw = (time / BEAM_PERIOD) * Math.PI * 2;
+    // the lock-on (BatchFleet): the sweep swings round the short way onto the dart and tips down to it
+    let beamTilt = BEAM_TILT;
+    if (this.lock > 0) {
+      // on the dart itself while it is out in the rain; within a few units of the lamp, held on the way it came in
+      const near = MathUtils.smoothstep(planePos.distanceTo(this.towerTop), 3, 6);
+      this.tmpV.copy(this.lockAim).lerp(planePos, near);
+      const dx = this.tmpV.x - this.towerTop.x;
+      const dz = this.tmpV.z - this.towerTop.z;
+      const aimYaw = Math.atan2(-dz, dx);
+      const aimTilt = MathUtils.clamp(Math.atan2(this.tmpV.y - this.towerTop.y, Math.hypot(dx, dz)), -0.9, 0.5);
+      const wrapped = this.beamYaw - Math.floor(this.beamYaw / (Math.PI * 2)) * Math.PI * 2;
+      let d = aimYaw - wrapped;
+      d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+      this.beamYaw = wrapped + d * this.lock;
+      beamTilt = MathUtils.lerp(BEAM_TILT, aimTilt, this.lock);
+    }
     this.beamPivot.rotation.y = this.beamYaw;
+    this.beamPivot.rotation.z = beamTilt;
     this.beamMaterial.uniforms.uTime!.value = time;
     // the lamp comes on out of the murk once the sea is in (and stands down entering CH7 —
     // inside-the-cone frames wash teal); the tower forms out of the mist after it
@@ -929,7 +959,7 @@ varying vec3 vBeamWorld;
     // first thing a phone saw of the lighthouse). The sea's glint, the lit rain and the flare all follow it.
     const lampSeen = MathUtils.smoothstep(towerClear, 0.0, 0.35);
     this.beamMaterial.uniforms.uIntensity!.value =
-      0.8 * lampOn * lampSeen * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
+      0.8 * lampOn * lampSeen * (1 - MathUtils.smoothstep(t, 0.575, 0.61)) * (1 + 0.7 * this.lock);
     this.oceanMaterial.uniforms.uTime!.value = time;
     (this.oceanMaterial.uniforms.uCamPos!.value as Vector3).copy(camera.position);
     // lightning lights the sea, the lamp's sweep rakes across it
@@ -995,7 +1025,7 @@ varying vec3 vBeamWorld;
     const camHit = Math.pow(Math.max((beamX * dx + beamZ * dz) / len, 0), 30) * lampGlow;
     // the delivery: the lamp flares white as the dart goes in, whichever way the beam is turned
     // (a lamp is seen through fog a little before the tower under it, but only a little: it comes up with it)
-    this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32) * lampOn * MathUtils.smoothstep(towerClear, 0, 0.6);
+    this.flareMaterial.opacity = Math.max(camHit * 0.95 * (1 - 0.7 * this.lock), delivery * 0.32 + 0.12 * this.lock) * lampOn * MathUtils.smoothstep(towerClear, 0, 0.6);
     this.flare.scale.setScalar(5 * TOWER_SCALE * (1 + delivery * 0.45));
 
     // — the freighter steams round the islet —
