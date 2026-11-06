@@ -23,6 +23,7 @@ import {
   Quaternion,
   TextureLoader,
   Vector3,
+  Vector4,
 } from 'three';
 import type { Material, Texture, WebGLProgramParametersWithUniforms } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -746,6 +747,32 @@ export class StreetCars {
       if (right) this.qw.multiply(this.qFlip);
       this.qw.multiply(this.qSpin.setFromAxisAngle(this.Z, right ? spin : -spin));
       tier.wheels!.setMatrixAt(k * 4 + w, this.m4.compose(this.p, this.qw, this.sc.set(car.scale, car.scale, car.scale)));
+    }
+  }
+
+  /**
+   * The moving cars nearest `x` (in this group's frame), for the wet road's mirror: x, z, signed half length
+   * (+ when the nose points +x), brake level. Fills `out` in place (unused slots are sent far away).
+   */
+  nearLights(x: number, out: Vector4[]): void {
+    const n = out.length;
+    let filled = 0;
+    for (const v of out) v.set(1e5, 1e5, 1, 0);
+    if (!this.ready || !this.group.visible) return;
+    for (let i = 0; i < this.moving; i++) {
+      const car = this.cars[i]!;
+      if (car.scale < 0.05) continue;
+      const d = Math.abs(car.x - x);
+      // insertion into the short list, nearest first
+      let k = Math.min(filled, n);
+      while (k > 0 && Math.abs(out[k - 1]!.x - x) > d) {
+        if (k < n) out[k]!.copy(out[k - 1]!);
+        k--;
+      }
+      if (k >= n) continue;
+      const half = (this.types[car.type]!.length * car.scale) / 2;
+      out[k]!.set(car.x, car.z, Math.cos(car.yaw) > 0 ? half : -half, car.brake);
+      if (filled < n) filled++;
     }
   }
 

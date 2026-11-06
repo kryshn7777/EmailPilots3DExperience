@@ -8,7 +8,7 @@ import {
   type PerspectiveCamera,
   type Scene,
   type Texture,
-  type Vector3,
+  Vector3,
   type WebGLRenderer,
 } from 'three';
 
@@ -50,13 +50,22 @@ export class ReflectionProbe {
   private faces: PerspectiveCamera[];
   private face = 0;
   private materials = new Map<MeshStandardMaterial, number>();
+  /** where the cube was last taken (world): the road's box-projected lookup reads from here */
+  readonly center = new Vector3();
+  /** whole cubes rendered so far */
+  cubes = 0;
 
-  constructor(size = 256) {
+  /**
+   * `shared` false makes a private probe that is not handed out as `current` (the city road's once-rendered
+   * canyon on phones, which nothing else should pick up).
+   */
+  constructor(size = 256, shared = true) {
     this.target = new WebGLCubeRenderTarget(size, {
       type: HalfFloatType, generateMipmaps: false, minFilter: LinearFilter, magFilter: LinearFilter,
     });
     this.cube = new CubeCamera(0.05, 400, this.target);
     this.faces = this.cube.children as PerspectiveCamera[];
+    if (!shared) return;
     ReflectionProbe.current = this;
     for (const [material, intensity] of ReflectionProbe.waiting) this.apply(material, intensity);
     ReflectionProbe.waiting.clear();
@@ -82,6 +91,7 @@ export class ReflectionProbe {
     if (ground === null) return;
     this.cube.position.set(eye.x, Math.min(eye.y, ground + lift), eye.z);
     this.cube.updateMatrixWorld(true);
+    this.center.copy(this.cube.position);
     const shown = hide.map((o) => o.visible);
     for (const o of hide) o.visible = false;
     const autoShadows = renderer.shadowMap.autoUpdate;
@@ -97,6 +107,7 @@ export class ReflectionProbe {
     // a whole cube since the last flag: three re-filters it for every roughness on next use
     if (++this.face === 6) {
       this.face = 0;
+      this.cubes++;
       this.target.texture.needsPMREMUpdate = true;
     }
   }

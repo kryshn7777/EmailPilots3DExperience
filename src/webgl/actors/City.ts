@@ -19,9 +19,12 @@ import {
   PointsMaterial,
   Quaternion,
   RepeatWrapping,
+  type Object3D,
+  type Scene,
   type Texture,
   TextureLoader,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import {
   CITY_EXTENT,
@@ -42,6 +45,8 @@ import { CityLife } from './CityLife';
 import { CAFE_SEAT, CafeTerrace } from './CafeTerrace';
 import { pavingMaps } from '../bake/RoomTextures';
 import { applyStreets, setLampField } from '../materials/Streets';
+import { MAX_NEON, roadReflect } from '../materials/RoadReflect';
+import { RoadDecals } from './RoadDecals';
 import { PaperPlane } from './PaperPlane';
 import { asset } from '../asset';
 import { mulberry32 } from '../util';
@@ -49,6 +54,9 @@ import type { FlightPath } from '../rig/FlightPath';
 import type { Quality } from '../quality';
 
 const WINDOW_AMBER = new Color('#ffc96b');
+/** where the phones' canyon cube is taken: over the stretch of road the flight comes down onto (city frame) */
+const ROAD_ENV_X = -8;
+const ROAD_ENV_Y = 1.5;
 const DELIVERIES = 5;
 /** how close (world units) a street tree stands to the dive for the ~50k-triangle model, and for the ~15k one (HIGH) */
 const CITY_TREE_ULTRA = 4.5;
@@ -89,6 +97,20 @@ export class City {
   constructor(anchor: Vector3, path: FlightPath, quality: Quality) {
     this.group.position.set(anchor.x, 0, 1);
 
+    // what the wet street mirrors (materials/RoadReflect.ts): HIGH the Engine's live probe at the camera, phones
+    // a cube of the canyon rendered once (captureRoadEnv), both read box-projected against the canyon's walls
+    const shared = ReflectionProbe.current;
+    if (!shared) {
+      this.roadEnv = new ReflectionProbe(128, false);
+      this.roadEnv.center.set(anchor.x + ROAD_ENV_X, ROAD_ENV_Y, 1);
+      // filtered once while still black, so the road's programs are built with their env map from the start
+      this.roadEnv.target.texture.needsPMREMUpdate = true;
+    }
+    const probe = (shared ?? this.roadEnv)!;
+    this.roadEnvMap = probe.texture;
+    roadReflect.probe.value = probe.center;
+    roadReflect.box.value.set(1, 3.2, 14, 40);
+
     // ground sheet under the buildings
     // wet paving, not a black sheet: slabs, joints, stains, normal and roughness (HIGH)
     const paving = pavingMaps(4107);
@@ -117,7 +139,8 @@ export class City {
     };
     const streetMaps = high ? { asphalt: detail('detail-asphalt.webp'), concrete: detail('detail-concrete.webp') } : {};
     const origin = this.group.position;
-    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, lamps: high ? 3 : 8, ...streetMaps });
+    groundMaterial.envMap = this.roadEnvMap;
+    applyStreets(groundMaterial, { kind: 'paving', origin, fine: high, lamps: high ? 3 : 8, reflect: true, ...streetMaps });
     // 260x200, not 140x100: the district is 97 x 39 now and the old sheet's
     // edge cut across the frame in the upper corners of the dive
     const ground = new Mesh(new PlaneGeometry(260, 200), groundMaterial);
@@ -194,7 +217,9 @@ export class City {
     // the restaurant terrace takes the plaza on the left of the street (north, -z) that the flight has
     // ahead of it as it comes down into the canyon (x -3..6): on a wide screen it fills the left of the
     // frame from the descent until the camera draws level (x 8..14, tried too, sits behind the title)
-    this.street = new CityStreet(footprints, quality, { realProps: true, cafe: { x: 1.5, side: -1 } });
+    this.street = new CityStreet(footprints, quality, {
+      realProps: true, cafe: { x: 1.5, side: -1 }, paint: { origin: this.group.position, envMap: this.roadEnvMap },
+    });
     this.group.add(this.street.group);
     if (this.street.terrace) {
       this.terrace = new CafeTerrace(this.street.terrace, quality, this.group.position);
@@ -211,6 +236,22 @@ export class City {
     });
     this.group.add(this.life.group);
     this.disposables.push(this.life);
+    // the street's markings, repairs, stains, covers, grates and litter (RoadDecals)
+    {
+      const [ex0, ex1] = CITY_EXTENT.x;
+      this.decals = new RoadDecals({
+        origin: this.group.position, quality, crossX: CROSS_STREET_X, x0: ex0 - 6, x1: ex1 + 6,
+        parked: this.parked, occupied: this.street.occupied, plazas: this.street.plazas, vents: this.street.vents,
+      }, this.roadEnvMap);
+      this.group.add(this.decals.group);
+      this.disposables.push(this.decals);
+    }
+    // the canyon's facade line, for the reflections' box: the nearest kit walls either side of the road
+    {
+      const faces = footprints.filter((f) => Math.abs(f.z) < 8).map((f) => Math.abs(f.z) - f.hz).filter((d) => d > 2.3);
+      faces.sort((a, b) => a - b);
+      if (faces.length) roadReflect.box.value.y = faces[Math.floor(faces.length * 0.3)]!;
+    }
     this.buildPeople(this.street.plazas, quality, this.life.stands, this.terrace);
     this.buildRoofDetail(buildings.filter((_, i) => nearSet.has(i)));
     this.buildStreetDressing(keep(nearSet), quality);
@@ -272,6 +313,11 @@ export class City {
       yaw.setFromAxisAngle(Y, north ? 0 : Math.PI);
       signs.setMatrixAt(i, new Matrix4().compose(p, yaw, s));
       signs.setColorAt(i, this.color.set(NEON[i % NEON.length]!));
+      // the wet road mirrors each sign (RoadReflect): its centre, half size and colour
+      if (i < MAX_NEON) {
+        roadReflect.neonA.value[i]!.set(p.x, p.y, p.z, 0.62);
+        roadReflect.neonB.value[i]!.set(this.color.r * 1.4, this.color.g * 1.4, this.color.b * 1.4, 0.26);
+      }
     }
     if (signs.instanceColor) signs.instanceColor.needsUpdate = true;
     this.group.add(signs);
@@ -355,6 +401,40 @@ export class City {
   private streetlights: Streetlights | null = null;
   /** Trattoria Luna's terrace (CafeTerrace): its diners are in the crowd, its delivery in BatchFleet */
   terrace: CafeTerrace | null = null;
+  /** the road's decals (RoadDecals): read by the probe (`__engine.city.decals.count`) */
+  decals: RoadDecals | null = null;
+  /** phones: the canyon's cube, rendered once for the wet road to mirror (null on HIGH: the live probe) */
+  private roadEnv: ReflectionProbe | null = null;
+  private roadEnvMap: Texture | null = null;
+  private roadEnvKit = 0;
+  private roadEnvEye = new Vector3();
+
+  /**
+   * Phones: renders the canyon's cube for the road's reflections, two faces a frame, once the city is built
+   * (and once more if more of the kit has streamed in since). The moving things (cars, people, the plane) are
+   * left out of it, since they would hang frozen in the puddles.
+   */
+  captureRoadEnv(renderer: WebGLRenderer, scene: Scene, hide: Object3D[]): void {
+    const env = this.roadEnv;
+    if (!env || !this.kitCity || !this.life || !this.decals) return;
+    const kit = this.kitCity.group.children.length;
+    if (kit === 0 || (env.cubes > 0 && (env.cubes > 1 || kit <= this.roadEnvKit * 1.1))) return;
+    const moving = [...hide, ...[this.streetCars, this.crossCars, this.people].flatMap((a) => (a ? [a.group] : []))];
+    this.roadEnvEye.copy(env.center);
+    // taken without the fog: the street's own fog lies over the road anyway, and a fogged cube mirrored
+    // as a grey sheen over the whole road instead of the lit towers
+    // (thinned to nothing rather than removed, so no program is rebuilt for it)
+    const fog = scene.fog as { near?: number; far?: number; density?: number } | null;
+    const was = fog ? [fog.near, fog.far, fog.density] : [];
+    if (fog) {
+      if (fog.density !== undefined) fog.density = 0;
+      else { fog.near = 1e5; fog.far = 2e5; }
+    }
+    for (let i = 0; i < 2; i++) env.update(renderer, scene, this.roadEnvEye, 0, moving, ROAD_ENV_Y);
+    if (fog && fog.density !== undefined) fog.density = was[2];
+    else if (fog) [fog.near, fog.far] = was;
+    if (env.cubes > 0) this.roadEnvKit = kit;
+  }
 
 
   /** Roads in the canyon + cross streets, real cars on the canyon lanes. */
@@ -379,7 +459,10 @@ export class City {
       return t;
     };
     const asphalt = high ? loadDetail('detail-asphalt.webp') : undefined;
-    for (const m of [roadMat, junctionMat]) applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, lamps: high ? 3 : 9, ...(asphalt ? { asphalt } : {}) });
+    for (const m of [roadMat, junctionMat]) {
+      m.envMap = this.roadEnvMap;
+      applyStreets(m, { kind: 'road', origin: this.group.position, fine: high, lamps: high ? 3 : 9, reflect: true, ...(asphalt ? { asphalt } : {}) });
+    }
     this.disposables.push(roadMat, road, junctionMat);
     // roads span the built grid rather than a hardcoded 66x27: the district is
     // 24x11 blocks now, and the old canyon road stopped dead a third of the way
@@ -740,6 +823,10 @@ export class City {
     // or without scroll (scroll-coupled surge removed by request)
     this.streetCars?.update(time);
     this.crossCars?.update(time);
+    // the wet road's mirror: the clock for its rain rings, and the cars whose lamps it shows
+    roadReflect.time.value = time;
+    const ex = (eye ?? focus)?.x ?? this.group.position.x;
+    this.streetCars?.nearLights(ex - this.group.position.x, roadReflect.cars.value);
     this.people?.update(time);
     KitCity.tick(time);
     this.street?.update(time);
@@ -840,6 +927,7 @@ export class City {
 
   dispose(): void {
     this.kitCity?.dispose();
+    this.roadEnv?.dispose();
     this.trees?.dispose();
     this.people?.dispose();
     this.street?.dispose();

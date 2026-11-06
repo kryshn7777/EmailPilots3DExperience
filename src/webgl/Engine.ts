@@ -1471,6 +1471,9 @@ export class Engine {
     const ground = this.inside ? null : t > 0.09 && t < 0.3 ? ROOFTOP_BASE_Y : t > 0.62 && t < 0.82 ? 0
       : t > 0.46 && t < 0.6 ? this.beacon.group.position.y + 1.5 : null;
     if (refresh) this.envProbe?.update(this.renderer, this.scene, this.camera.position, ground, this.probeHidden);
+    // phones have no live probe: the city road's mirror is a cube of the canyon taken once, as the flight comes
+    // down into it (City.captureRoadEnv: two faces a frame, three frames, then nothing)
+    else if (!this.envProbe && !this.inside && t > 0.655 && t < 0.8) this.city.captureRoadEnv(this.renderer, this.scene, this.probeHidden);
 
     if (this.warming) return; // silent warm-up frames: no chrome events
     if (!this.firstFrameDone) {

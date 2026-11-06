@@ -18,6 +18,7 @@ import {
   Quaternion,
   RepeatWrapping,
   ShaderMaterial,
+  type Texture,
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -25,6 +26,7 @@ import { CITY_EXTENT, CROSS_STREET_X } from '../bake/cityGen.mjs';
 import { glowTexture } from '../bake/CanvasTextures';
 import { plazaMaps } from '../bake/RoomTextures';
 import { mulberry32 } from '../util';
+import { applyStreets } from '../materials/Streets';
 import type { Quality } from '../quality';
 
 export interface Footprint {
@@ -196,12 +198,23 @@ export class CityStreet {
   readonly trees: { x: number; z: number; yaw: number; s: number }[] = [];
   /** everything stood on the street here, as circles (for CityLife's scatter, which must not stand in them) */
   readonly occupied: { x: number; z: number; r: number }[] = [];
+  /** the steaming manholes on the canyon road (RoadDecals lays a cast cover pattern over each) */
+  readonly vents: { x: number; z: number }[] = [];
   /** the hydrant and bin spots; with `realProps` CityLife stands its scanned models there instead of these primitives */
   readonly hydrants: { x: number; z: number }[] = [];
   readonly bins: { x: number; z: number }[] = [];
   readonly shelters: { x: number; z: number; yaw: number }[] = [];
 
-  constructor(footprints: Footprint[], quality: Quality, opts: { realProps?: boolean; cafe?: { x: number; side: 1 | -1 } } = {}) {
+  constructor(
+    footprints: Footprint[],
+    quality: Quality,
+    opts: {
+      realProps?: boolean;
+      cafe?: { x: number; side: 1 | -1 };
+      /** the crossings' bars as worn, lamp-lit, wet thermoplastic (materials/Streets.ts, kind 'paint') */
+      paint?: { origin: Vector3; envMap: Texture | null };
+    } = {},
+  ) {
     const rand = mulberry32(8855);
     const own = <T extends { dispose(): void }>(x: T): T => { this.disposables.push(x); return x; };
     const high = quality.tier === 'high';
@@ -463,7 +476,11 @@ export class CityStreet {
     own(curbMesh);
 
     // ---- crosswalks and stop lines ------------------------------------------------------------
-    const paintMaterial = own(new MeshBasicMaterial({ color: '#8d897c' }));
+    const paintMaterial = own(opts.paint ? new MeshStandardMaterial({ color: '#c9ccd2', emissive: '#2c2c2b', roughness: 0.5, metalness: 0 }) : new MeshBasicMaterial({ color: '#8d897c' }));
+    if (opts.paint && paintMaterial instanceof MeshStandardMaterial) {
+      paintMaterial.envMap = opts.paint.envMap;
+      applyStreets(paintMaterial, { kind: 'paint', origin: opts.paint.origin, fine: high, lamps: high ? 2 : 5, reflect: true });
+    }
     const bars: { x: number; z: number; sx: number; sz: number }[] = [];
     for (const sx of CROSS_STREET_X) {
       for (const e of [-1, 1]) {
@@ -532,7 +549,7 @@ export class CityStreet {
     }
 
     // ---- manholes with steam -----------------------------------------------------------------------
-    const vents: { x: number; z: number }[] = [];
+    const vents = this.vents;
     for (let x = x0 + 8; x < x1 - 8; x += 13 + rand() * 9) {
       if (CROSS_STREET_X.some((sx) => Math.abs(x - sx) < 3.2)) continue;
       vents.push({ x, z: (rand() < 0.5 ? -1 : 1) * (0.2 + rand() * 0.5) });
