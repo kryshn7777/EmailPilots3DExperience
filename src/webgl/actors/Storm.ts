@@ -16,6 +16,10 @@ import type { FlightPath } from '../rig/FlightPath';
 import rainVert from '../shaders/rain.vert.glsl';
 import rainFrag from '../shaders/rain.frag.glsl';
 
+/** the gate's warning red, and the green it shows as a one-by-one dart is cleared through */
+const GATE_RED = new Color('#e24b4b');
+const GATE_GREEN = new Color('#4fe39a');
+
 /** one warning gate, mid-chapter (there were three on a slalom; the line is gentle now) */
 const GATE_TS = [0.415] as const;
 
@@ -122,6 +126,9 @@ export class Storm {
       const a = appear * leave * stormness;
       gate.material.opacity = a;
       gate.material.emissiveIntensity = 1.6 * a;
+      // the gate goes green as our dart passes under the strike that takes the BCC bomber down
+      const pass = MathUtils.smoothstep(t, gate.t + 0.001, gate.t + 0.004) * (1 - MathUtils.smoothstep(t, gate.t + 0.012, gate.t + 0.02));
+      gate.material.emissive.copy(GATE_RED).lerp(GATE_GREEN, pass);
     }
 
     if (stormness > 0.2 && time > this.nextFlash) {

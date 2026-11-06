@@ -1,0 +1,513 @@
+/* The fleet card, its chips, stamps and the flight report (src/webgl/interact/BatchHud.ts; the copy is
+   src/story/fleet.ts). One sample campaign, counted the whole way: always on from the first envelope
+   to the reply. State colours are the site's: orange = waiting / human pace, green = delivered,
+   red = 550 / skipped, gold = a reply; teal is the flight's own (info). On phones the card is one line. */
+
+.fleet-card,
+.fleet-chip,
+.fleet-stamp,
+.fleet-report {
+  --fl-ink: #e9fbff;
+  --fl-dim: rgb(214 240 246 / 0.62);
+  --fl-teal: #7fe8d8;
+  --fl-wait: #ff8a3d;
+  --fl-ok: #4fe39a;
+  --fl-bad: #ff4b55;
+  --fl-reply: #ffcc4d;
+  --fl-glass: rgb(5 13 26 / 0.84);
+  --fl-tone: var(--fl-teal);
+  font-family: 'JetBrains Mono', var(--font-mono, ui-monospace), monospace;
+  pointer-events: none;
+}
+
+/* ---- the card ------------------------------------------------------------------------------- */
+.fleet-card {
+  position: fixed;
+  z-index: 60;
+  top: max(14px, calc(env(safe-area-inset-top, 0px) + 8px));
+  left: clamp(16px, 3vw, 44px);
+  width: min(392px, calc(100vw - 32px));
+  padding: 10px 14px 11px;
+  opacity: 0;
+  translate: 0 -12px;
+  transition: opacity 260ms ease, translate 260ms ease;
+  color: var(--fl-ink);
+  background:
+    linear-gradient(180deg, rgb(6 18 34 / 0.88), rgb(6 10 26 / 0.8)),
+    repeating-linear-gradient(0deg, rgb(127 232 216 / 0.05) 0 1px, transparent 1px 3px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgb(127 232 216 / 0.28);
+  border-left: 3px solid var(--fl-tone);
+  border-radius: 4px;
+  box-shadow: 0 0 34px rgb(0 0 0 / 0.35), 0 0 22px color-mix(in srgb, var(--fl-tone) 18%, transparent);
+}
+
+.fleet-card[data-visible='true'] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.fleet-card[data-tone='wait'] { --fl-tone: var(--fl-wait); }
+.fleet-card[data-tone='ok'] { --fl-tone: var(--fl-ok); }
+.fleet-card[data-tone='bad'] { --fl-tone: var(--fl-bad); }
+.fleet-card[data-tone='reply'] { --fl-tone: var(--fl-reply); }
+
+.fleet-card__bar {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fl-dim);
+  white-space: nowrap;
+}
+
+.fleet-card__brand {
+  font-weight: 700;
+  color: var(--fl-teal);
+}
+
+.fleet-card__head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fleet-card__head em,
+.fleet-card__sample {
+  font-style: normal;
+  color: #ffd9a8;
+}
+
+.fleet-card__badge {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--fl-ink);
+}
+
+.fleet-card__main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0 7px;
+}
+
+.fleet-card__count {
+  position: relative;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--fl-ok) 45%, transparent);
+}
+
+.fleet-card__count b { font-weight: 800; }
+
+.fleet-card__count small {
+  font-size: 0.55em;
+  font-weight: 600;
+  color: var(--fl-dim);
+}
+
+/* the count ticks: a short pop each time it steps (the class is re-added by the HUD) */
+.fleet-card__count[data-tick='true'] b {
+  display: inline-block;
+  animation: fleet-tick 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  color: var(--fl-ok);
+}
+
+@keyframes fleet-tick {
+  from { transform: translateY(-6px) scale(1.25); }
+  to { transform: none; }
+}
+
+.fleet-card__word {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fl-dim);
+}
+
+.fleet-card__sample { display: none; }
+
+/* SAMPLE CAMPAIGN, always in view: the campaign on the card is the site's own mock-up */
+.fleet-card__tag {
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 6px;
+  border: 1px solid #ffd9a8;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffd9a8;
+}
+
+.fleet-card__meter {
+  position: relative;
+  height: 4px;
+  background: rgb(127 232 216 / 0.12);
+  overflow: hidden;
+}
+
+.fleet-card__meter i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--fl-teal), var(--fl-ok));
+  box-shadow: 0 0 10px var(--fl-ok);
+  transform: scaleX(var(--p, 0));
+  transform-origin: 0 50%;
+  transition: transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* one notch per email: 42 (delivered) or 50 (the daily cap) */
+.fleet-card__meter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / var(--notches, 42) - 1px), rgb(5 13 26 / 0.9) 0 calc(100% / var(--notches, 42)));
+}
+
+.fleet-card[data-meter='cap'] .fleet-card__meter i {
+  background: var(--fl-wait);
+  box-shadow: 0 0 10px var(--fl-wait);
+}
+
+.fleet-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 1.3em;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fl-tone);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--fl-tone) 40%, transparent);
+}
+
+.fleet-card__foot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.fleet-card[data-tone='wait'] .fleet-card__foot::before {
+  animation: fleet-blink 1s steps(2, jump-none) infinite;
+}
+
+.fleet-card__short { display: none; }
+
+@keyframes fleet-blink {
+  50% { opacity: 0.2; }
+}
+
+/* phones: one line high, count + the short foot, a hairline meter under it */
+@media (max-width: 720px) {
+  .fleet-card {
+    left: 50%;
+    width: auto;
+    max-width: calc(100vw - 32px);
+    padding: 6px 12px 7px 10px;
+    translate: -50% -12px;
+  }
+
+  .fleet-card[data-visible='true'] {
+    translate: -50% 0;
+  }
+
+  .fleet-card__bar,
+  .fleet-card__word,
+  .fleet-card__tag,
+  .fleet-card__long { display: none; }
+
+  .fleet-card__short { display: inline; }
+
+  .fleet-card__main {
+    margin: 0;
+    gap: 9px;
+    align-items: center;
+  }
+
+  .fleet-card__count {
+    font-size: 19px;
+    padding-top: 7px;
+  }
+
+  .fleet-card__sample {
+    display: block;
+    position: absolute;
+    top: -2px;
+    left: 0;
+    font-size: 7.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    text-shadow: none;
+  }
+
+  .fleet-card__foot {
+    margin: 0;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .fleet-card__meter {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+  }
+
+  .fleet-card__meter::after { content: none; }
+}
+
+/* ---- the flight report at the crest ------------------------------------------------------------- */
+.fleet-report {
+  position: fixed;
+  z-index: 61;
+  left: 50%;
+  top: 50%;
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px 20px 14px;
+  opacity: 0;
+  translate: -50% -46%;
+  scale: 0.96;
+  transition: opacity 280ms ease, translate 320ms ease, scale 320ms ease;
+  color: var(--fl-ink);
+  background: linear-gradient(180deg, rgb(6 18 34 / 0.92), rgb(6 10 26 / 0.88));
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgb(127 232 216 / 0.35);
+  border-top: 3px solid var(--fl-ok);
+  border-radius: 6px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.5), 0 0 30px rgb(79 227 154 / 0.15);
+}
+
+.fleet-report[data-visible='true'] {
+  opacity: 1;
+  translate: -50% -50%;
+  scale: 1;
+}
+
+.fleet-report__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  padding: 7px 0;
+  border-top: 1px solid rgb(127 232 216 / 0.12);
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0;
+  translate: -8px 0;
+  transition: opacity 220ms ease, translate 260ms ease;
+}
+
+.fleet-report__row[data-on='true'] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.fleet-report__row > :first-child {
+  font-weight: 700;
+  color: #fff;
+}
+
+.fleet-report__row > :last-child { color: var(--fl-dim); }
+
+.fleet-report__row:first-child {
+  border-top: 0;
+  padding-top: 0;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.fleet-report__row:first-child > :first-child { color: var(--fl-teal); }
+
+.fleet-report__row:first-child > :last-child {
+  justify-self: end;
+  padding: 2px 7px;
+  border: 1px solid #ffd9a8;
+  border-radius: 3px;
+  color: #ffd9a8;
+  font-weight: 700;
+}
+
+.fleet-report__row:nth-child(2) > :first-child {
+  font-size: 18px;
+  color: var(--fl-ok);
+}
+
+@media (max-width: 720px) {
+  .fleet-report {
+    top: auto;
+    bottom: max(70px, calc(env(safe-area-inset-bottom, 0px) + 60px));
+    padding: 12px 14px 10px;
+    translate: -50% 12px;
+  }
+
+  .fleet-report[data-visible='true'] {
+    translate: -50% 0;
+  }
+
+  .fleet-report__row {
+    grid-template-columns: 1fr;
+    gap: 1px;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+
+  .fleet-report__row:first-child {
+    grid-template-columns: 1fr auto;
+    font-size: 10px;
+  }
+
+  .fleet-report__row:nth-child(2) > :first-child { font-size: 16px; }
+}
+
+/* ---- name chips over the 3D landings -------------------------------------------------------- */
+.fleet-chip {
+  --fl-tone: var(--fl-ok);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 59;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 7px;
+  translate: calc(var(--x, 50vw) - 50%) calc(var(--y, 50vh) - 100% - 12px);
+  opacity: 0;
+  transition: opacity 220ms ease;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--fl-tone);
+  background: var(--fl-glass);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border: 1px solid color-mix(in srgb, var(--fl-tone) 60%, transparent);
+  border-radius: 3px;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--fl-tone) 25%, transparent);
+}
+
+.fleet-chip[data-visible='true'] { opacity: 1; }
+
+.fleet-chip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 12px;
+  background: linear-gradient(var(--fl-tone), transparent);
+}
+
+.fleet-chip[data-mode='flying'] { --fl-tone: var(--fl-teal); }
+.fleet-chip[data-mode='slot'] { --fl-tone: #f3f0e8; font-weight: 600; }
+.fleet-chip[data-mode='slot']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fl-wait);
+  box-shadow: 0 0 6px var(--fl-wait);
+}
+.fleet-chip[data-mode='ghost'] {
+  --fl-tone: #b9c8ff;
+  font-weight: 500;
+  border-style: dashed;
+  background: rgb(10 16 40 / 0.55);
+}
+.fleet-chip[data-mode='cancel'] {
+  --fl-tone: #8f9bd6;
+  font-weight: 500;
+  background: rgb(10 16 40 / 0.4);
+}
+.fleet-chip[data-mode='reply'] { --fl-tone: var(--fl-reply); }
+.fleet-chip[data-mode='bad'] { --fl-tone: var(--fl-bad); }
+.fleet-chip[data-mode='auth'] {
+  --fl-tone: var(--fl-teal);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+.fleet-chip[data-mode='auth']::after,
+.fleet-chip[data-mode='ghost']::after,
+.fleet-chip[data-mode='cancel']::after { content: none; }
+
+/* ---- stamps: 550 on the BCC bomber, DO-NOT-SEND on the 43rd -------------------------------- */
+.fleet-stamp {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 62;
+  padding: 6px 14px 5px;
+  translate: calc(var(--x, 50vw) - 50%) calc(var(--y, 50vh) - 50%);
+  rotate: -9deg;
+  opacity: 0;
+  font-family: 'Oswald', 'Bricolage Grotesque Variable', system-ui, sans-serif;
+  font-size: clamp(22px, 5.4vw, 44px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  color: #ff3b47;
+  border: 4px solid #ff3b47;
+  border-radius: 6px;
+  background: rgb(40 0 6 / 0.35);
+  text-shadow: 0 0 18px rgb(255 59 71 / 0.6);
+  box-shadow: 0 0 30px rgb(255 59 71 / 0.35), inset 0 0 18px rgb(255 59 71 / 0.25);
+  mix-blend-mode: screen;
+}
+
+.fleet-stamp[data-kind='dns'] {
+  font-size: clamp(18px, 4.2vw, 32px);
+  rotate: 7deg;
+}
+
+.fleet-stamp[data-on='true'] {
+  opacity: 1;
+  animation: fleet-slam 320ms cubic-bezier(0.2, 0.9, 0.2, 1.2) both;
+}
+
+@keyframes fleet-slam {
+  from { scale: 2.6; opacity: 0; }
+  60% { opacity: 1; }
+  to { scale: 1; opacity: 1; }
+}
+
+/* the site after the flight: the HUD is the flight's, not the page's */
+body.is-landing .fleet-card,
+body.is-landing .fleet-chip,
+body.is-landing .fleet-stamp,
+body.is-landing .fleet-report {
+  opacity: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet-card,
+  .fleet-card__meter i,
+  .fleet-report,
+  .fleet-report__row,
+  .fleet-chip {
+    transition: none;
+  }
+
+  .fleet-stamp[data-on='true'],
+  .fleet-card__count[data-tick='true'] b,
+  .fleet-card[data-tone='wait'] .fleet-card__foot::before {
+    animation: none;
+  }
+}
