@@ -157,6 +157,8 @@ const SHIP_DECK_SCRATCH = new Vector3();
 const SEA_FADE_DELAY = 0.012;
 /** seconds for the lamp to come full circle */
 const BEAM_PERIOD = 7;
+/** the sweep's tilt below level (it rakes the sea and crosses the lens), radians */
+const BEAM_TILT = -0.26;
 
 /**
  * The sea fog the tower and the freighter come out of: an extinction by DISTANCE. Each fragment's
@@ -164,7 +166,7 @@ const BEAM_PERIOD = 7;
  * what is lost goes to the colour of what lies behind it in the murk (the pale storm-light of the sky
  * above the horizon, the dark far sea below it: the scene's own fog colour matches neither, and would
  * paint a dark silhouette on the grey sky). While the object is still nearly lost (transmittance under
- * about a third) its fragments are also thinned by a fine dither, so what really lies behind shows
+ * about a quarter) its fragments are also thinned by a fine dither, so what really lies behind shows
  * through and no edge of the shape is drawn in fog colour; the dots that remain are already nearly the
  * colour of the murk, so they do not read as a screen. Every part of the object at the same range is
  * equally veiled, so the base and the top come out together, and the density ramps smoothly to exactly 0 (fully clear; the branch is skipped).
@@ -175,7 +177,7 @@ const MIST_VERT = /* glsl */ `#include <project_vertex>
 const MIST_FRAG = /* glsl */ `#include <dithering_fragment>
         if (uMist.x > 0.0 || uMist.y < 1.0) {
           float mistT = uMist.y * exp(-uMist.x * distance(vMistWorld, cameraPosition));
-          float mistCover = smoothstep(0.01, 0.35, mistT);
+          float mistCover = smoothstep(0.005, 0.25, mistT);
           float mistN = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
           if (mistN >= mistCover) discard;
           vec3 mistBehind = mix(uMistSea, uMistSky, smoothstep(-0.06, -0.01, normalize(vMistWorld - cameraPosition).y));
@@ -195,20 +197,32 @@ function addMist(shader: { uniforms: Record<string, unknown>; vertexShader: stri
 }
 
 /**
- * The fog's density over the arrival, per object: optical depth MIST_DEPTH at the object's own typical
- * range at the start, easing to 0 across [from, to] (a squared ease, so it thins slowly at first and
- * lets go smoothly). The tower is met at about 25 to 40 units, the freighter at 130 to 170, so each is
- * scaled by its own range and the same density curve reveals both evenly.
+ * How clear each object is over the arrival: the fog's transmittance at the object's own centre, a pure
+ * function of story t, rising from nothing across [from, to] (smoothstep raised to `pow`, so it stays
+ * thick while the object swings into frame and lets go evenly after). The density each frame is the one
+ * that gives exactly this at the object's live range from the lens (see `densityFor`), so nearer parts
+ * still come out a little ahead of farther ones, but how much of the object shows never depends on how
+ * the camera happened to approach, on the wall clock or on how fast the page was scrolled.
+ *
+ * The window is wide on purpose: on a phone 0.01 of story t is under 200 px of scroll, and the old
+ * density curve took the tower from a 1% ghost to crisp between t 0.477 and 0.495, about one flick,
+ * which read as the tower spawning. Now the tower is a faint silhouette as it swings into frame (0.48),
+ * half there at 0.50 and crisp by the delivery run (0.53); the freighter, further out, trails it.
  */
-const MIST_DEPTH = 6;
-const TOWER_MIST = { from: 0.452, to: 0.515, range: 32 };
-const SHIP_MIST = { from: 0.462, to: 0.54, range: 150 };
-function mistDensity(t: number, m: { from: number; to: number; range: number }): number {
-  const c = 1 - MathUtils.smoothstep(t, m.from, m.to);
-  return (MIST_DEPTH * c * c) / m.range;
+const TOWER_MIST = { from: 0.462, to: 0.532, pow: 1.8 };
+const SHIP_MIST = { from: 0.47, to: 0.552, pow: 1.8 };
+function mistClear(t: number, m: { from: number; to: number; pow: number }): number {
+  return Math.pow(MathUtils.smoothstep(t, m.from, m.to), m.pow);
 }
-/** seconds an object that arrives late takes to come up to its fog's transmittance, instead of appearing */
-const ARRIVAL_FADE = 1.5;
+/** the density that leaves transmittance `clear` at `range` from the lens (exactly 0 once fully clear) */
+function densityFor(clear: number, range: number): number {
+  return clear >= 1 ? 0 : -Math.log(Math.max(clear, 1e-4)) / Math.max(range, 1);
+}
+/**
+ * Seconds an object that arrives late (a slow phone link) takes to come up to its fog's transmittance:
+ * it starts fully dissolved, so a late model fades in out of the murk instead of appearing.
+ */
+const ARRIVAL_FADE = 2.5;
 
 /** A soft bank of sea mist: an elliptical gaussian-ish blob with its lower part fading out to the water. */
 function bankTexture(): CanvasTexture {
@@ -303,6 +317,12 @@ export class Beacon {
     uFill: { value: 1 },
   };
   private disposables: { dispose(): void }[] = [];
+  /**
+   * Settles once the lighthouse (its manifest, model and every texture) and the freighter are in. The
+   * engine holds the scroll short of the run-in on it (Readiness): the manifest is a plain fetch the
+   * loading manager never sees, so without this the gate could open before the tower's textures started.
+   */
+  readonly loaded: Promise<void>;
 
   constructor(anchor: Vector3, raycast: Raycast, private tooltip: Tooltip, quality: Quality) {
     const baseY = anchor.y - 13;
@@ -315,7 +335,7 @@ export class Beacon {
     // (blender/make_lighthouse.py) in the old tower's units, so the lantern is still
     // at y = 12.2 and every anchor below (beam pivot, flare, tooltip) still holds.
     // It arrives a moment after construction; the beacon chapter is a long way off.
-    void this.loadLighthouse();
+    const lighthouseLoad = this.loadLighthouse();
 
     // — the sea — oversized so the camera never looks past its far edge
     // into black void on the way out of the chapter. Scaled up with the
@@ -458,7 +478,7 @@ export class Beacon {
     this.beam.rotation.z = Math.PI / 2;
     this.beam.position.x = 23;
     this.beamPivot.position.y = 12.2 * TOWER_SCALE;
-    this.beamPivot.rotation.z = -0.26;
+    this.beamPivot.rotation.z = BEAM_TILT;
     this.beamPivot.add(this.beam);
     this.group.add(this.beamPivot);
     this.mirrored(this.beamPivot);
@@ -500,7 +520,9 @@ export class Beacon {
     this.mirrored(this.flare);
     this.disposables.push(this.flareMaterial);
 
-    this.buildShip(quality.tier);
+    const shipLoad = this.buildShip(quality.tier);
+    this.loaded = Promise.all([lighthouseLoad, shipLoad]).then(() => undefined);
+    this.loaded.catch(() => undefined);
 
     // — radar rings riding just above the swell —
     for (let i = 0; i < 3; i++) {
@@ -708,7 +730,7 @@ varying vec3 vBeamWorld;
    * ship-lo.glb, which leaves out what only reads close up). It streams in after construction; the
    * scanners turn, the running lights and deck floods glow and a foam wake trails it.
    */
-  private buildShip(tier: Quality['tier']): void {
+  private buildShip(tier: Quality['tier']): Promise<void> {
     const mat = (extra: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial => {
       const m = new MeshStandardMaterial({ vertexColors: true, ...extra });
       this.beamLit(m);
@@ -752,7 +774,7 @@ varying vec3 vBeamWorld;
       this.disposables.push(g, m);
     };
 
-    void Promise.all([
+    const load = Promise.all([
       new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(
         asset(tier === 'low' ? '/models/ship/ship-lo.glb' : '/models/ship/ship.glb'),
       ),
@@ -828,9 +850,21 @@ varying vec3 vBeamWorld;
     this.group.add(this.wake);
     this.disposables.push(wakeGeometry, wakeMaterial);
     this.group.add(this.ship);
+    return load;
   }
 
-  // --- BatchFleet: where on the freighter a batch dart lands ---
+  // --- BatchFleet: the lock-on, and where on the freighter a batch dart lands ---
+  private lock = 0;
+  private lockAim = new Vector3();
+  /**
+   * The domain check (direction §3, CH 06b): the beam stops sweeping and swings onto `aim` (world; the
+   * hero dart on its way in) by `weight`, 0..1. BatchFleet sets it every frame before update(), pure in t.
+   */
+  lockOn(weight: number, aim: Vector3): void {
+    this.lock = MathUtils.clamp(weight, 0, 1);
+    this.lockAim.copy(aim);
+  }
+
   /**
    * World position of `spot` (the model's metres: bow +x, y up, see SHIP_DECK_SPOTS) on the freighter
    * at story-t `t`: its place and heading on SHIP_TRACK, without the swell (pure in t).
@@ -867,29 +901,46 @@ varying vec3 vBeamWorld;
     // page is moving: no scroll keyframes, no beat staged for the lens. The beam crosses the plane
     // and the camera as often as the lamp comes round to them.
     this.beamYaw = (time / BEAM_PERIOD) * Math.PI * 2;
+    // the lock-on (BatchFleet): the sweep swings round the short way onto the dart and tips down to it
+    let beamTilt = BEAM_TILT;
+    if (this.lock > 0) {
+      // on the dart itself while it is out in the rain; within a few units of the lamp, held on the way it came in
+      const near = MathUtils.smoothstep(planePos.distanceTo(this.towerTop), 3, 6);
+      this.tmpV.copy(this.lockAim).lerp(planePos, near);
+      const dx = this.tmpV.x - this.towerTop.x;
+      const dz = this.tmpV.z - this.towerTop.z;
+      const aimYaw = Math.atan2(-dz, dx);
+      const aimTilt = MathUtils.clamp(Math.atan2(this.tmpV.y - this.towerTop.y, Math.hypot(dx, dz)), -0.9, 0.5);
+      const wrapped = this.beamYaw - Math.floor(this.beamYaw / (Math.PI * 2)) * Math.PI * 2;
+      let d = aimYaw - wrapped;
+      d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+      this.beamYaw = wrapped + d * this.lock;
+      beamTilt = MathUtils.lerp(BEAM_TILT, aimTilt, this.lock);
+    }
     this.beamPivot.rotation.y = this.beamYaw;
+    this.beamPivot.rotation.z = beamTilt;
     this.beamMaterial.uniforms.uTime!.value = time;
     // the lamp comes on out of the murk once the sea is in (and stands down entering CH7 —
     // inside-the-cone frames wash teal); the tower forms out of the mist after it
     const lampOn = MathUtils.smoothstep(t, 0.44, 0.47);
     // A little way into the scroll after the sea is in, the sea fog lets go of the tower and then of the
-    // ship beyond it: a density that eases to 0, applied by each fragment's distance to the lens (MIST_FRAG).
+    // ship beyond it: each object's transmittance at its centre is a pure function of story t (mistClear),
+    // turned into a density at its live range and applied by each fragment's distance to the lens (MIST_FRAG).
     // An object is held fully dissolved until every part of it has loaded, then eased up to what the fog
     // allows over ARRIVAL_FADE seconds (normally long before the arrival, so this is only for slow links).
     const now = performance.now();
     const arrival = (at: number | null): number =>
       at === null ? 0 : MathUtils.smoothstep((now - at) / 1000, 0, ARRIVAL_FADE);
-    const towerDensity = mistDensity(t, TOWER_MIST);
-    const shipDensity = mistDensity(t, SHIP_MIST);
-    this.towerMist.value.set(towerDensity, arrival(this.towerReadyAt));
-    this.shipMist.value.set(shipDensity, arrival(this.shipReadyAt));
-    // how clear each object is as a whole (its transmittance at its own centre): lamps, wake and banks follow it
     this.tmpV.copy(this.group.position).y += 10;
-    const towerClear = this.towerMist.value.y * Math.exp(-towerDensity * camera.position.distanceTo(this.tmpV));
+    const towerRange = camera.position.distanceTo(this.tmpV);
+    const towerDensity = densityFor(mistClear(t, TOWER_MIST), towerRange);
+    this.towerMist.value.set(towerDensity, arrival(this.towerReadyAt));
+    // how clear each object is as a whole (its transmittance at its own centre): lamps, wake and banks follow it
+    const towerClear = this.towerMist.value.y * Math.exp(-towerDensity * towerRange);
     // a hidden object costs nothing: drawn only once its nearest part (the islet reaches about 12 units
-    // from the centre) is past MIST_FRAG's 1% cut, so switching it on shows not a single pixel
-    const towerNear = this.towerMist.value.y * Math.exp(-towerDensity * Math.max(camera.position.distanceTo(this.tmpV) - 14, 0));
-    this.tower.visible = this.towerReadyAt !== null && towerNear > 0.01;
+    // from the centre) is past MIST_FRAG's lowest cut, so switching it on shows not a single pixel
+    const towerNear = this.towerMist.value.y * Math.exp(-towerDensity * Math.max(towerRange - 14, 0));
+    this.tower.visible = this.towerReadyAt !== null && towerNear > 0.005;
     // the mist is the grey storm-light the tower stands in (matched to the overcast behind it, and lit up
     // with it when the lightning flashes), tinted a little by the live fog
     // The night overcast is dark teal; the lightning lights it up grey for a moment, and the murk the
@@ -902,8 +953,13 @@ varying vec3 vBeamWorld;
       this.mistColor.lerp(fogColor, 0.12);
       mistSea.value.lerp(fogColor, 0.12);
     }
+    // The sweep is the lamp seen through the same murk: it comes up with the tower, a little ahead of
+    // it (a light carries further in fog than the stone under it), never as a full-strength cone wheeling
+    // across the sky over a tower that is not there yet (it used to, from t 0.45, and that cone was the
+    // first thing a phone saw of the lighthouse). The sea's glint, the lit rain and the flare all follow it.
+    const lampSeen = MathUtils.smoothstep(towerClear, 0.0, 0.35);
     this.beamMaterial.uniforms.uIntensity!.value =
-      0.8 * lampOn * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
+      0.8 * lampOn * lampSeen * (1 - MathUtils.smoothstep(t, 0.575, 0.61)) * (1 + 0.7 * this.lock);
     this.oceanMaterial.uniforms.uTime!.value = time;
     (this.oceanMaterial.uniforms.uCamPos!.value as Vector3).copy(camera.position);
     // lightning lights the sea, the lamp's sweep rakes across it
@@ -969,7 +1025,7 @@ varying vec3 vBeamWorld;
     const camHit = Math.pow(Math.max((beamX * dx + beamZ * dz) / len, 0), 30) * lampGlow;
     // the delivery: the lamp flares white as the dart goes in, whichever way the beam is turned
     // (a lamp is seen through fog a little before the tower under it, but only a little: it comes up with it)
-    this.flareMaterial.opacity = Math.max(camHit * 0.95, delivery * 0.32) * lampOn * MathUtils.smoothstep(towerClear, 0, 0.6);
+    this.flareMaterial.opacity = Math.max(camHit * 0.95 * (1 - 0.7 * this.lock), delivery * 0.32 + 0.12 * this.lock) * lampOn * MathUtils.smoothstep(towerClear, 0, 0.6);
     this.flare.scale.setScalar(5 * TOWER_SCALE * (1 + delivery * 0.45));
 
     // — the freighter steams round the islet —
@@ -995,12 +1051,15 @@ varying vec3 vBeamWorld;
 
     for (const radar of this.radars) radar.rotation.y = time * 2.4;
 
-    // the ship's own clearness, from its range now that it is placed
+    // the ship's fog, from its range now that it is placed (the same rule as the tower's)
     this.tmpV.copy(this.shipPos).add(this.group.position).y += 8;
-    const shipClear = this.shipMist.value.y * Math.exp(-shipDensity * camera.position.distanceTo(this.tmpV));
-    // (the same rule as the tower's: its bow or stern can be 50 units nearer than its middle)
-    const shipNear = this.shipMist.value.y * Math.exp(-shipDensity * Math.max(camera.position.distanceTo(this.tmpV) - 52, 0));
-    this.ship.visible = reveal > 0.003 && this.shipReadyAt !== null && shipNear > 0.01;
+    const shipRange = camera.position.distanceTo(this.tmpV);
+    const shipDensity = densityFor(mistClear(t, SHIP_MIST), shipRange);
+    this.shipMist.value.set(shipDensity, arrival(this.shipReadyAt));
+    const shipClear = this.shipMist.value.y * Math.exp(-shipDensity * shipRange);
+    // (its bow or stern can be 50 units nearer than its middle)
+    const shipNear = this.shipMist.value.y * Math.exp(-shipDensity * Math.max(shipRange - 52, 0));
+    this.ship.visible = reveal > 0.003 && this.shipReadyAt !== null && shipNear > 0.005;
     // its lamps are points, not dithered: they take the same transmittance
     for (const l of this.shipLamps) l.m.opacity = l.base * shipClear;
 

@@ -6,6 +6,7 @@ import '@fontsource/oswald/700.css';
 import '../styles/global.css';
 import Nav from '../components/islands/Nav.tsx';
 import { href } from '../lib/href';
+import { CHAPTER_NAMES, SITE } from '../story/copy';
 
 interface Props {
   title: string;
@@ -54,11 +55,11 @@ const { title, description } = Astro.props;
 
     <!-- flight-data HUD, home only (page.ts hides it elsewhere) -->
     <div id="hud" aria-hidden="true">
-      <span id="hud-chapter">CH 01 / 10 · THE DESK</span>
+      <span id="hud-chapter">CH 01 / {CHAPTER_NAMES.length} · {CHAPTER_NAMES[0]}</span>
       <span id="hud-alt">ALT 0000</span>
     </div>
-    <!-- the progress rail; page.ts adds a tick per chapter (jump to it) -->
-    <div id="scroll-progress"><i aria-hidden="true"></i><nav class="rail" aria-label="Chapters"></nav></div>
+    <!-- the progress rail; page.ts adds a tick per chapter (jump to it), named from story/copy.ts -->
+    <div id="scroll-progress" data-names={JSON.stringify(CHAPTER_NAMES)}><i aria-hidden="true"></i><nav class="rail" aria-label="Chapters"></nav></div>
     <!-- scroll feel: the first-load cue, the loading cue and the sound toggle (page.ts, webgl/audio/Wind.ts) -->
     <div class="scroll-cue" id="scroll-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
     <div class="load-cue" id="load-cue" role="status" aria-live="polite"></div>
@@ -90,18 +91,13 @@ const { title, description } = Astro.props;
         </p>
       </div>
       <nav aria-label="Site">
-        <a href={href("/features")}>Flight manual</a>
-        <a href={href("/pricing")}>Pricing</a>
         <a href={href("/download")}>Download</a>
-      </nav>
-      <nav aria-label="Journey">
-        <a href={href("/#desk")}>The Desk</a>
-        <a href={href("/#storm")}>The Storm</a>
-        <a href={href("/#landing")}>The Landing</a>
+        <a href={href("/features")}>Flight manual</a>
+        <a href={SITE.terms}>Terms of Service</a>
+        <a href={SITE.privacy}>Privacy Policy</a>
       </nav>
       <div class="site-footer__fine">
-        <span>© 2026 EMAIL PILOTS · WINDOWS DESKTOP</span>
-        <span>BUILT FOR FOUNDERS · RECRUITERS · JOB-SEEKERS · FREELANCERS</span>
+        <span>© 2026 EMAIL PILOTS · WINDOWS DESKTOP APP</span>
         <span class="site-footer__legal">Outlook and the Outlook logo are trademarks of the Microsoft group of companies. Email Pilots is not affiliated with or endorsed by Microsoft.</span>
       </div>
     </footer>

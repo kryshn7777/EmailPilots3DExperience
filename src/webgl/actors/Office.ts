@@ -37,38 +37,42 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { asset } from '../asset';
-import { cityRecipes, type CityLot, type KitModuleRef } from '../bake/cityGen.mjs';
 import { arrivalScreens, heightToNormal, plasterMaps, woodMaps } from '../bake/RoomTextures';
 import { mulberry32 } from '../util';
 import { requestCompile } from '../warm';
 import type { Quality } from '../quality';
 import type { FlightPath } from '../rig/FlightPath';
 import type { CameraRig } from '../rig/CameraRig';
-import { DETOUR, T_S, flareAt, smooth } from '../rig/detour';
+import { DETOUR, T_S, flareAt, smooth, tOfU } from '../rig/detour';
 import {
-  ROOM_K, buildExitCurve, detourPose, envelopePose, type DetourPose, type DetourScene, type EnvelopePose,
+  OFFICE_LINE, ROOM_K, detourPose, envelopePose, type DetourPose, type DetourScene, type EnvelopePose,
 } from '../rig/officeShot';
 import { envelopeTextures } from './Envelopes';
+import { DETOUR_COPY } from '../../story/copy';
+import { CAMPAIGN, OFFICE_ROW } from '../../story/fleet';
 import { buildOfficeWalls } from './OfficeWalls';
 import {
   Batcher, LAYOUT, PROP_SIZES, ROOM, meshesUnder, placementMatrix, standIn, type PropName, type StandInMaterial,
 } from './OfficeProps';
 
 /**
- * The office detour's stage (see rig/detour.ts): an open-plan IT office on a floor of the city
- * tower beside the copilot climb, which the dart flies into through the glass and leaves again.
+ * The office detour's stage (see rig/detour.ts): an open-plan IT office on a floor of the city tower the flight
+ * line crosses (pathPoints.mjs DETOUR_TOWER). The line goes straight in the tower's west face and straight out of
+ * its east face; between the two cuts the camera is in here, and the dart crosses the room in one straight, level
+ * line from the window it came in by to the window wall opposite, right over the one live laptop.
  *
  * It is not inside the city: the room is its own stage far below the world (y = -200), and while
- * the camera is in it the Engine hides everything else (applyVisibility). What the window shows
- * is the real night city, rendered ONCE from the tower's facade into a texture (`bakeBackdrop`),
- * so the view out costs one textured quad. Everything that sits still is batched by material
+ * the camera is in it the Engine hides everything else (applyVisibility). What each window wall shows
+ * is the real night city, rendered ONCE from the tower's facade on that side into a texture (`bakeBackdrop`),
+ * so each view out costs one textured quad. Everything that sits still is batched by material
  * (OfficeProps.Batcher), the laptops included, so the room is a few dozen draws.
  *
- * Three things move, all keyed on the detour clock u: the envelope that follows the dart in and is
- * swallowed by the one laptop that is on (its screen then flips from the waiting inbox to the
- * delivered one, the arrival office's `arrivalScreens`), the white flare over each cut, and the
- * glass bursting out of the facade as the dart leaves.
+ * What moves, all keyed on the detour clock u: every monitor in the room flickering on red (all the same "Dear
+ * all", the old way) as the dart comes in, then dying; the envelope that drops out of the dart's belly into the
+ * one laptop that is on (its screen then flips from the waiting inbox to the delivered one, the arrival office's
+ * `arrivalScreens`); the white flare over each cut; and the glass bursting out of the east face as the dart leaves.
  */
 
 /** the office's grade, laid over the chapter grade while the camera is inside (Engine.applyOfficeGrade) */
@@ -86,10 +90,15 @@ const STAGE_Y = -200;
 const LAPTOP_SCALE = 0.225;
 const IDLE_GLOW = 0.55;
 
+/** the office card's words, the red flicker's and Lena's screen's: story/copy.ts DETOUR_COPY */
+const CARD_ROWS = DETOUR_COPY.rows.map(([k, v]) => `<li><span>${k}</span><b>${v}</b></li>`).join('');
+
 /** the delivered card, the same HUD card as the lighthouse's (`.delivery` in global.css) */
 class OfficeCard {
   private el: HTMLDivElement;
+  private panel: HTMLDivElement;
   private projected = new Vector3();
+  private docked = false;
 
   constructor() {
     this.el = document.createElement('div');
@@ -104,34 +113,59 @@ class OfficeCard {
       </svg>
       <div class="delivery__panel">
         <div class="delivery__bar">
-          <span>INBOX // IT-OPS · DESK 07</span>
+          <span>${DETOUR_COPY.bar}</span>
           <span class="delivery__live">LIVE</span>
         </div>
-        <div class="delivery__title" data-text="EMAIL DELIVERED">EMAIL DELIVERED</div>
-        <ul class="delivery__log">
-          <li><span>SPF</span><b>PASS</b></li>
-          <li><span>DKIM</span><b>PASS</b></li>
-          <li><span>DMARC</span><b>ALIGNED</b></li>
-          <li><span>FOLDER</span><b>INBOX</b></li>
-        </ul>
-        <div class="delivery__meter" aria-hidden="true"><i></i></div>
-        <div class="delivery__foot"><span>14TH FLOOR</span><span>0.62 s</span></div>
+        <div class="delivery__title" data-text="${DETOUR_COPY.title}">${DETOUR_COPY.title}</div>
+        <div class="delivery__sub">${DETOUR_COPY.sub}</div>
+        <ul class="delivery__log">${CARD_ROWS}</ul>
       </div>`;
+    this.panel = this.el.querySelector<HTMLDivElement>('.delivery__panel')!;
     document.body.appendChild(this.el);
   }
 
+  /**
+   * Pinned to the screen with its leader on a wide screen; on a narrow one (a phone) the panel cannot sit beside
+   * the screen without leaving the frame, so it docks across the bottom inside a 16 px gutter, without the leader.
+   */
   update(visible: boolean, anchor: Vector3, camera: Camera): void {
     const next = visible ? 'true' : 'false';
     if (this.el.dataset.visible !== next) this.el.dataset.visible = next;
     if (!visible) return;
+    const dock = innerWidth < 640;
+    if (dock !== this.docked) {
+      this.docked = dock;
+      const ring = this.el.querySelector<HTMLElement>('.delivery__ring');
+      const leader = this.el.querySelector<SVGElement>('.delivery__leader');
+      if (ring) ring.style.display = dock ? 'none' : '';
+      if (leader) leader.style.display = dock ? 'none' : '';
+      this.panel.style.left = dock ? '16px' : '';
+      this.panel.style.right = dock ? 'auto' : '';
+      this.panel.style.bottom = dock ? '0px' : '';
+      this.panel.style.top = dock ? 'auto' : '';
+      this.panel.style.width = dock ? `${Math.max(innerWidth - 32, 200)}px` : '';
+      this.panel.style.boxSizing = dock ? 'border-box' : '';
+    }
+    if (dock) {
+      this.el.dataset.flip = 'false';
+      this.el.dataset.below = 'false';
+      this.panel.style.width = `${Math.max(innerWidth - 32, 200)}px`;
+      this.el.style.setProperty('--x', '0px');
+      // (the panel hangs above this point: its bottom edge is 24 px off the frame's)
+      this.el.style.setProperty('--y', `${Math.round(innerHeight - 24)}px`);
+      return;
+    }
     this.projected.copy(anchor).project(camera);
     const behind = this.projected.z > 1;
     const x = (this.projected.x * 0.5 + 0.5) * innerWidth;
     const y = (-this.projected.y * 0.5 + 0.5) * innerHeight;
-    this.el.dataset.flip = String(x > innerWidth - 400);
+    // the panel is up to 330 wide, 54 off the anchor: keep it, and the anchor, inside the frame's 16 px gutter
+    const flip = x > innerWidth - 400;
+    const cx = MathUtils.clamp(x, flip ? 16 + 54 + 330 : 16, flip ? innerWidth - 16 : innerWidth - 16 - 54 - 330);
+    this.el.dataset.flip = String(flip);
     this.el.dataset.below = String(y < 250);
-    this.el.style.setProperty('--x', `${Math.round(behind ? innerWidth / 2 : x)}px`);
-    this.el.style.setProperty('--y', `${Math.round(behind ? innerHeight / 2 : y)}px`);
+    this.el.style.setProperty('--x', `${Math.round(behind ? innerWidth / 2 : cx)}px`);
+    this.el.style.setProperty('--y', `${Math.round(behind ? innerHeight / 2 : MathUtils.clamp(y, 120, innerHeight - 40))}px`);
   }
 
   dispose(): void {
@@ -154,9 +188,16 @@ export class Office {
   /** the dart's size this frame relative to the main rig's */
   planeScale = 1;
 
-  private stage: DetourScene | null = null;
-  private lots: CityLot[] = [];
-  private lotsLoaded = false;
+  private stage: DetourScene;
+  /**
+   * The flight line's crossing of the tower, world: where it meets the west face (the cut in) and the east face
+   * (the cut out), each face's outward normal, and the glass found there by a ray once the city's models are in.
+   */
+  private faces = {
+    entry: new Vector3(), exit: new Vector3(),
+    inNormal: new Vector3(-1, 0, 0), outNormal: new Vector3(1, 0, 0),
+    entryGlass: new Vector3(), exitGlass: new Vector3(),
+  };
   private refinedAt = -1;
   private cityChildren0: number;
   private out: DetourPose;
@@ -169,18 +210,24 @@ export class Office {
   private propsBuilt = false;
   private laptopsBuilt = false;
   private envelope: Mesh;
-  private screens = arrivalScreens();
+  // Lena's screen: the note drafted on this PC, from the sample campaign, at her row's clock
+  private screens = arrivalScreens({
+    ...DETOUR_COPY.screen,
+    from: CAMPAIGN.from,
+    time: OFFICE_ROW.clock,
+    label: CAMPAIGN.name.toUpperCase() + ' · ' + CAMPAIGN.label,
+  });
   private screenMaterial: MeshStandardMaterial;
   private showing: 'idle' | 'received' = 'idle';
   private screenLight: PointLight;
   private lamp: SpotLight;
   private card = new OfficeCard();
   private screenWorld = new Vector3();
-  private backdrop: Mesh;
-  private backdropTarget: WebGLRenderTarget;
-  private backdropCamera = new PerspectiveCamera(62, 2, 0.1, 400);
-  /** the backdrop is baked for this entry point and this many city children (re-baked when either changes) */
-  private bakedFor = '';
+  /** the two views out: through the window wall the dart comes in by (west) and the one it leaves by (east) */
+  private backdrops: { mesh: Mesh; target: WebGLRenderTarget; camera: PerspectiveCamera; bakedFor: string; face: 'in' | 'out' }[] = [];
+  /** every monitor in the room: the ops dashboard dimmed, the red "Dear all" flicker, then dark */
+  private monitorMaps: { dash: CanvasTexture; red: CanvasTexture } | null = null;
+  private monitorState: 'dash' | 'red' | 'off' = 'dash';
   private shardSeeds: { v: Vector3; spin: Vector3; size: number }[] = [];
   private tmpM = new Matrix4();
   private tmpQ = new Quaternion();
@@ -191,13 +238,19 @@ export class Office {
   private up = new Vector3(0, 1, 0);
   private materials: Record<StandInMaterial, Material>;
 
-  constructor(private path: FlightPath, private city: { group: Group }, quality: Quality) {
+  constructor(path: FlightPath, private city: { group: Group }, quality: Quality) {
     this.high = quality.tier === 'high';
     this.cityChildren0 = city.group.children.length;
+    // the crossing: the flight line meets the west face at the cut in and the east face at the cut out
+    path.pointAt(tOfU(DETOUR.cutIn), this.faces.entry);
+    path.pointAt(tOfU(DETOUR.cutOut), this.faces.exit);
+    this.faces.entryGlass.copy(this.faces.entry);
+    this.faces.exitGlass.copy(this.faces.exit);
     const p0 = path.pointAt(T_S, new Vector3());
     this.group.position.set(p0.x, STAGE_Y, p0.z);
     this.group.scale.setScalar(ROOM_K);
     this.group.visible = false;
+    this.stage = { origin: this.group.position.clone(), screen: new Vector3(-0.7, 0.95, 6.45) };
     this.out = {
       weight: 0, camPos: new Vector3(), look: new Vector3(), fov: 45, roll: 0,
       planePos: new Vector3(), planeQuat: new Quaternion(), planeScale: 1,
@@ -215,7 +268,7 @@ export class Office {
     }));
 
     // the envelope, as BatchSend makes it: air-mail paper, lit a little from within
-    const faces = envelopeTextures();
+    const faces = envelopeTextures(OFFICE_ROW.name); // Lena's name on it
     this.keep(faces.front, faces.back);
     this.textures.push(faces.front, faces.back);
     const paper = (map?: CanvasTexture): MeshStandardMaterial => this.own(new MeshStandardMaterial({
@@ -228,10 +281,11 @@ export class Office {
     this.envelope.visible = false;
     this.group.add(this.envelope);
 
-    // the desk lamp (the room's key) and the live screen's spill
+    // the desk lamp at the live laptop (the room's key) and the live screen's spill
+    const hx = OFFICE_LINE.x;
     this.lamp = new SpotLight('#ffd3a0', 7, 7, 0.62, 0.65, 1.6);
-    this.lamp.position.set(-3.46, 1.18, 3.18);
-    this.lamp.target.position.set(-3.0, 0.76, 3.12);
+    this.lamp.position.set(hx - 0.46, 1.18, 6.48);
+    this.lamp.target.position.set(hx, 0.76, 6.42);
     if (this.high) {
       this.lamp.castShadow = true;
       this.lamp.shadow.mapSize.set(512, 512);
@@ -241,7 +295,7 @@ export class Office {
       this.lamp.shadow.normalBias = 0.02;
     }
     this.screenLight = new PointLight('#9be8ff', 0.6, 5, 2);
-    this.screenLight.position.set(-3.0, 0.95, 3.05);
+    this.screenLight.position.set(hx, 0.95, 6.15);
     this.group.add(this.lamp, this.lamp.target, this.screenLight);
 
     // the flare
@@ -268,26 +322,34 @@ export class Office {
     this.shards.visible = false;
     const rand = mulberry32(7307);
     for (let i = 0; i < n; i++) {
+      // out along the face's normal (x), spread up/down (y) and across the face (z), in world units per unit of burst
       this.shardSeeds.push({
-        v: new Vector3(3 + rand() * 7, (rand() - 0.3) * 5, (rand() - 0.5) * 7),
+        v: new Vector3(1.2 + rand() * 3.4, (rand() - 0.25) * 2.4, (rand() - 0.5) * 3.6),
         spin: new Vector3(rand() * 12, rand() * 12, rand() * 12),
-        size: 0.5 + rand() * 1.1,
+        size: 0.35 + rand() * 0.8,
       });
     }
 
-    // the view out: a quad behind the glass, filled by bakeBackdrop
+    // the two views out: a quad behind each window wall, filled by bakeBackdrop from that face of the tower
     const size = this.high ? [2048, 1024] : [1024, 512];
-    this.backdropTarget = new WebGLRenderTarget(size[0]!, size[1]!, { type: HalfFloatType, generateMipmaps: false });
-    this.backdropTarget.texture.minFilter = LinearFilter;
-    this.own(this.backdropTarget);
     const dist = 14;
-    const h = 2 * dist * Math.tan(MathUtils.degToRad(this.backdropCamera.fov / 2));
-    const backdropMaterial = this.own(new MeshBasicMaterial({ color: '#0b1020', fog: false }));
-    this.backdrop = new Mesh(this.own(new PlaneGeometry(h * 2, h)), backdropMaterial);
-    this.backdrop.position.set(-2.3, 1.7, -dist);
-    this.group.add(this.backdrop);
+    for (const face of ['in', 'out'] as const) {
+      const target = this.own(new WebGLRenderTarget(size[0]!, size[1]!, { type: HalfFloatType, generateMipmaps: false }));
+      target.texture.minFilter = LinearFilter;
+      const camera = new PerspectiveCamera(62, 2, 0.1, 400);
+      const h = 2 * dist * Math.tan(MathUtils.degToRad(camera.fov / 2));
+      const material = this.own(new MeshBasicMaterial({ color: '#0b1020', fog: false }));
+      const mesh = new Mesh(this.own(new PlaneGeometry(h * 2, h)), material);
+      // behind the window the dart came in by (looking back west), and behind the far one (east, ahead)
+      if (face === 'in') mesh.position.set(hx, 1.7, -dist);
+      else {
+        mesh.position.set(hx, 1.7, ROOM.z1 + dist);
+        mesh.rotation.y = Math.PI;
+      }
+      this.group.add(mesh);
+      this.backdrops.push({ mesh, target, camera, bakedFor: '', face });
+    }
 
-    void this.loadLots();
     this.buildLaptops();
     void this.loadProps();
   }
@@ -319,6 +381,10 @@ export class Office {
     const monitor = monitorTexture();
     this.own(monitor);
     this.textures.push(monitor);
+    const red = blastTexture();
+    this.own(red);
+    this.textures.push(red);
+    this.monitorMaps = { dash: monitor, red };
     const screen = std({ map: monitor, emissiveMap: monitor, emissive: '#ffffff', emissiveIntensity: 0.75, roughness: 0.22 });
     const led = this.own(new MeshBasicMaterial({ vertexColors: true, toneMapped: false, color: new Color(2.6, 2.6, 2.6) }));
     const panel = std({ color: '#f4f7ff', emissive: '#eef3ff', emissiveIntensity: 0.9, roughness: 0.6 });
@@ -375,21 +441,12 @@ export class Office {
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.set(0, h, D / 2);
 
-    // painted walls; the back wall in the company navy
+    // painted side walls (the two other walls are glass: the tower's west and east faces)
     const grey = plasterMaps([192, 197, 202], 61);
-    const navy = plasterMaps([40, 54, 82], 63);
-    for (const m of [grey, navy]) {
-      for (const t of [m.map, m.normalMap]) t.repeat.set(3, 1);
-      this.keep(m.map, m.normalMap);
-      this.textures.push(m.map, m.normalMap);
-    }
+    for (const t of [grey.map, grey.normalMap]) t.repeat.set(3, 1);
+    this.keep(grey.map, grey.normalMap);
+    this.textures.push(grey.map, grey.normalMap);
     const wallMat = this.own(new MeshStandardMaterial({ map: grey.map, ...(high ? { normalMap: grey.normalMap, normalScale: new Vector2(0.5, 0.5) } : {}), roughness: 0.92 }));
-    const backMat = high
-      ? this.own(new MeshStandardMaterial({ map: navy.map, normalMap: navy.normalMap, normalScale: new Vector2(0.5, 0.5), roughness: 0.9 }))
-      : wallMat;
-    const back = add(new Mesh(new PlaneGeometry(W, h), backMat));
-    back.position.set(0, h / 2, D);
-    back.rotation.y = Math.PI;
     const left = add(new Mesh(new PlaneGeometry(D, h), wallMat));
     left.position.set(x0, h / 2, D / 2);
     left.rotation.y = Math.PI / 2;
@@ -397,7 +454,7 @@ export class Office {
     right.position.set(x1, h / 2, D / 2);
     right.rotation.y = -Math.PI / 2;
 
-    // the window wall: anodised mullions every 1.4 m, a head, a sill and a transom; and the glass
+    // the two window walls: anodised mullions every 1.4 m, a head, a sill and a transom; and the glass
     const batch = new Batcher();
     const alu = high ? this.own(new MeshStandardMaterial({ color: '#2a2e35', roughness: 0.35, metalness: 0.75 })) : this.materials.dark;
     const box = (m: Material, w: number, hh: number, d: number, x: number, y: number, z: number): void => {
@@ -406,28 +463,34 @@ export class Office {
       batch.add(m, g);
       g.dispose();
     };
-    for (let x = x0; x <= x1 + 1e-6; x += 1.4) box(alu, 0.07, h, 0.14, x, h / 2, 0);
-    box(alu, W, 0.12, 0.16, 0, h - 0.06, 0);
-    box(alu, W, 0.1, 0.2, 0, 0.05, 0.02);
-    box(alu, W, 0.05, 0.1, 0, 2.45, 0);
-    // skirting and the ceiling's LED cove along three walls
+    for (const [z, inward] of [[0, 1], [D, -1]] as const) {
+      // (the dart's line, x OFFICE_LINE.x, runs through the middle of a bay: no mullion on it)
+      for (let x = x0; x <= x1 + 1e-6; x += 1.4) box(alu, 0.07, h, 0.14, x, h / 2, z);
+      box(alu, W, 0.12, 0.16, 0, h - 0.06, z);
+      box(alu, W, 0.1, 0.2, 0, 0.05, z + 0.02 * inward);
+      box(alu, W, 0.05, 0.1, 0, 2.45, z);
+    }
+    // skirting and the ceiling's LED cove along the side walls
     const skirt = this.materials.dark;
-    box(skirt, W, 0.08, 0.02, 0, 0.04, D - 0.01);
     box(skirt, 0.02, 0.08, D, x0 + 0.01, 0.04, D / 2);
     box(skirt, 0.02, 0.08, D, x1 - 0.01, 0.04, D / 2);
     const cove = this.materials.panel;
-    box(cove, W - 0.2, 0.025, 0.04, 0, h - 0.08, D - 0.06);
     box(cove, 0.04, 0.025, D - 0.2, x0 + 0.06, h - 0.08, D / 2);
     box(cove, 0.04, 0.025, D - 0.2, x1 - 0.06, h - 0.08, D / 2);
     for (const mesh of batch.build({ castShadow: false, receiveShadow: high })) this.group.add(mesh);
 
-    // the glass: plain and transparent, with the room's environment in it (no transmission)
+    // the glass: plain and transparent, with the room's environment in it (no transmission); one pane each side
     const glassMat = this.own(new MeshStandardMaterial({
       color: '#9fb2c6', transparent: true, opacity: 0.16, roughness: 0.04, metalness: 0.9,
       envMapIntensity: 1.4, depthWrite: false, side: DoubleSide,
     }));
-    const glass = add(new Mesh(new PlaneGeometry(W, h), glassMat), false);
-    glass.position.set(0, h / 2, 0.005);
+    const glassGeom = new PlaneGeometry(W, h);
+    const g0 = glassGeom.clone().translate(0, h / 2, 0.005);
+    const g1 = glassGeom.clone().translate(0, h / 2, D - 0.005);
+    glassGeom.dispose();
+    const glass = add(new Mesh(mergeGeometries([g0, g1], false), glassMat), false);
+    g0.dispose();
+    g1.dispose();
     glass.renderOrder = 2;
   }
 
@@ -510,7 +573,8 @@ export class Office {
       plant_pot: { scale: 0.75 },
     };
     for (const p of LAYOUT.props) {
-      const prop = p.name === 'rack_42u' && p.x > 5.5 ? { ...p, x: p.x + 0.35 } : p;
+      // (the real racks are wider than the layout's with their doors open: the second one stands a little further on)
+      const prop = p.name === 'rack_42u' && p.z > 8.8 ? { ...p, z: p.z + 0.3 } : p;
       placementMatrix(prop, deskTop, sizeOf(p.name)[1], m);
       const glb = glbParts.get(p.name);
       if (glb) {
@@ -621,121 +685,67 @@ export class Office {
   }
 
   /** the live screen's centre, room-local metres (an estimate until the laptop has loaded) */
-  private screenCentre = new Vector3(-3.0, 0.88, 3.4);
+  private screenCentre = new Vector3(OFFICE_LINE.x, 0.95, 6.45);
 
   // ---------------------------------------------------------------- the tower and the flight
 
-  private async loadLots(): Promise<void> {
-    try {
-      const manifest = (await fetch(asset('/models/city-kit/manifest.json')).then((r) => r.json())) as { modules: KitModuleRef[] };
-      this.lots = cityRecipes(manifest.modules).lots;
-    } catch {
-      this.lots = [];
-    }
-    this.lotsLoaded = true;
-    this.pickTower();
-  }
-
-  /** a lot's half extents on the ground (a quarter turn swaps width and depth) */
-  private extents(lot: CityLot): [number, number] {
-    const turned = Math.round(lot.yaw / (Math.PI / 2)) % 2 !== 0;
-    return [(turned ? lot.d : lot.w) / 2, (turned ? lot.w : lot.d) / 2];
-  }
-
   /**
-   * The tower the dart flies into: the nearest lot to P(T_S) that stands at least 3 above the dart,
-   * entered through the face that looks toward it. Picked from the city's own lots at runtime, then
-   * refined against the real facade by a ray (`refineTarget`) once the city's models are in.
+   * Once the city's models are in: find the real glass on both faces where the flight line crosses them (a ray
+   * along the line at each face), for the shards and the views out. The crossing itself is the flight line's.
    */
-  private pickTower(): void {
-    const p0 = this.path.pointAt(T_S, new Vector3());
-    const t0 = this.path.tangentAt(T_S, new Vector3());
-    const g = this.city.group.position;
-    let best: CityLot | null = null;
-    let bestD = Infinity;
-    for (const lot of this.lots) {
-      if (lot.h < p0.y + 3) continue;
-      const d = Math.hypot(lot.x + g.x - p0.x, lot.z + g.z - p0.z);
-      if (d < bestD) { bestD = d; best = lot; }
-    }
-    if (!best || bestD > 30) return;
-    const cx = best.x + g.x;
-    const cz = best.z + g.z;
-    const [hx, hz] = this.extents(best);
-    const dx = p0.x - cx;
-    const dz = p0.z - cz;
-    const normal = Math.abs(dx) / hx > Math.abs(dz) / hz ? new Vector3(Math.sign(dx), 0, 0) : new Vector3(0, 0, Math.sign(dz));
-    const entry = new Vector3(
-      normal.x !== 0 ? cx + normal.x * hx : MathUtils.clamp(p0.x, cx - hx + 0.35, cx + hx - 0.35),
-      MathUtils.clamp(p0.y + 1.0, 2, best.h * 0.6),
-      normal.z !== 0 ? cz + normal.z * hz : MathUtils.clamp(p0.z, cz - hz + 0.35, cz + hz - 0.35),
-    );
-    this.stage = {
-      p0, t0, mainCam: new Vector3(), mainLook: new Vector3(), mainFov: 40,
-      entry, normal, origin: this.group.position.clone(), screen: this.screenCentre.clone(), exit: null,
-    };
-    this.stage.exit = buildExitCurve(this.stage, (p) => this.clear(p));
-  }
-
-  /** lift a point of the flight out of any building it would stand in */
-  private clear(p: Vector3): void {
-    const g = this.city.group.position;
-    for (const lot of this.lots) {
-      const [hx, hz] = this.extents(lot);
-      if (Math.abs(p.x - (lot.x + g.x)) < hx + 1.4 && Math.abs(p.z - (lot.z + g.z)) < hz + 1.4 && p.y < lot.h + 2.5) {
-        p.y = lot.h + 2.5;
-      }
-    }
-  }
-
-  /** Once the city's models are in: move the entry point onto the real glass (a ray at the facade). */
   refineTarget(): void {
-    const stage = this.stage;
-    if (!stage) return;
     const count = this.city.group.children.length;
     if (count <= this.cityChildren0 || count === this.refinedAt) return;
-    const n = stage.normal;
-    const ray = new Raycaster(stage.entry.clone().addScaledVector(n, 4), n.clone().negate(), 0, 8);
-    const hits = ray.intersectObject(this.city.group, true);
-    const hit = hits.find((h) => h.distance > 0.5 && (h.object as Mesh).isMesh);
-    if (!hit) return; // the models are still streaming: try again on the next warm
-    this.refinedAt = count;
-    stage.entry.copy(hit.point).addScaledVector(n, 0.03);
-    stage.exit = buildExitCurve(stage, (p) => this.clear(p));
+    const f = this.faces;
+    let found = 0;
+    for (const [at, n, out] of [[f.entry, f.inNormal, f.entryGlass], [f.exit, f.outNormal, f.exitGlass]] as const) {
+      const ray = new Raycaster(at.clone().addScaledVector(n, 3), n.clone().negate(), 0, 4.5);
+      // (a Sprite's raycast reads the ray's camera: the city has sprites, and without one the cast threw, which
+      // stopped the warm-up before the views out were ever baked)
+      ray.camera = this.backdrops[0]!.camera;
+      let hits: ReturnType<Raycaster['intersectObject']> = [];
+      try {
+        hits = ray.intersectObject(this.city.group, true);
+      } catch {
+        hits = [];
+      }
+      const hit = hits.find((h) => (h.object as Mesh).isMesh);
+      if (!hit) continue; // the models are still streaming: try again on the next warm
+      out.copy(hit.point).addScaledVector(n, 0.03);
+      found++;
+    }
+    if (found === 2) this.refinedAt = count;
   }
 
-  /** the scene the detour flies through, once the tower is known (null before the city's lots arrive) */
-  get scene(): DetourScene | null {
+  /** the office's stage */
+  get scene(): DetourScene {
     return this.stage;
   }
 
   // ---------------------------------------------------------------- per frame
 
-  /** The detour's camera and dart for u, written into the rig's `detour` (CameraRig applies it last). */
+  /** The office's camera and dart for u, written into the rig's `detour` (CameraRig applies it last). */
   pose(u: number, rig: CameraRig, aspect: number): void {
     const d = rig.detour;
-    const stage = this.stage;
-    if (!stage || u <= 0 || u >= 1) {
-      d.weight = 0;
+    detourPose(u, this.stage, aspect, this.out);
+    d.weight = this.out.weight;
+    if (d.weight <= 0) {
       this.planeScale = 1;
       return;
     }
-    stage.mainFov = rig.mainPose(T_S, stage.mainCam, stage.mainLook);
-    detourPose(u, stage, aspect, this.out);
-    d.weight = this.out.weight;
     d.camPos.copy(this.out.camPos);
     d.look.copy(this.out.look);
     d.fov = this.out.fov;
     d.roll = this.out.roll;
     d.planePos.copy(this.out.planePos);
     d.planeQuat.copy(this.out.planeQuat);
-    this.planeScale = this.out.weight > 0 ? this.out.planeScale : 1;
+    this.planeScale = this.out.planeScale;
   }
 
-  /** Everything in the office that moves with u, the flare on the lens and the glass on the facade. */
+  /** Everything in the office that moves with u, the flare on the lens and the glass out of the east face. */
   update(u: number, inside: boolean, camera: PerspectiveCamera, showCard: boolean): void {
     const stage = this.stage;
-    const live = !!stage && u > 0 && u < 1;
+    const live = u > 0 && u < 1;
 
     // the white-out over each cut
     const f = live ? flareAt(u) : 0;
@@ -751,34 +761,39 @@ export class Office {
       this.flare.updateMatrixWorld();
     }
 
-    // the glass bursting out of the facade
-    const burst = live ? (u - DETOUR.cutOut) / (DETOUR.climb + 0.05 - DETOUR.cutOut) : -1;
+    // the glass bursting out of the east face with the dart: along the face's normal, falling, spinning
+    const burst = live ? (u - DETOUR.cutOut) / (DETOUR.shardsTo - DETOUR.cutOut) : -1;
     this.shards.visible = burst > 0 && burst < 1;
-    if (this.shards.visible && stage) {
-      const n = stage.normal;
+    if (this.shards.visible) {
+      const n = this.faces.outNormal;
       const side = this.shardSide.crossVectors(n, this.up).normalize();
-      const k = burst * 0.9;
+      // fast out of the glass, slowing: the dart itself crosses this stretch slowly (the pace eases out of the cut)
+      const k = 1 - (1 - burst) * (1 - burst);
       for (let i = 0; i < this.shardSeeds.length; i++) {
         const s = this.shardSeeds[i]!;
-        const p = this.tmpV.copy(stage.entry)
+        const p = this.tmpV.copy(this.faces.exitGlass)
           .addScaledVector(n, s.v.x * k)
           .addScaledVector(side, s.v.z * k);
-        p.y += s.v.y * k - 9 * k * k;
-        this.tmpQ.setFromAxisAngle(this.tmpV2.set(s.spin.x, s.spin.y, s.spin.z).normalize(), (s.spin.x + s.spin.y) * k);
-        const sc = s.size * (1 - smooth(burst, 0.7, 1));
+        p.y += s.v.y * k - 3.2 * burst * burst;
+        this.tmpQ.setFromAxisAngle(this.tmpV2.set(s.spin.x, s.spin.y, s.spin.z).normalize(), (s.spin.x + s.spin.y) * burst);
+        const sc = s.size * (1 - smooth(burst, 0.75, 1));
         this.tmpM.compose(p, this.tmpQ, this.shardScale.setScalar(sc));
         this.shards.setMatrixAt(i, this.tmpM);
       }
       this.shards.instanceMatrix.needsUpdate = true;
     }
 
-    if (!inside || !stage) {
+    if (!inside) {
       this.card.update(false, this.screenWorld, camera);
       this.envelope.visible = false;
       return;
     }
 
-    // the envelope after the dart, into the screen
+    // every monitor: the dashboard, dim, as the dart comes in; then all of them at once on the same red "Dear all"
+    // (flickering), the old way; then dark. Only the one laptop stays lit.
+    this.updateMonitors(u);
+
+    // the envelope out of the dart's belly, into the screen
     envelopePose(u, stage, this.envPose);
     this.envelope.visible = this.envPose.scale > 0.002;
     if (this.envelope.visible) {
@@ -788,7 +803,7 @@ export class Office {
     }
 
     // the screen: the waiting inbox brightens as the envelope reaches it, and reads delivered once it is in
-    const arrive = smooth(u, 0.36, DETOUR.absorbed);
+    const arrive = smooth(u, DETOUR.envelopeFrom + 0.03, DETOUR.absorbed);
     const done = u >= DETOUR.received ? 1 : 0;
     const flash = done ? Math.exp(-(u - DETOUR.received) * 80) : 0;
     const want = done ? 'received' : 'idle';
@@ -804,39 +819,68 @@ export class Office {
     this.card.update(showCard && u >= DETOUR.received + 0.01 && u < DETOUR.cardTo, this.screenWorld, camera);
   }
 
+  /** the monitors' state at u (one shared material: swapping its map costs nothing) */
+  private updateMonitors(u: number): void {
+    const maps = this.monitorMaps;
+    const mat = this.materials.screen as MeshStandardMaterial;
+    if (!maps) return;
+    const red = u >= DETOUR.flickerFrom && u < DETOUR.flickerTo;
+    const want: 'dash' | 'red' | 'off' = red ? 'red' : u < DETOUR.flickerFrom ? 'dash' : 'off';
+    if (want !== this.monitorState) {
+      this.monitorState = want;
+      const map = want === 'red' ? maps.red : maps.dash;
+      // (texture for texture: a uniform, no new program)
+      if (mat.map !== map) mat.map = mat.emissiveMap = map;
+    }
+    if (want === 'red') {
+      // a hard flicker keyed on u (so a scrub replays it): on, a stutter, on
+      const k = (u - DETOUR.flickerFrom) / (DETOUR.flickerTo - DETOUR.flickerFrom);
+      const stutter = k > 0.35 && k < 0.5 ? 0.25 : k > 0.8 ? 0.6 : 1;
+      mat.emissiveIntensity = 1.6 * stutter;
+    } else mat.emissiveIntensity = want === 'dash' ? 0.35 : 0.02;
+  }
+
   // ---------------------------------------------------------------- warm-up
 
-  /** the camera the backdrop is baked from, or null if it is already baked for this city */
-  backdropCameraIfStale(): PerspectiveCamera | null {
-    const stage = this.stage;
-    if (!stage) return null;
-    const key = `${stage.entry.x.toFixed(2)},${stage.entry.y.toFixed(2)},${stage.entry.z.toFixed(2)}:${this.city.group.children.length}`;
-    if (key === this.bakedFor || this.city.group.children.length <= this.cityChildren0) return null;
-    this.bakedFor = key;
-    const cam = this.backdropCamera;
-    cam.position.copy(stage.entry).addScaledVector(stage.normal, 0.8);
-    cam.lookAt(this.tmpV.copy(cam.position).addScaledVector(stage.normal, 10).add(new Vector3(0, -1.2, 0)));
-    cam.updateMatrixWorld();
-    return cam;
+  /** the cameras the views out are baked from that are stale (the city's models changed since): none, one or two */
+  backdropCamerasIfStale(): PerspectiveCamera[] {
+    const n = this.city.group.children.length;
+    if (n <= this.cityChildren0) return [];
+    const out: PerspectiveCamera[] = [];
+    for (const b of this.backdrops) {
+      const glass = b.face === 'in' ? this.faces.entryGlass : this.faces.exitGlass;
+      const normal = b.face === 'in' ? this.faces.inNormal : this.faces.outNormal;
+      const key = `${glass.x.toFixed(2)},${glass.y.toFixed(2)},${glass.z.toFixed(2)}:${n}`;
+      if (key === b.bakedFor) continue;
+      b.bakedFor = key;
+      const cam = b.camera;
+      cam.position.copy(glass).addScaledVector(normal, 0.8);
+      cam.lookAt(this.tmpV.copy(cam.position).addScaledVector(normal, 10).add(this.tmpV2.set(0, -1.2, 0)));
+      cam.updateMatrixWorld();
+      out.push(cam);
+    }
+    return out;
   }
 
   /**
-   * The view out of the office: the city as it stands at T_S, from just outside the tower's glass,
-   * into a texture (the Engine has set the grade and visibility of T_S and hidden the dart).
+   * A view out of the office: the city as it stands at T_S, from just outside the tower's glass on that side, into
+   * a texture (the Engine has set the grade and visibility of T_S and hidden the dart).
    */
   bakeBackdrop(renderer: WebGLRenderer, scene: Scene, cam: PerspectiveCamera): void {
+    const b = this.backdrops.find((x) => x.camera === cam);
+    if (!b) return;
     const shown = [this.group.visible, this.flare.visible, this.shards.visible];
     this.group.visible = this.flare.visible = this.shards.visible = false;
     // (shadow maps update as usual: a city light whose map was never drawn must not be sampled empty)
     const prev = renderer.getRenderTarget();
-    renderer.setRenderTarget(this.backdropTarget);
+    renderer.setRenderTarget(b.target);
     renderer.clear();
     renderer.render(scene, cam);
     renderer.setRenderTarget(prev);
     [this.group.visible, this.flare.visible, this.shards.visible] = shown as [boolean, boolean, boolean];
-    const m = this.backdrop.material as MeshBasicMaterial;
-    if (m.map !== this.backdropTarget.texture) {
-      m.map = this.backdropTarget.texture;
+    const m = b.mesh.material as MeshBasicMaterial;
+    if (m.map !== b.target.texture) {
+      m.map = b.target.texture;
       m.color.set('#ffffff');
       m.needsUpdate = true;
     }
@@ -852,22 +896,25 @@ export class Office {
     if (!this.warmCam) this.warmCam = new PerspectiveCamera(100, 2, 0.1, 400);
     const cam = this.warmCam;
     const o = this.group.position;
-    // from the back corner, looking at the window: nearly the whole room is in view
+    // from the far corner, looking back at the entry window: nearly the whole room is in view
     cam.position.set(o.x + 6 * ROOM_K, o.y + 2.6 * ROOM_K, o.z + 9.6 * ROOM_K);
     cam.lookAt(o.x - 2 * ROOM_K, o.y + 0.8 * ROOM_K, o.z + 1 * ROOM_K);
     cam.updateMatrixWorld();
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
-    // the flare is drawn too (fully transparent), so its program is the one the frame will ask for
+    // the flare is drawn too (fully transparent), so its program is the one the frame will ask for; and the
+    // monitors in their red state, so its texture is uploaded
     const flareShown = this.flare.visible;
     const flareMat = this.flare.material as MeshBasicMaterial;
     const flareOpacity = flareMat.opacity;
     this.flare.visible = true;
     flareMat.opacity = 0;
+    this.updateMonitors((DETOUR.flickerFrom + DETOUR.flickerTo) / 2);
     renderer.render(scene, cam);
+    this.updateMonitors(0);
     this.flare.visible = flareShown;
     flareMat.opacity = flareOpacity;
-    // and from the window, looking in (the other side of every desk)
+    // and from the entry window, looking in (the other side of every desk), toward the far windows
     cam.position.set(o.x - 1 * ROOM_K, o.y + 2 * ROOM_K, o.z + 0.4 * ROOM_K);
     cam.lookAt(o.x, o.y + 0.8 * ROOM_K, o.z + 6 * ROOM_K);
     cam.updateMatrixWorld();
@@ -883,22 +930,23 @@ export class Office {
    * detour. The Engine has set T_S's visibility and moved the city's detail toward the entry.
    */
   warmApproach(renderer: WebGLRenderer, scene: Scene, target: WebGLRenderTarget): void {
-    const stage = this.stage;
-    if (!stage) return;
     if (!this.warmCam) this.warmCam = new PerspectiveCamera(100, 2, 0.1, 400);
     const cam = this.warmCam;
-    cam.position.copy(stage.entry).addScaledVector(stage.normal, 5).add(this.tmpV.set(0, 0.5, 0));
-    cam.lookAt(stage.entry);
-    cam.updateMatrixWorld();
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
-    renderer.render(scene, cam);
+    // both faces: the run at the west one, the burst out of the east one
+    for (const [at, n] of [[this.faces.entry, this.faces.inNormal], [this.faces.exit, this.faces.outNormal]] as const) {
+      cam.position.copy(at).addScaledVector(n, 5).add(this.tmpV.set(0, 0.5, 0));
+      cam.lookAt(at);
+      cam.updateMatrixWorld();
+      renderer.render(scene, cam);
+    }
     renderer.setRenderTarget(prev);
   }
 
-  /** where the dart enters the tower (null before the tower is known) */
-  get entry(): Vector3 | null {
-    return this.stage?.entry ?? null;
+  /** where the flight line meets the tower's west face (the cut into the office) */
+  get entry(): Vector3 {
+    return this.faces.entry;
   }
 
   /** triangles and draws of the room as built (for the budget check) */
@@ -1050,6 +1098,35 @@ function monitorTexture(): CanvasTexture {
       ctx.fillRect(20 + i * 20, 194 + j * 23, 16, 18);
     }
   }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/**
+ * The old way, on every monitor at once for a moment as the dart comes in: one message to everybody, the same on
+ * every screen (`Dear all,` and a BCC line of hundreds). Red, like the app's own 550 / spam state.
+ */
+function blastTexture(): CanvasTexture {
+  const W = 512;
+  const H = 300;
+  const [c, ctx] = canvas(W, H);
+  ctx.fillStyle = '#2a0508';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#5c0c12';
+  ctx.fillRect(0, 0, W, 34);
+  ctx.fillStyle = '#ffb3b3';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText(DETOUR_COPY.bcc[1], 16, 24);
+  ctx.fillStyle = '#ff5a5a';
+  ctx.font = 'bold 58px "Helvetica Neue", Arial, sans-serif';
+  ctx.fillText(DETOUR_COPY.bcc[0], 24, 128);
+  ctx.fillStyle = 'rgba(255,140,140,0.55)';
+  for (let i = 0; i < 6; i++) ctx.fillRect(24, 160 + i * 20, 300 + ((i * 97) % 160), 8);
+  ctx.strokeStyle = '#ff3b3b';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, W - 6, H - 6);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;

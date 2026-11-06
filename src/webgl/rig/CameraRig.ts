@@ -4,7 +4,13 @@ import { rigParamsAt, type RigParams } from '../../story/chapters';
 import type { FlightPath } from './FlightPath';
 import { HERO_RELEASE, heroParam, launchAttitude } from './launch';
 import { studyShot } from './studyShot';
+import { endingPose, type EndingPose } from './endingShot';
+import { DETOUR_TIMING, DETOUR_TOWER, HANDOFF } from './pathPoints.mjs';
 import type { PaperPlane } from '../actors/PaperPlane';
+
+/** the story-t the dart reaches the tower's west face, and leaves its east face (pathPoints.mjs) */
+const AT_GLASS = DETOUR_TIMING.T_S + DETOUR_TIMING.cutIn * DETOUR_TIMING.D_T;
+const OUT_GLASS = DETOUR_TIMING.T_S + DETOUR_TIMING.cutOut * DETOUR_TIMING.D_T;
 
 const UP = new Vector3(0, 1, 0);
 const X_AXIS = new Vector3(1, 0, 0);
@@ -33,7 +39,37 @@ interface Beat {
   dutch?: number;
   /** background defocus in pixels (at 720 lines) */
   bokeh?: number;
+  /** the chase camera's lag, as a multiplier on the chapter's at full weight (< 1 rides closer) */
+  lag?: number;
+  /** the chase camera's side offset and how far ahead it looks, as multipliers on the chapter's at full weight */
+  side?: number;
+  ahead?: number;
+  /**
+   * With `holdAt`: the held camera dollies along after the dart, by this share of how far the dart has flown since
+   * the beat began (0 holds still, 1 keeps pace), so letting go of it is a short move, not a lunge.
+   */
+  follow?: number;
+  /** the story-t the following starts from (default: the beat's start) */
+  followFrom?: number;
 }
+
+/** how far either side (story-t) the chase camera's frame averages the line's heading from the canyon to H */
+const CHASE_SMOOTH = 0.005;
+/** how long (story-t) a following hold takes to come up to its share of the dart's speed */
+const FOLLOW_EASE = 0.025;
+/** the hand-off onto the ending's line (pathPoints.mjs), where the line's speed per unit of story-t steps up */
+const HAND_T = HANDOFF.t;
+
+/**
+ * Off the tower's far face, where the camera waits for the dart to burst out (see the 'burst' beat): north of the
+ * tower over the canyon, short of its east face and a little above the exit, so the lens still looks the way the
+ * dart flies (under 30 degrees off it) and the dart comes out past the tower's corner in front of it.
+ */
+const BURST_CAM: [number, number, number] = [
+  DETOUR_TOWER.x + DETOUR_TOWER.hx - 8.5,
+  DETOUR_TOWER.entryY + 2.3,
+  DETOUR_TOWER.z + DETOUR_TOWER.hz + 4.1,
+];
 
 /**
  * The shot list. Everything here is additive to the per-chapter rig in story/chapters.ts.
@@ -62,12 +98,17 @@ const BEATS: Beat[] = [
   // the dive into the city: the frame tilts into the drop (the lens holds: widening it shrank the towers)
   { id: 'dive', at: [0.655, 0.668, 0.69, 0.715], dutch: 4, bars: 0.6 },
   // the canyon floor: low over the wet street, leaning the other way
-  { id: 'canyon', at: [0.7, 0.715, 0.735, 0.75], dutch: -2 },
-  // touchdown: the camera swings out to the runway edge at wheel height and waits there; the dart
-  // flares past it in profile and lands, then the lens catches up through the office door
-  { id: 'touchdown', at: [0.92, 0.936, 0.956, 0.972], holdAt: [263.5, 0.95, -4.0], fov: 0.9, bars: 1, bokeh: 2.4 },
-  // the last push into the screen, the matte opening as the dart becomes the page
-  { id: 'arrival', at: [0.962, 0.972, 0.982, 0.996], bars: 0.6, fov: 0.94 },
+  { id: 'canyon', at: [0.7, 0.715, 0.73, 0.745], dutch: -2 },
+  // the push to the glass: the camera closes in behind the dart and the lens tightens, the lit facade filling the
+  // frame as the dart reaches it (the cut into the office is at AT_GLASS, under the flare)
+  // (straight behind it, not out to the side as the copilot's chase rides, and looking at the dart and the glass
+  // just past it, not into the tower: on a phone the dart was out at the frame's edge)
+  { id: 'glass', at: [0.758, 0.784, AT_GLASS, AT_GLASS], lag: 0.82, side: 0.2, ahead: 0.35, fov: 0.88, bars: 0.35 },
+  // out of the far face: after the cut the camera is off the tower's north side (BURST_CAM) and watches the dart
+  // burst out past the corner, shards first; it holds still while the dart bursts out slowly, sets off after it
+  // as the dart picks up the line's speed (at the end of the detour), and settles into the chase well clear of the
+  // tower
+  { id: 'burst', at: [OUT_GLASS, OUT_GLASS, 0.814, 0.866], holdAt: BURST_CAM, follow: 1, followFrom: OUT_GLASS + 0.004, fov: 0.92, bars: 0.35 },
 ];
 
 function beatWeight(b: Beat, t: number): number {
@@ -141,20 +182,98 @@ export class CameraRig {
     mainPlanePos: new Vector3(), mainPlaneQuat: new Quaternion(),
   };
 
-  /** The main rig's pose at story-t `t` with no turbulence, damping or roll; returns the fov. */
-  mainPose(t: number, pos: Vector3, look: Vector3): number {
-    const rig = rigParamsAt(t);
+  /**
+   * The main rig's pose at story-t `t` with no turbulence, damping or roll: the chase cam (with the beats' lag and
+   * lens changes) and the ending's own camera; with `holds`, the beats' held shots too (not the study's shot over
+   * the desk, nor the lighthouse's held shot, which the Engine lays on). Returns the fov. Pure in t (the pace
+   * measures the chase without the holds, as it always has; check-line measures both).
+   */
+  mainPose(t: number, pos: Vector3, look: Vector3, holds = false): number {
+    const rig = this.beatRig(t);
     this.chasePosition(t, rig, pos);
-    this.path.pointAt(Math.min(t + rig.lookAhead, 1), look);
+    this.path.pointAt(Math.min(this.along(t, rig.lookAhead), 1), look);
     look.y += rig.lookUp ?? 0;
     let fovMul = 1;
+    let holdW = 0;
     for (const beat of BEATS) {
       const w = beatWeight(beat, t);
-      if (w > 0 && beat.fov !== undefined) fovMul *= 1 + (beat.fov - 1) * w;
+      if (w <= 0) continue;
+      if (beat.fov !== undefined) fovMul *= 1 + (beat.fov - 1) * w;
+      if (holds && (beat.hold !== undefined || beat.holdAt) && w > holdW) {
+        holdW = w;
+        if (beat.holdAt) this.poseHold.fromArray(beat.holdAt);
+        else this.chasePosition(beat.hold!, rigParamsAt(beat.hold!), this.poseHold);
+        if (beat.nudge) this.poseHold.add(this.tA.fromArray(beat.nudge));
+        if (beat.holdAt && beat.follow) this.followDart(beat, t, this.poseHold);
+      }
     }
-    return rig.fov * (this.options.reducedMotion ? 1 : fovMul);
+    const hold = holdW * holdW * (3 - 2 * holdW);
+    if (hold > 0) {
+      pos.lerp(this.poseHold, hold);
+      look.lerp(this.path.pointAt(t, this.tB), hold);
+    }
+    let fov = rig.fov * (this.options.reducedMotion ? 1 : fovMul);
+    const e = endingPose(t, this.camera.aspect, this.poseEnding);
+    if (e.weight > 0) {
+      pos.lerp(e.camPos, e.weight);
+      look.lerp(e.look, e.weight);
+      fov = MathUtils.lerp(fov, e.fov, e.weight);
+    }
+    return fov;
   }
+  private poseHold = new Vector3();
+  private poseEnding: EndingPose = { weight: 0, camPos: new Vector3(), look: new Vector3(), fov: 40, roll: 0 };
   // --- end office detour ---
+
+  /** the ending's own camera this frame (rig/endingShot.ts, owned by the ending), laid over everything last */
+  readonly ending: EndingPose = { weight: 0, camPos: new Vector3(), look: new Vector3(), fov: 40, roll: 0, bars: 0 };
+
+  /**
+   * A following hold: moved on by `follow` x the dart's way since `followFrom` (the beat's start by default), the
+   * share easing in over 0.01 of story-t so the camera sets off without a jolt (pure in t).
+   */
+  private followDart(beat: Beat, t: number, out: Vector3): void {
+    const from = beat.followFrom ?? beat.at[0];
+    if (t <= from) return;
+    // the camera's velocity is the share times the dart's: sum the share over the dart's way, step by step (the
+    // share of the way so far, not of the whole way, or the camera lunges as the share grows)
+    const steps = 16;
+    this.path.pointAt(from, this.tFollowB);
+    for (let i = 1; i <= steps; i++) {
+      const s = from + ((t - from) * i) / steps;
+      this.path.pointAt(s, this.tFollowA);
+      const share = beat.follow! * MathUtils.smoothstep(s - (t - from) / (2 * steps), from, from + FOLLOW_EASE);
+      out.addScaledVector(this.tFollowB.sub(this.tFollowA).negate(), share);
+      this.tFollowB.copy(this.tFollowA);
+    }
+  }
+  private tFollowA = new Vector3();
+  private tFollowB = new Vector3();
+
+  /** the chapter's rig at t with the beats' changes to it (the chase camera's lag), in a scratch object */
+  private beatRig(t: number): RigParams {
+    const s = this.rigScratch;
+    s.dutch = 0;
+    s.bank = 0;
+    s.lookUp = 0;
+    const rig = Object.assign(s, rigParamsAt(t));
+    let lag = 1;
+    let side = 1;
+    let ahead = 1;
+    for (const beat of BEATS) {
+      if (beat.lag === undefined && beat.side === undefined && beat.ahead === undefined) continue;
+      const w = beatWeight(beat, t);
+      if (w <= 0) continue;
+      if (beat.lag !== undefined) lag *= 1 + (beat.lag - 1) * w;
+      if (beat.side !== undefined) side *= 1 + (beat.side - 1) * w;
+      if (beat.ahead !== undefined) ahead *= 1 + (beat.ahead - 1) * w;
+    }
+    rig.camLag *= lag;
+    rig.offsetSide *= side;
+    rig.lookAhead *= ahead;
+    return rig;
+  }
+  private rigScratch: RigParams = { fov: 45, camLag: 0, lookAhead: 0, turbAmp: 0, offsetUp: 0, offsetSide: 0, offsetBack: 0 };
 
   private noise = new ImprovedNoise();
   private roll = 0;
@@ -176,6 +295,7 @@ export class CameraRig {
   private rollQuat = new Quaternion();
   private tA = new Vector3();
   private tB = new Vector3();
+  private tSmooth = new Vector3();
   private sideScratch = new Vector3();
   private planeScratch = new Vector3();
   private studyPos = new Vector3();
@@ -189,6 +309,23 @@ export class CameraRig {
     private options: CameraRigOptions = { reducedMotion: false },
   ) {}
 
+  /** the line's speed per unit t just after the hand-off over just before it (lazily: the path is a parameter) */
+  private handK = 0;
+  /**
+   * The story-t at the distance a lag or look-ahead `d` (story-t, at the copilot's speed) reaches from `t`: t + d
+   * everywhere but across the hand-off. The ending's line is about four times as fast per unit of story-t as the
+   * copilot's (FlightPath: a step in its speed at H; the pace warp gives the ending as many more pixels per unit t,
+   * so the dart's speed per pixel carries straight across), and an offset in story-t that crossed H would stretch to
+   * four times its distance within a few pixels: the chase would drop back, and the look run on, in a jerk. Measured
+   * at the copilot's speed the chase stays the same distance behind the dart, and looks the same distance ahead.
+   */
+  private along(t: number, d: number): number {
+    const k = this.handK || (this.handK = this.path.speedAt(HAND_T + 1e-3) / Math.max(this.path.speedAt(HAND_T - 1e-3), 1e-6));
+    const u = t <= HAND_T ? t : HAND_T + (t - HAND_T) * k;
+    const v = u + d;
+    return v <= HAND_T ? v : HAND_T + (v - HAND_T) / k;
+  }
+
   /**
    * Where the chase camera stands for story-t `t`, with no turbulence: the chapter's lag and
    * offsets, kept a minimum distance off the dart. Pure in t, so a held shot can ask where the
@@ -197,8 +334,16 @@ export class CameraRig {
   private chasePosition(t: number, rig: RigParams, out: Vector3): Vector3 {
     const planePos = this.path.pointAt(t, this.planeScratch);
     const tangent = this.path.tangentAt(t, this.tA);
+    // From the canyon to the hand-off the camera's frame follows the line's heading over a few units, not its
+    // instant one: the climb out of the street eases its heading and pitch onto the tower's line within a couple of
+    // units, and a chase camera hung off the instant tangent swung its side and back offsets with it (a jerk).
+    const k = CHASE_SMOOTH * MathUtils.smoothstep(t, 0.7, 0.72) * (1 - MathUtils.smoothstep(t, 0.86, 0.88));
+    if (k > 0) {
+      tangent.add(this.path.tangentAt(Math.max(t - k, 0), this.tSmooth));
+      tangent.add(this.path.tangentAt(Math.min(t + k, 1), this.tSmooth)).normalize();
+    }
     const side = this.sideScratch.crossVectors(tangent, UP).normalize();
-    this.path.pointAt(Math.max(t - rig.camLag, 0), out);
+    this.path.pointAt(Math.max(this.along(t, -rig.camLag), 0), out);
     out.addScaledVector(UP, rig.offsetUp);
     out.addScaledVector(side, rig.offsetSide);
     out.addScaledVector(tangent, -rig.offsetBack);
@@ -226,7 +371,7 @@ export class CameraRig {
   }
 
   update(t: number, time: number, dt: number): void {
-    const rig = rigParamsAt(t);
+    const rig = this.beatRig(t);
     const calm = this.options.reducedMotion;
 
     // --- plane ---
@@ -297,6 +442,7 @@ export class CameraRig {
         if (beat.holdAt) this.holdPos.fromArray(beat.holdAt);
         else this.chasePosition(beat.hold!, rigParamsAt(beat.hold!), this.holdPos);
         if (beat.nudge) this.holdPos.add(this.tA.fromArray(beat.nudge));
+        if (beat.holdAt && beat.follow) this.followDart(beat, t, this.holdPos);
       }
     }
 
@@ -332,9 +478,13 @@ export class CameraRig {
       this.camPos.z += this.noise.noise(44.2, 8.8, time * 0.143) * b;
     }
     if (dw > 0) this.camPos.lerp(this.detour.camPos, dw);
+    // the ending's own camera (rig/endingShot.ts), laid over everything last
+    const end = endingPose(t, this.camera.aspect, this.ending);
+    const ew = end.weight;
+    if (ew > 0) this.camPos.lerp(end.camPos, ew);
     this.camera.position.copy(this.camPos);
 
-    const lookT = Math.min(t + rig.lookAhead, 1);
+    const lookT = Math.min(this.along(t, rig.lookAhead), 1);
     this.path.pointAt(lookT, this.lookAtPoint);
     this.lookAtPoint.y += rig.lookUp ?? 0;
     if (!this.lookInitialized) {
@@ -352,6 +502,7 @@ export class CameraRig {
     if (hold > 0) this.lookAtPoint.lerp(this.planePos, hold);
     if (this.shot.weight > 0) this.lookAtPoint.lerp(this.shot.look, this.shot.weight);
     if (dw > 0) this.lookAtPoint.lerp(this.detour.look, dw);
+    if (ew > 0) this.lookAtPoint.lerp(end.look, ew);
     this.camera.lookAt(this.lookAtPoint);
 
     // roll: a dutch angle where the beat wants one, and a share of the dart's bank into turns —
@@ -360,7 +511,8 @@ export class CameraRig {
     const bank = calm ? 0 : -this.pathTurn(t) * 2.4 * (rig.bank ?? 0) * free;
     const rollTarget = calm ? 0 : MathUtils.clamp(bank, -0.18, 0.18) + dutch * DEG;
     this.camRoll = MathUtils.damp(this.camRoll, rollTarget, 4, dt);
-    const roll = dw > 0 ? MathUtils.lerp(this.camRoll, this.detour.roll, dw) : this.camRoll;
+    let roll = dw > 0 ? MathUtils.lerp(this.camRoll, this.detour.roll, dw) : this.camRoll;
+    if (ew > 0) roll = MathUtils.lerp(roll, calm ? 0 : end.roll, ew);
     if (Math.abs(roll) > 1e-4) this.camera.rotateZ(roll);
 
     // focal length: the chapter's lens times the beat's push, plus a kick when lightning hits
@@ -371,14 +523,15 @@ export class CameraRig {
     const widen = MathUtils.lerp(1, MathUtils.clamp(1.25 / this.camera.aspect, 1, 1.9), study);
     if (widen > 1.001) fov = (2 * Math.atan(Math.tan((fov * DEG) / 2) * widen)) / DEG;
     this.fovTarget = calm ? fov : MathUtils.damp(this.fovTarget, fov, 5, dt);
-    const lens = dw > 0 ? MathUtils.lerp(this.fovTarget, this.detour.fov, dw) : this.fovTarget;
+    let lens = dw > 0 ? MathUtils.lerp(this.fovTarget, this.detour.fov, dw) : this.fovTarget;
+    if (ew > 0) lens = MathUtils.lerp(lens, end.fov, ew);
     if (Math.abs(this.camera.fov - lens) > 0.01) {
       this.camera.fov = lens;
       this.camera.updateProjectionMatrix();
     }
 
     // the lens: what is in focus, how soft the rest is, how matted the frame
-    this.cine.bars = bars;
+    this.cine.bars = ew > 0 && end.bars !== undefined ? Math.max(bars * (1 - ew), end.bars * ew) : bars;
     this.cine.bokeh = 0.4 + bokeh;
     this.tB.copy(this.planePos).lerp(this.shot.look, this.shot.weight);
     this.cine.focus = this.camPos.distanceTo(this.tB);

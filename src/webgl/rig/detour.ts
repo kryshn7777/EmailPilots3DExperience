@@ -1,75 +1,106 @@
+import { DETOUR_TIMING } from './pathPoints.mjs';
+
 /**
- * The office detour: a stretch of scroll where story-t STOPS and a sub-timeline `u` runs instead.
+ * The office detour: a stretch of scroll where story-t runs SLOWLY across the IT-office tower and a sub-timeline
+ * `u` drives the office.
  *
- * Story-t is written as literal numbers across the whole engine (visibility gates, grades, beats,
- * titles), so the detour is not a chapter: it is a pause in t. One extra spacer section in the
- * scroll stage (Experience.astro, `[data-detour]`) is `W` of the scroll; scroll progress `p` maps to
+ * The tower crossing is part of the flight line (pathPoints.mjs): the line goes straight in the tower's west face
+ * and straight out of its east face, and the dart is always ON it, except between the two cuts, when the camera is
+ * in the office (its own stage, below the world). Story-t does not stop: across the detour's spacer section in the
+ * scroll stage (Experience.astro, `[data-detour]`, `W` of the scroll) it runs from T_S to T_E = T_S + D_T, and
+ * u = (t - T_S) / D_T. Scroll progress `p` maps to
  *
- *   p <  Ps          t = p / (1 - W)                u = 0
- *   Ps <= p <= Ps+W  t = T_S                        u = (p - Ps) / W
- *   p >  Ps + W      t = (p - W) / (1 - W)          u = 0 (the detour is behind)
+ *   p <  Ps          t = p (1 - D_T) / (1 - W)                         u = 0
+ *   Ps <= p <= Pe    t = T_S + D_T u,  u = (p - Ps) / W                (the detour)
+ *   p >  Pe          t = T_E + (p - Pe) (1 - D_T) / (1 - W)            u = 0 (the detour is behind)
  *
- * with Ps = T_S * (1 - W), so t is continuous at both edges and every chapter keeps its own
- * stretch of scroll in the same proportions as before. W = 0 (a page without the spacer) is the
- * identity. Everything in here is pure (no three, no DOM): `scripts/check-detour.mjs` tests it.
+ * with Ps = T_S (1 - W) / (1 - D_T) and Pe = Ps + W, so t is continuous and increasing everywhere and the rest of
+ * the story keeps its share of the scroll in the same proportions as before. W = 0 (a page without the spacer) is
+ * the identity (no office: the dart just flies through the tower). Everything in here is pure (no three, no DOM):
+ * `scripts/check-detour.mjs` tests it.
  *
- * Everything in the detour is keyed on `u` alone (the cuts, the flare, the screen's state), never
- * on events, so a scrub in either direction or a fast flick always lands on the same frame.
+ * The office's beats are keyed on `u` alone (the cuts, the flare, the screen's state), never on events, so a scrub
+ * in either direction or a fast flick always lands on the same frame.
  */
 
-/** the story moment the detour leaves from and rejoins: the copilot climb, above the night city */
-export const T_S = 0.79;
+/** the story moment the detour starts at (the dart is 0.4 short of the tower's west face) */
+export const T_S = DETOUR_TIMING.T_S;
+/** how much story-t the detour carries: the run-in, the tower and the burst out of it */
+export const D_T = DETOUR_TIMING.D_T;
+/** where it ends */
+export const T_E = T_S + D_T;
 
 /** the sub-timeline's beats */
 export const DETOUR = {
-  /** the dart reaches the tower's glass: flare and cut into the office */
-  cutIn: 0.08,
-  /** the establishing shot from the window ends; the envelope comes out after the dart */
-  envelopeFrom: 0.2,
-  /** the envelope is inside the live laptop */
+  /** the dart reaches the tower's west face (P(T_S + cutIn D_T) is on it): flare and cut into the office */
+  cutIn: DETOUR_TIMING.cutIn,
+  /** every monitor in the room flickers on red, the old way (all the same "Dear all"), then dies */
+  flickerFrom: 0.1,
+  flickerTo: 0.135,
+  /** the envelope drops out of the dart's belly toward the one live laptop */
+  envelopeFrom: 0.33,
+  /** the envelope is inside the live laptop: delivered */
   absorbed: 0.45,
   /** the screen reads received; the card is up until `cardTo` */
   received: 0.47,
-  cardTo: 0.62,
-  /** the dart turns for the window */
-  leave: 0.6,
-  /** the dart reaches the glass from inside: flare and cut back to the city */
-  cutOut: 0.66,
-  /** out of the facade; the climb over the city starts */
-  climb: 0.72,
+  cardTo: 0.64,
+  /** the dart reaches the far glass from inside (P(T_S + cutOut D_T) is on the east face): flare and cut back */
+  cutOut: DETOUR_TIMING.cutOut,
+  /** the glass shards are spent */
+  shardsTo: 0.86,
 } as const;
+
+/** the story-t at detour clock u */
+export function tOfU(u: number): number {
+  return T_S + D_T * Math.min(Math.max(u, 0), 1);
+}
+
+/** the detour clock at story-t t (0 before the detour, 1 after it) */
+export function uOfT(t: number): number {
+  return Math.min(Math.max((t - T_S) / D_T, 0), 1);
+}
 
 export interface DetourState {
   /** story-t */
   t: number;
-  /** the detour's own clock, 0..1; 0 outside the detour */
+  /** the detour's own clock, 0..1, while it runs; 0 outside it (before and after) */
   u: number;
   /** inside the detour's stretch of scroll (0 < u < 1) */
   active: boolean;
 }
 
-/** where the detour starts in scroll progress */
-export function detourStart(w: number): number {
-  return T_S * (1 - w);
+/**
+ * Where the detour starts in scroll progress. `gap` is the linear story-t the spacer sits at: T_S for the plain
+ * linear map; the pace warp (rig/pace.ts) puts it where its own pixels reach T_S, so it passes its `gap` here.
+ */
+export function detourStart(w: number, gap = T_S): number {
+  return (gap * (1 - w)) / (1 - D_T);
 }
 
-/** scroll progress (0..1) to story-t and the detour clock */
-export function detourMap(p: number, w: number): DetourState {
+/**
+ * Scroll progress (0..1) to linear story-t and the detour clock. With the default `gap` the linear story-t IS
+ * story-t (no pace warp); with the pace's `gap` it is the warp's input (the detour runs gap -> gap + D_T in it).
+ */
+export function detourMap(p: number, w: number, gap = T_S): DetourState {
   const q = Math.min(Math.max(p, 0), 1);
   if (!(w > 0)) return { t: q, u: 0, active: false };
-  const ps = detourStart(w);
-  if (q < ps) return { t: q / (1 - w), u: 0, active: false };
-  if (q > ps + w) return { t: Math.min((q - w) / (1 - w), 1), u: 0, active: false };
+  const ps = detourStart(w, gap);
+  const k = (1 - D_T) / (1 - w);
+  if (q < ps) return { t: q * k, u: 0, active: false };
+  if (q > ps + w) return { t: Math.min(gap + D_T + (q - ps - w) * k, 1), u: 0, active: false };
   const u = (q - ps) / w;
-  return { t: T_S, u, active: u > 0 && u < 1 };
+  return { t: gap + D_T * u, u, active: u > 0 && u < 1 };
 }
 
-/** the inverse: the scroll progress that shows story-t `t` (u = 0 before T_S, u at T_S, past it after) */
-export function progressOf(t: number, w: number, u = 0): number {
-  if (!(w > 0)) return t;
-  if (t < T_S) return t * (1 - w);
-  if (t > T_S) return t * (1 - w) + w;
-  return detourStart(w) + Math.min(Math.max(u, 0), 1) * w;
+/** the inverse: the scroll progress that shows linear story-t `t` (exact; inside the detour `t` and `u` are the same thing) */
+export function progressOf(t: number, w: number, gap = T_S): number {
+  const q = Math.min(Math.max(t, 0), 1);
+  if (!(w > 0)) return q;
+  const ps = detourStart(w, gap);
+  const k = (1 - D_T) / (1 - w);
+  if (q < gap) return q / k;
+  if (q > gap + D_T) return ps + w + (q - gap - D_T) / k;
+  return ps + ((q - gap) / D_T) * w;
 }
 
 /** in the office (the room is on screen and the rest of the world is hidden) */
@@ -85,25 +116,25 @@ export function flareAt(u: number): number {
     return Math.exp(-(d / s) * (d / s));
   };
   if (u <= 0 || u >= 1) return 0;
-  // the tails are cut off (a faint veil over the dark office read as fog)
-  const f = Math.max(bump(DETOUR.cutIn, 0.014, 0.016), bump(DETOUR.cutOut, 0.014, 0.016));
+  // the tails are cut off (a faint veil over the dark office read as fog). The way in rises a little earlier:
+  // the dart is still on the line at speed until just before the glass, and slows under the white (rig/pace.ts)
+  const f = Math.max(bump(DETOUR.cutIn, 0.02, 0.02), bump(DETOUR.cutOut, 0.014, 0.016));
   return Math.max(0, (f - 0.04) / 0.96);
 }
 
 /**
- * How much the detour owns the camera and the dart: 0 at both ends (the frame IS the main rig's),
- * 1 once it is under way. The poses it blends toward start and end on the main rig's own pose, so
- * the ramp only has to cover what the main rig does that the detour does not model (turbulence).
+ * How much the office owns the camera and the dart: 1 between the cuts, 0 everywhere else. Outside the office the
+ * dart is on the flight line and the camera is the main rig's (its beats frame the run at the glass and the burst
+ * out of the far face); the switch is a cut, made under the flare.
  */
 export function detourWeight(u: number): number {
-  if (u <= 0 || u >= 1) return 0;
-  return smooth(u, 0, 0.025) * (1 - smooth(u, 0.975, 1));
+  return insideAt(u) ? 1 : 0;
 }
 
 /**
- * The fastest the scroll may carry the detour clock, in u per second: a flick across the whole
- * page still plays the detour in about two-thirds of a second, so neither cut can be stepped over
- * between two frames without its flare (see Engine.renderFrame).
+ * The fastest the scroll may carry the detour clock, in u per second: a flick across the whole page still plays
+ * the detour in about two-thirds of a second, so neither cut can be stepped over between two frames without its
+ * flare (see Engine.renderFrame).
  */
 export const MAX_U_RATE = 1.5;
 

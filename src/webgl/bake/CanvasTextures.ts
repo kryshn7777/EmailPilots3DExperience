@@ -1,6 +1,7 @@
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three';
 import { detectQuality } from '../quality';
 import { createLaptopScreen } from '../actors/LaptopScreen';
+import { BANNER, PREFLIGHT_BOARD } from '../../story/copy';
 
 /**
  * Runtime "texture baking": every map the world needs is drawn once into a
@@ -127,7 +128,8 @@ export function bannerTexture(): CanvasTexture {
   ctx.font = '900 128px Georgia, "Times New Roman", serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('EMAIL PILOTS', 512, 136, 940);
+  // the storm's lesson, towed across it: one by one (story/copy.ts BANNER)
+  ctx.fillText(BANNER, 512, 136, 940);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
   return texture;
@@ -201,35 +203,153 @@ export function letterTexture(): CanvasTexture {
   return texture;
 }
 
-/** Preflight panel face: dark plate, checklist rows, READY strip at top. */
-export function panelTexture(): CanvasTexture {
-  const [canvas, ctx] = makeCanvas(512);
-  ctx.fillStyle = '#10141f';
-  ctx.fillRect(0, 0, 512, 512);
-  ctx.strokeStyle = 'rgba(155, 232, 255, 0.25)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(12, 12, 488, 488);
+/** the pre-flight departures board's canvas, in layout px (Panel.ts sizes the board to its aspect) */
+export const BOARD_W = 1024;
+export const BOARD_H = 590;
+const BOARD_M = 40;
+/** the split-flap rows: label cells, a gap, status cells, a gap, the tick */
+const ROW_Y0 = 96;
+const ROW_PITCH = 68;
+const CELL_H = 56;
+/** the verdict strip, under the checks: the conclusion they lead to */
+const VERDICT_Y = 452;
+const VERDICT_H = 96;
+const LABEL_CELLS = 16;
+const STATUS_CELLS = 7;
+const CELL_PITCH = (BOARD_W - 2 * BOARD_M) / (LABEL_CELLS + 1 + STATUS_CELLS + 1 + 1);
 
-  ctx.fillStyle = '#9be8ff';
-  ctx.font = '600 34px monospace';
-  ctx.fillText('PRE-FLIGHT', 36, 70);
+export interface BoardFace {
+  texture: CanvasTexture;
+  /**
+   * Draws state `s` (0..rows+1): 0 every row still CHECKing under a red GROUNDED; k rows cleared; rows+1 the
+   * verdict flipped to READY FOR TAKEOFF. The first row's value cycles through the mailboxes it works with.
+   */
+  draw(s: number): void;
+  /** the status cells of row `i`, in layout px: where Panel lays its falling flap */
+  statusRect(i: number): [number, number, number, number];
+  /** the verdict strip, in layout px */
+  verdictRect(): [number, number, number, number];
+}
 
-  ctx.font = '400 22px monospace';
-  const rows = ['INBOX CONNECTED', 'ACCOUNTS HEALTHY', 'SUBJECT WRITTEN', 'SCHEDULES SET', "TODAY'S ALLOWANCE"];
-  rows.forEach((row, i) => {
-    const y = 140 + i * 62;
-    ctx.fillStyle = 'rgba(155, 232, 255, 0.75)';
-    ctx.fillText(row, 90, y);
-    ctx.strokeStyle = 'rgba(155, 232, 255, 0.4)';
-    ctx.strokeRect(40, y - 24, 30, 30);
-  });
-
-  ctx.fillStyle = '#7fe8d8';
-  ctx.font = '700 30px monospace';
-  ctx.fillText('READY FOR TAKEOFF', 60, 480);
+/**
+ * The pre-flight board's face (Panel.ts): an airport departures board. Split-flap cells, white characters on
+ * black: five checks that flip from CHECK to cleared one by one, and under them the verdict strip with the
+ * app's real two verdicts, red GROUNDED and green READY FOR TAKEOFF (FEATURES.md §7; story/copy.ts
+ * PREFLIGHT_BOARD). The verdict sits at the foot so it stays in frame as the camera leaves the window.
+ * A live canvas: Panel redraws it once per state (seven states in all), never per frame.
+ */
+export function preflightBoard(): BoardFace {
+  const res = detectQuality('').tier === 'high' ? 1.5 : 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(BOARD_W * res);
+  canvas.height = Math.round(BOARD_H * res);
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(res, res);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
-  return texture;
+  texture.anisotropy = 8;
+  const flap = "600 44px Oswald, 'Arial Narrow', sans-serif";
+  const big = "700 70px Oswald, 'Arial Narrow', sans-serif";
+
+  /** one split-flap cell with its character */
+  const cell = (x: number, y: number, w: number, h: number, ch: string, color: string, font: string, lit = 0): void => {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, '#30343e');
+    g.addColorStop(0.5, '#23262e');
+    g.addColorStop(0.5, '#191b21');
+    g.addColorStop(1, '#262a33');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 4);
+    ctx.fill();
+    if (lit > 0) {
+      ctx.fillStyle = color.replace('rgb(', 'rgba(').replace(')', `, ${0.12 * lit})`);
+      ctx.fill();
+    }
+    if (ch.trim()) {
+      ctx.save();
+      ctx.font = font;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = color;
+      ctx.shadowBlur = lit > 0 ? 10 : 0;
+      ctx.fillText(ch, x + w / 2, y + h / 2 + 2, w * 0.96);
+      ctx.restore();
+    }
+    // the split
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(x, y + h / 2 - 1, w, 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - 1, y + h / 2 - 3, 3, 6);
+    ctx.fillRect(x + w - 2, y + h / 2 - 3, 3, 6);
+  };
+
+  const text = (x: number, y: number, s: string, n: number, color: string, font: string, h: number, lit = 0): void => {
+    const padded = s.padEnd(n, ' ').slice(0, n);
+    for (let k = 0; k < n; k++) cell(x + k * CELL_PITCH, y, CELL_PITCH - 4, h, padded[k]!, color, font, lit);
+  };
+
+  const WHITE = 'rgb(240, 240, 232)';
+  const AMBER = 'rgb(255, 196, 61)';
+  const GREEN = 'rgb(93, 255, 176)';
+  const RED = 'rgb(255, 77, 77)';
+  const rows = PREFLIGHT_BOARD.rows;
+  const verdictCells = PREFLIGHT_BOARD.ready.length;
+  const vPitch = 55;
+  const vx = (BOARD_W - verdictCells * vPitch) / 2;
+
+  const draw = (s: number): void => {
+    ctx.clearRect(0, 0, BOARD_W, BOARD_H);
+    const bg = ctx.createLinearGradient(0, 0, 0, BOARD_H);
+    bg.addColorStop(0, '#0d0f14');
+    bg.addColorStop(1, '#07080b');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, BOARD_W - 6, BOARD_H - 6);
+
+    // the header: what the board is, and which flight
+    ctx.font = "600 34px Oswald, 'Arial Narrow', sans-serif";
+    ctx.fillStyle = AMBER;
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillText(PREFLIGHT_BOARD.title.split('').join(String.fromCharCode(8202)), BOARD_M, 64);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(240, 240, 232, 0.75)';
+    ctx.fillText(PREFLIGHT_BOARD.flight, BOARD_W - BOARD_M, 64);
+    ctx.textAlign = 'left';
+
+    // the verdict
+    const ready = s > rows.length;
+    const verdict = ready ? PREFLIGHT_BOARD.ready : PREFLIGHT_BOARD.grounded;
+    const pad = Math.floor((verdictCells - verdict.length) / 2);
+    const padded = ' '.repeat(pad) + verdict;
+    for (let k = 0; k < verdictCells; k++) {
+      cell(vx + k * vPitch, VERDICT_Y, vPitch - 5, VERDICT_H, padded[k] ?? ' ', ready ? GREEN : RED, big, 1);
+    }
+
+    // the checks
+    rows.forEach((row, i) => {
+      const y = ROW_Y0 + i * ROW_PITCH;
+      const done = s > i;
+      text(BOARD_M, y, row.label, LABEL_CELLS, done ? WHITE : 'rgba(240, 240, 232, 0.55)', flap, CELL_H);
+      // the first row's value cycles: GMAIL, OUTLOOK, SMTP, …
+      const values = row.values as readonly string[];
+      const value = done ? values[(s - 1 - i) % values.length]! : PREFLIGHT_BOARD.pending;
+      text(BOARD_M + (LABEL_CELLS + 1) * CELL_PITCH, y, value, STATUS_CELLS, done ? GREEN : AMBER, flap, CELL_H, done ? 1 : 0);
+      cell(BOARD_M + (LABEL_CELLS + 1 + STATUS_CELLS + 1) * CELL_PITCH, y, CELL_PITCH - 4, CELL_H, done ? '✓' : '·', done ? GREEN : AMBER, flap, done ? 1 : 0);
+    });
+    texture.needsUpdate = true;
+  };
+  draw(0);
+  return {
+    texture,
+    draw,
+    statusRect: (i) => [BOARD_M + (LABEL_CELLS + 1) * CELL_PITCH, ROW_Y0 + i * ROW_PITCH, (STATUS_CELLS + 2) * CELL_PITCH, CELL_H],
+    verdictRect: () => [vx, VERDICT_Y, verdictCells * vPitch, VERDICT_H],
+  };
 }
 
 /**
@@ -728,14 +848,22 @@ export function cloudDeckTexture(): CanvasTexture {
 
 /** Soft radial spot — dust motes, rain caps, glows. */
 export function glowTexture(): CanvasTexture {
-  const [canvas, ctx] = makeCanvas(64);
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
+  // Smooth, not three stops: a puff or halo is drawn hundreds of pixels wide, and a 64 px gradient with a
+  // kink at 0.4 showed as concentric rings (each texel's edge, magnified) in the steam and the lamp haze.
+  // The falloff (1 - r)^1.6 reaches zero with zero slope at the rim, and many stops keep the 8-bit steps
+  // fine enough that the filter blends them away.
+  const [canvas, ctx] = makeCanvas(128);
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (let i = 0; i <= 32; i++) {
+    const r = i / 32;
+    g.addColorStop(r, `rgba(255,255,255,${Math.pow(1 - r, 1.6).toFixed(4)})`);
+  }
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new CanvasTexture(canvas);
+  ctx.fillRect(0, 0, 128, 128);
+  const texture = new CanvasTexture(canvas);
+  texture.generateMipmaps = true;
+  texture.anisotropy = 1;
+  return texture;
 }
 
 /** Soft round blob, black in the middle and clear at the edge: a contact shadow decal. */

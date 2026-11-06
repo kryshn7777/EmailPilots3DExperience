@@ -16,6 +16,7 @@ import {
   ShaderMaterial,
   TextureLoader,
   Vector3,
+  Vector4,
   type Texture,
   type WebGLProgramParametersWithUniforms,
 } from 'three';
@@ -765,7 +766,7 @@ export class CityLife {
           p.x += age * age * 0.35 + sin(age * 7.0 + aPhase * 40.0) * 0.04 * age;
           p.z += sin(age * 5.0 + aPhase * 17.0) * 0.05 * age;
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = (8.0 + age * (34.0 + 30.0 * aK)) * (260.0 / -mv.z);
+          gl_PointSize = min((8.0 + age * (34.0 + 30.0 * aK)) * (260.0 / -mv.z), 300.0);
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
@@ -773,7 +774,7 @@ export class CityLife {
         varying float vAge;
         varying float vK;
         void main() {
-          float a = texture2D(uMap, gl_PointCoord).r * (1.0 - vAge) * smoothstep(0.0, 0.1, vAge) * (0.12 + 0.12 * vK);
+          float a = texture2D(uMap, gl_PointCoord).a * (1.0 - vAge) * smoothstep(0.0, 0.1, vAge) * (0.12 + 0.12 * vK);
           gl_FragColor = vec4(vec3(0.86, 0.78, 0.7) * a, a);
         }`,
       transparent: true, depthWrite: false, blending: AdditiveBlending,
@@ -897,9 +898,16 @@ function cableGeometry(a: Vector3, b: Vector3, sag: number, uv: number[]): Buffe
  * `lampField`, read-only here): each lamp head a cos^2 downlight with inverse-square falloff, the
  * three nearest columns asked, in the lamps' warm sodium colour.
  */
-function litByLamps(material: MeshStandardMaterial, origin: Vector3, k: number): void {
+/**
+ * The street props' lighting: the canyon's lamps (lampField) as fake point lights in the fragment shader.
+ * `warm` adds a few more of them, warm and close (a terrace's candles and festoon lights), in the
+ * material's group frame: x, y, z and strength.
+ */
+export function litByLamps(material: MeshStandardMaterial, origin: Vector3, k: number, warm?: { value: Vector4[] }): void {
+  const nw = warm?.value.length ?? 0;
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uLOrigin = { value: origin };
+    if (warm) shader.uniforms.uWarm = warm;
     shader.uniforms.uLamps = lampField.heads;
     shader.uniforms.uLampInfo = lampField.info;
     shader.uniforms.uLampLevel = lampField.level;
@@ -912,8 +920,17 @@ function litByLamps(material: MeshStandardMaterial, origin: Vector3, k: number):
         uniform vec2 uLamps[${lampField.heads.value.length}];
         uniform vec4 uLampInfo;
         uniform float uLampLevel;
+        ${nw ? `uniform vec4 uWarm[${nw}];` : ''}
         vec3 propLamps(vec3 P, vec3 N, vec3 albedo) {
           vec3 sum = vec3(0.0);
+          ${nw ? `vec3 warmSum = vec3(0.0);
+          for (int i = 0; i < ${nw}; i++) {
+            vec3 L = uWarm[i].xyz - P;
+            float d2 = dot(L, L);
+            float ndl = clamp(dot(N, L * inversesqrt(d2)) * 0.6 + 0.4, 0.0, 1.0);
+            warmSum += albedo * ndl * uWarm[i].w / (d2 * 40.0 + 0.6);
+          }
+          sum += warmSum * vec3(1.0, 0.62, 0.3) / max(uLampLevel, 0.05);` : ''}
           float col = floor((P.x - uLampInfo.x) / uLampInfo.y);
           for (int ci = -1; ci <= 1; ci++) {
             float cc = col + float(ci);
@@ -934,6 +951,6 @@ function litByLamps(material: MeshStandardMaterial, origin: Vector3, k: number):
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
         totalEmissiveRadiance += propLamps(vLW, inverseTransformDirection(normal, viewMatrix), diffuseColor.rgb);`);
   };
-  material.customProgramCacheKey = () => 'city-life-props';
+  material.customProgramCacheKey = () => (nw ? `city-life-props-warm${nw}` : 'city-life-props');
 }
 

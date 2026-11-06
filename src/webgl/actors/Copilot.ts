@@ -12,6 +12,7 @@ import {
 } from 'three';
 import { PaperPlane } from './PaperPlane';
 import { mulberry32 } from '../util';
+import { T_E } from '../rig/detour';
 
 /**
  * CH9: the on-device copilot — a smaller dart that slides onto the wing in
@@ -73,8 +74,9 @@ export class Copilot {
     time: number,
   ): void {
     if (!this.group.visible) return;
-    // slides in from below-right early in the chapter, then holds formation
-    const enter = Math.min(Math.max((t - 0.79) / 0.03, 0), 1);
+    // slides in from below once the dart is out of the tower (the office detour ends at T_E), still on the same
+    // climb, then holds formation on the far wing
+    const enter = Math.min(Math.max((t - T_E - 0.004) / 0.026, 0), 1);
     const eased = enter * enter * (3 - 2 * enter);
     this.offset
       .copy(side)

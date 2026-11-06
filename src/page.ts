@@ -8,8 +8,23 @@ let observer: IntersectionObserver | null = null;
 const magnetCleanups: (() => void)[] = [];
 let chromeBound = false;
 
-const CHAPTER_NAMES = ['THE DESK', 'PREFLIGHT', 'TAKEOFF', 'FORMATION', 'THE STORM', 'THE BEACON', 'THE NO-FLY LIST', 'CITY OF INBOXES', 'THE COPILOT', 'THE LANDING'];
 const CHAPTER_T = [0, 0.09, 0.17, 0.26, 0.36, 0.48, 0.58, 0.66, 0.78, 0.88, 1];
+
+/**
+ * The chapters' names, one per chapter: the feature each one shows ("HUMAN PACING", "DO-NOT-SEND LIST"…).
+ * story/copy.ts CHAPTER_NAMES is the source; Base.astro writes them onto the rail (`data-names`) so this
+ * initial bundle stays free of the copy module.
+ */
+function chapterNames(): string[] {
+  try {
+    const names = JSON.parse(document.getElementById('scroll-progress')?.dataset.names ?? '[]') as unknown;
+    if (Array.isArray(names) && names.length === CHAPTER_T.length - 1) return names.map(String);
+  } catch {
+    /* fall through */
+  }
+  return CHAPTER_T.slice(0, -1).map((_, i) => `CHAPTER ${i + 1}`);
+}
+let CHAPTER_NAMES: string[] = [];
 
 let stageObserver: IntersectionObserver | null = null;
 let stageScroll: (() => void) | null = null;
@@ -80,6 +95,7 @@ function bindStage(): void {
 function bindChromeOnce(): void {
   if (chromeBound) return;
   chromeBound = true;
+  CHAPTER_NAMES = chapterNames();
 
   const hudChapter = document.getElementById('hud-chapter');
   const hudAlt = document.getElementById('hud-alt');
@@ -114,7 +130,7 @@ function bindChromeOnce(): void {
       const key = detourU > 0 ? -2 : i;
       if (key !== lastChapter) {
         lastChapter = key;
-        hudChapter.textContent = `CH ${String(i + 1).padStart(2, '0')} / 10 · ${detourU > 0 ? 'DETOUR · IT OFFICE' : CHAPTER_NAMES[i]}`;
+        hudChapter.textContent = `CH ${String(i + 1).padStart(2, '0')} / ${CHAPTER_NAMES.length} · ${detourU > 0 ? 'DETOUR · IT OFFICE' : CHAPTER_NAMES[i]}`;
       }
       const alt = Math.round(120 + Math.sin(t * Math.PI) * 2280);
       if (alt !== lastAlt) {
