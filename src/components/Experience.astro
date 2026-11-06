@@ -11,14 +11,14 @@
  * the content that follows scrolls up over the canvas.
  *
  * Its copy is hidden by default (canvas-only; `?copy=1` shows it) with `visibility`, never
- * `display`: the stage's height is the timeline.
+ * `display`: the stage's height is the timeline. Each chapter carries only its kicker, title and sub,
+ * generated from the same constants as the titles pinned into the flight (story/copy.ts PINNED_TITLES).
  *
  * Office detour: one more stretch of scroll (`[data-detour]`, 120vh) after the copilot chapter.
  * Story-t holds still while it scrolls by and the detour's own clock runs instead (the Engine maps
  * the scroll to both, rig/detour.ts, from this spacer's share of the timeline). No copy of its own.
  */
 import { HOME_CHAPTERS } from '../story/copy';
-import { href } from '../lib/href';
 ---
 
 <div id="experience" class="experience" data-experience>
@@ -34,41 +34,7 @@ import { href } from '../lib/href';
         <div class="chapter__copy" data-reveal>
           <p class="chapter__kicker">{c.kicker}</p>
           {i === 0 ? <h1>{c.title}</h1> : <h2>{c.title}</h2>}
-          <p class="chapter__body">{c.body}</p>
-          <ul class="chips">
-            {c.chips.map((chip) => (
-              <li>{chip}</li>
-            ))}
-          </ul>
-          {i === 1 && (
-            <div class="app-mock" aria-hidden="true">
-              <div class="app-mock__bar"><i></i><i></i><i></i></div>
-              <div class="app-mock__body">
-                <div class="app-mock__side">
-                  <b>DASHBOARD</b><span>CONTACTS</span><span>SEQUENCES</span><span>REPLIES</span><span>SENT</span><span>SETTINGS</span>
-                </div>
-                <div class="app-mock__main">
-                  <div class="app-mock__verdict"><span>PRE-FLIGHT CHECK</span><span>READY FOR TAKEOFF ✓</span></div>
-                  <div class="app-mock__meter">
-                    <label><span>TODAY'S USAGE</span><span>18 / 50</span></label>
-                    <i style="--fill: 36%"></i>
-                    <label><span>WARM-UP RAMP</span><span>DAY 6</span></label>
-                    <i style="--fill: 62%"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {i === HOME_CHAPTERS.length - 1 && (
-            <div class="btn-row">
-              <a class="btn btn--primary" data-magnetic href={href("/download")}>
-                Download for Windows — 7-day free trial
-              </a>
-              <a class="btn btn--ghost" href={href("/pricing")}>
-                See pricing
-              </a>
-            </div>
-          )}
+          <p class="chapter__body">{c.sub}</p>
         </div>
       </section>
     )).flatMap((section, i) => (HOME_CHAPTERS[i]!.id === 'copilot' ? [section, <div class="detour" data-detour aria-hidden="true" />] : [section]))

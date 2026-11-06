@@ -1,185 +1,37 @@
 ---
 /**
- * The website, after the flight. It sits directly below `<Experience />` in the same page: when
- * the last chapter has scrolled through (the experience is finished) this content scrolls up
- * over the fixed canvas like a curtain, the nav comes back, and the engine stops rendering
- * behind it. Every word is the site's own copy (story/copy.ts); only the section headings and
- * the replay button are new.
+ * The website, after the flight: one block over the last frame (the recipient's open inbox), and
+ * nothing else. It sits directly below `<Experience />` in the same page: when the last chapter has
+ * scrolled through, this block scrolls up over the fixed canvas, the nav comes back, and the engine
+ * stops rendering behind it (the canvas keeps its last frame, which the block's glass lets through).
+ * Every word comes from story/copy.ts (`INTRO`, `DOWNLOAD`, `SITE`): the flight has already said the
+ * rest, so there is no feature list, no FAQ and no pricing here.
  */
-import {
-  AUDIENCES,
-  DOWNLOAD,
-  FAQ,
-  HOME_CHAPTERS,
-  INTRO,
-  LAST_MILE,
-  LOCAL_AI,
-  MAILBOXES,
-  PRICING,
-  PROBLEM,
-  SAFEGUARDS,
-  STEPS,
-  WHY,
-} from '../story/copy';
-import LandingBlock from './LandingBlock.astro';
-import { href } from '../lib/href';
-
-const closing = HOME_CHAPTERS[HOME_CHAPTERS.length - 1]!;
+import { DOWNLOAD, INTRO, SITE } from '../story/copy';
 ---
 
-<section class="landing" id="landing-page" aria-label="Email Pilots">
-  <div class="landing__inner">
-    <header class="landing__hero" data-reveal>
-      <p class="page__kicker">{INTRO.kicker}</p>
-      <h2>{INTRO.title}</h2>
-      <p class="page__lede">{INTRO.body}</p>
-      <div class="btn-row">
-        <a
-          class="btn btn--primary"
-          data-magnetic
-          href={DOWNLOAD.cta.href}
-          aria-disabled={DOWNLOAD.cta.pending ? 'true' : undefined}
-          title={DOWNLOAD.cta.pending ? 'Release link coming with launch' : undefined}
-        >
-          {DOWNLOAD.cta.label}
-        </a>
-        <a class="btn btn--ghost" href={href('/features')}>Read the flight manual</a>
-        <button class="btn btn--ghost" type="button" data-replay>Replay the flight</button>
-      </div>
-      <ul class="landing__proof">
-        {INTRO.proof.map((p) => (
-          <li>
-            {/outlook/i.test(p) && <img class="landing__mark" src={href('/images/outlook.svg')} alt="" width="14" height="13" />}
-            {p}
-          </li>
-        ))}
-      </ul>
-      <p class="pricing-card__note">{DOWNLOAD.requirements}</p>
-    </header>
-
-    <section class="landing__section" aria-labelledby="landing-problem">
-      <p class="page__kicker">{PROBLEM.kicker}</p>
-      <h2 id="landing-problem">{PROBLEM.title}</h2>
-      <p class="page__lede">{PROBLEM.body}</p>
-      <div class="landing__versus">
-        {
-          [
-            { side: PROBLEM.before, mod: 'is-before', mark: '×' },
-            { side: PROBLEM.after, mod: 'is-after', mark: '✓' },
-          ].map(({ side, mod, mark }) => (
-            <article class={`landing__panel ${mod}`} data-reveal>
-              <p class="landing__card-kicker">{side.label}</p>
-              <ul data-mark={mark}>
-                {side.points.map((pt) => <li>{pt}</li>)}
-              </ul>
-            </article>
-          ))
-        }
-      </div>
-      <ul class="landing__proof">
-        {PROBLEM.wins.map((w) => <li>{w}</li>)}
-      </ul>
-    </section>
-
-    <LandingBlock id="landing-how" block={STEPS} />
-    <LandingBlock id="landing-safeguards" block={SAFEGUARDS} />
-    <LandingBlock id="landing-last-mile" block={LAST_MILE} />
-
-    <section class="landing__section" aria-labelledby="landing-ai">
-      <p class="page__kicker">{LOCAL_AI.kicker}</p>
-      <h2 id="landing-ai">{LOCAL_AI.title}</h2>
-      <p class="page__lede">{LOCAL_AI.body}</p>
-      <div class="landing__versus">
-        {
-          [
-            { side: LOCAL_AI.cloud, mod: 'is-before', mark: '×' },
-            { side: LOCAL_AI.local, mod: 'is-after', mark: '✓' },
-          ].map(({ side, mod, mark }) => (
-            <article class={`landing__panel ${mod}`} data-reveal>
-              <p class="landing__card-kicker">{side.label}</p>
-              <ul data-mark={mark}>
-                {side.points.map((pt) => <li>{pt}</li>)}
-              </ul>
-            </article>
-          ))
-        }
-      </div>
-    </section>
-
-    <section class="landing__section" aria-labelledby="landing-mailboxes">
-      <p class="page__kicker">{MAILBOXES.kicker}</p>
-      <h2 id="landing-mailboxes">{MAILBOXES.title}</h2>
-      <p class="page__lede">{MAILBOXES.body}</p>
-      <ul class="landing__proof landing__mailboxes">
-        {
-          MAILBOXES.accounts.map((a) => (
-            <li>
-              <i aria-hidden="true"></i>
-              {a.address} · {a.kind}
-            </li>
-          ))
-        }
-        <li>+ up to 2 more</li>
-      </ul>
-    </section>
-
-    <LandingBlock id="landing-who" block={AUDIENCES} />
-    <LandingBlock id="landing-why" block={WHY} />
-
-    <section class="landing__section" aria-labelledby="landing-flight">
-      <p class="page__kicker">The full flight, in brief</p>
-      <h2 id="landing-flight">Ten stops and a detour, one send.</h2>
-      <div class="landing__grid">
-        {
-          HOME_CHAPTERS.map((c) => (
-            <article class="landing__card" data-reveal>
-              <p class="landing__card-kicker">{c.kicker}</p>
-              <h3>{c.title}</h3>
-              <ul>
-                {c.chips.map((chip) => (
-                  <li>{chip}</li>
-                ))}
-              </ul>
-            </article>
-          ))
-        }
-      </div>
-    </section>
-
-    <section class="landing__section landing__pricing" aria-labelledby="landing-pricing">
-      <p class="page__kicker">{PRICING.kicker}</p>
-      <h2 id="landing-pricing">{PRICING.title}</h2>
-      <div class="pricing-card" data-reveal>
-        <div class="pricing-card__price">
-          {PRICING.price}<small>{PRICING.period}</small>
-        </div>
-        <ul>
-          {PRICING.bullets.map((b) => <li>{b}</li>)}
-        </ul>
-        <a class="btn btn--primary" data-magnetic href={href(PRICING.cta.href)}>{PRICING.cta.label}</a>
-        <p class="pricing-card__note" style="margin-top:1.25rem">{PRICING.note}</p>
-      </div>
-    </section>
-
-    <section class="landing__section faq" aria-labelledby="landing-faq" data-reveal>
-      <h2 id="landing-faq" style="font-family:var(--font-display);font-weight:400">Questions, answered.</h2>
+<section class="landing" id="landing-page" aria-labelledby="landing-title">
+  <div class="landing__block" data-reveal>
+    <div class="landing__kicker">{INTRO.kicker}</div>
+    <h2 id="landing-title">{INTRO.title}</h2>
+    <p class="landing__body">{INTRO.body}</p>
+    <a class="btn btn--brand landing__cta" data-magnetic href={DOWNLOAD.cta.href}>
+      <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 3v10M5.5 8.5 10 13l4.5-4.5M4 17h12" />
+      </svg>
+      {DOWNLOAD.cta.label}
+    </a>
+    <div class="landing__links">
+      <a href={SITE.home} target="_blank" rel="noopener">{SITE.label}&nbsp;↗</a>
+      <span aria-hidden="true">·</span>
+      <button type="button" data-replay>{INTRO.replay}</button>
+    </div>
+    <ul class="landing__tags">
       {
-        FAQ.map((f) => (
-          <details>
-            <summary>{f.q}</summary>
-            <p>{f.a}</p>
-          </details>
+        INTRO.tags.map((tag) => (
+          <li>{tag}</li>
         ))
       }
-    </section>
-
-    <section class="landing__closing" data-reveal>
-      <h2>{closing.title}</h2>
-      <p class="page__lede">{closing.body}</p>
-      <div class="btn-row">
-        <a class="btn btn--primary" data-magnetic href={href('/download')}>Download for Windows — 7-day free trial</a>
-        <a class="btn btn--ghost" href={href('/pricing')}>See pricing</a>
-      </div>
-    </section>
+    </ul>
   </div>
 </section>

@@ -25,16 +25,35 @@ There's nothing special about `src/components/`, but that's where we like to put
 
 Any static assets, like images, can be placed in the `public/` directory.
 
-## The home page: experience, then landing
+## The home page: the flight, then one block
 
 `src/pages/index.astro` is two components, one after the other:
 
-- `src/components/Experience.astro`: the scroll-driven flight. It is the scroll *stage* (`#experience`) the fixed WebGL canvas plays along to. The canvas itself lives in `src/layouts/Base.astro`, outside the Swup container, so it survives navigation. The master ScrollTrigger (`src/webgl/scroll/ScrollDirector.ts`) measures from the top of the page to the bottom of `#experience`, so content placed after it never stretches the flight. Its copy is hidden by default (canvas only); `?copy=1` shows it.
-- `src/components/Landing.astro`: the website. It is ordinary page content that scrolls up over the canvas once the experience has finished: the nav comes back (`body.is-landing`, set by `src/page.ts`), the engine pauses behind it, and a "Replay the flight" button returns to the start. All of its words come from `src/story/copy.ts`.
+- `src/components/Experience.astro`: the scroll-driven flight. It is the scroll *stage* (`#experience`) the fixed WebGL canvas plays along to. The canvas itself lives in `src/layouts/Base.astro`, outside the Swup container, so it survives navigation. The master ScrollTrigger (`src/webgl/scroll/ScrollDirector.ts`) measures from the top of the page to the bottom of `#experience`, so content placed after it never stretches the flight. Its ten sections carry only each chapter's kicker, title and sub, generated from the titles pinned into the flight (`HOME_CHAPTERS` from `PINNED_TITLES`), and are hidden by default (canvas only; `?copy=1` shows them).
+- `src/components/Landing.astro`: the END. One block over the flight's last frame (the recipient's open inbox), and nothing else: a kicker, the site's own headline, one line on what it does, the brand-blue **Download for Windows** button (the live installer), `emailpilots.com ↗` and "Replay the flight", and three tags. The flight has already said the rest, so there is no feature list, no FAQ and no pricing. The nav comes back with it (`body.is-landing`, set by `src/page.ts`) and is a single Download button; the footer carries the brand, the flight manual (`/features`), and the Terms and Privacy pages on emailpilots.com, with the Outlook trademark notice.
 
-The landing reads top to bottom as a pitch: what it is (`INTRO`), the problem it solves (`PROBLEM`), how it works (`STEPS`), the deliverability safeguards (`SAFEGUARDS`), the last mile (`LAST_MILE`), the local AI (`LOCAL_AI`), the mailboxes (`MAILBOXES`), who it is for (`AUDIENCES`), why it is different (`WHY`), the ten stops (and the detour) in brief, the plan, FAQ, and a closing call to action. Every line is checked against `FEATURES.md` Appendix B; no placement guarantees, no tiers, no tracking claims.
+Pages: `/` (the flight and the END), `/features` (the flight manual, linked from the footer) and `/download` (the installer, its requirements and the SmartScreen note).
 
-To add landing content, edit `Landing.astro`; to change the flight, edit `src/webgl/` and `src/story/`.
+### The words: `src/story/copy.ts`
+
+Every word on the site and in the 3D scene comes from `src/story/copy.ts`; every name, role, clock time and count of the sample campaign comes from `src/story/fleet.ts` (`FLEET`, `CAMPAIGN`, `DESK_NAMES`, `OFFICE_ROW`, `CARD`, `REPORT`). Neither is duplicated anywhere else.
+
+| export | where it shows |
+| :-- | :-- |
+| `PINNED_TITLES` | the titles in the flight: kicker (names the feature), three lines (heavy / thin / heavy), and a sub of at most twelve words; read in order they are the pitch: from your own inbox, ready for takeoff, one by one, follow-ups that stop themselves, don't BCC 100 people, never a flood, cleared for delivery, never the wrong person, a note not a broadcast, never phones home, the reply is the landing |
+| `HOME_CHAPTERS`, `CHAPTER_NAMES` | the scroll stage's hidden copy; the progress rail's tick labels and the flight HUD (Base.astro writes the names onto the rail, `page.ts` reads them) |
+| `DESK_SCREEN`, `QUEUE_NAMES` | the desk laptop's composer: `Hi {{Name}}` spins like a slot machine and lands on Amy, Ben, then Cara as each envelope leaves; the other fields resolve with it; a tunnel of the campaign's 42 envelopes, each with a name tab, recedes into the screen (`actors/LaptopScreen.ts`) |
+| (fleet `DESK_NAMES`, `FLEET`) | the envelopes: the one leaving the laptop has its person's name written on it by hand (`actors/Envelopes.ts`, `stampDeskEnvelopes`); the five escorting the dart over the town are the next five in the queue |
+| `PREFLIGHT_BOARD` | the departures board over the street: five checks flip like a split-flap display, then the verdict flips from red GROUNDED to green READY FOR TAKEOFF with a green wash (`actors/Panel.ts`, `bake/CanvasTextures.preflightBoard`) |
+| `AUTH_CARD` | the lighthouse card: a clearance (SPF, DKIM, DMARC, verdict), CLEARED FOR DELIVERY (`interact/DeliveryPopup.ts`); kept inside a 16 px gutter, and docked under the fleet card on a phone |
+| `BANNER` | the biplane's banner in the storm: ONE BY ONE |
+| `DETOUR_COPY` | the IT office: the forty red `Dear all, / BCC: +231` screens, Lena's warm laptop, its badge, and the office card |
+| `INTRO`, `DOWNLOAD`, `SITE` | the END block, the download page and the one installer link (`DOWNLOAD.cta.href`), the footer's legal links |
+| `MANUAL` | `/features` |
+
+Guardrails (FEATURES.md Appendix B and the scene direction's honesty rules): no price, no plan or tier names, no trial; no inbox-placement promise and no bounce-rate stat; opens are "not tracked, by design"; the campaign on screen is always labelled SAMPLE CAMPAIGN; "spam" only for the folder or the filters. `node scripts/check-copy.mjs` checks all of it but the last over `src/` and this file (it reads Appendix B's banned phrases from FEATURES.md itself) and exits 1 on a hit.
+
+Engineering notes for the other systems: the fleet (`docs/fleet.md`), the flight line and the office crossing (`docs/flight-line.md`), and the ending (`docs/ending.md`).
 
 ## The office detour
 
@@ -201,11 +220,27 @@ wind's mix.
 
 ## Pinned titles
 
-Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a canvas-drawn lockup (heavy / thin / heavy condensed capitals, Oswald) on a plane with the depth test on, so towers, trees and the lighthouse pass in front of it and the haze dims it, the way a camera-tracked title is made in a film. The words come from `PINNED_TITLES` in `src/story/copy.ts`.
+Each chapter's title stands in the world (`src/webgl/actors/PinnedTitles.ts`): a canvas-drawn lockup on a plane with the depth test on, so towers, trees and the lighthouse pass in front of it and the haze dims it, the way a camera-tracked title is made in a film. The words come from `PINNED_TITLES` in `src/story/copy.ts`. The lockup, centred on one axis:
 
-A spot can carry a `portrait` alternative for phones, whose lens is less than a third as wide: the ocean title ("Send mail to anyone, anywhere in the world", 0.452 to 0.512) stands on the water to the left of the lighthouse on a landscape screen, and straight ahead behind it on a phone, where it is read while the tower is still in the fog and goes as the tower comes out in front of it.
+- the **kicker**: the feature the chapter shows (`CH 03 · HUMAN PACING`), Inter 600 tracked capitals in the beam colour between two short rules;
+- the **lines**: heavy / thin / heavy condensed capitals (Oswald), the heavy ones fitted to the width up to a size, the thin one tracked out under them;
+- the **sub**: one sentence of at most twelve words, Inter 500 in the beam colour, wrapped to at most two balanced lines (it shrinks rather than take a third). Pre-flight carries its big `note` with the Outlook mark instead.
 
-The rig directs a different camera in every chapter, so each title's spot (`SPOTS`) was fitted to the camera across its window: the position that stays nearest the middle of the lens while the chapter plays. Where the camera looks steeply down, the title lies flat over the scene. If a chapter's camera changes, sample the camera across its window and refit that spot.
+The canvas is cropped to the title's own width; a spot's `width` is the world width of a full 2048 px lockup, so the lettering's scale does not depend on how long a title is. A phone draws the kicker and the sub bigger (`LAYOUT.portrait`), and phones draw the canvas at 0.6 resolution (a title is a fifth of the canvas wide there).
+
+**Spots.** The rig directs a different camera in every chapter, so each title's spot (`SPOTS`: one table, a landscape spot and a `portrait` one per title) is fitted to the camera across its window: the biggest lettering that stays inside a 16 px gutter at every sampled frame, clear of the fleet card at the top and the cue at the foot. Where the camera looks steeply down, the title lies flat over the scene (`flat`). A portrait spot may have a shorter window than the landscape one where a phone's narrow lens cannot hold a readable title through all of it, and may be drawn `over` the scene where houses, trees or the desk would take a bite out of it. Title windows are fixed by the scene direction (§4.3) and copied by `rig/pace.ts`.
+
+**Refitting** (when a chapter's camera changes): build and serve `dist/`, then
+
+```sh
+URL=http://localhost:4414/ W=390 H=800 node scripts/fit-titles.mjs sample phone.json    # the camera at 9 frames per window
+URL=http://localhost:4414/ W=1280 H=720 node scripts/fit-titles.mjs sample desk.json
+node scripts/fit-titles.mjs fit phone.json city,copilot,landing hints.json             # prints pos / width / face for SPOTS
+MAXW=540 node scripts/fit-titles.mjs fit desk.json city,copilot,landing hints.json     # capped: as big as fits is too big on a desktop
+node scripts/fit-titles.mjs check phone.json spots.json                                # each title's box per frame
+```
+
+`hints.json` keeps a title clear of something else in the frame (`y0` under the docked lighthouse card, `y0` under the departures board, `x0` beside the laptop), shortens its window (`from`, `to`), keeps it on the ground (`minY`) or flat on the water (`pos`, `flat`). Then shoot the acceptance frames and look: the fit knows nothing of what stands in front of a title or of the haze.
 
 ## Town realism
 
@@ -270,7 +305,7 @@ The ground and the house atlases are baked at a few centimetres a texel, so the 
 - *Facades* (`materials/Facades.ts`, applied by `KitCity` to the `tower` and `block` modules): upkeep per building (`dirtK`), soot up the first storeys, rain streaks, a slow mottle, repainted sections, and on HIGH a photographed concrete grain with parallax and relief. Only the wall texels (rough, non-metal) are touched, so lit windows and glass are as baked.
 - *Skyline and grade*: tower and block heights vary about 12% from a stream of their own (`cityGen.mjs`, rings rebaked); the `city` grade now has the town's tone curve, a little less saturation and a cooler white balance.
 - *Lit-window rooms* (`Facades.ts`, `blender/bld/model.py`): the kit's wall faces carry a window-cell grid as a second UV layer (`Grid`, `TEXCOORD_1`; whole numbers are floor slabs and piers, -1 off walls; see blender/README.md). The facade shader reads it (`uv1`) and, behind every lit window texel, ray-marches a box room (ceiling lamp, floor, side and back walls; on HIGH furniture, shelves, pictures, the odd person or television), tinted by the window's baked colour. The grid adds about 2.7 MB to the city kit (float UVs).
-- *Outlook mark*: `public/images/outlook.svg` (from the community dashboard-icons set, not Microsoft's own asset) sits beside "Works with Outlook" in the 3D lockup and the landing proof chips, with Microsoft's trademark notice in the footer.
+- *Outlook mark*: `public/images/outlook.svg` (from the community dashboard-icons set, not Microsoft's own asset) sits beside "Works with Gmail · Outlook · any email" in the pre-flight title, with Microsoft's trademark notice in the footer.
 - *Streetlamps*: the road and pavement light themselves from the lamps (`lampField` in `Streets.ts`; inverse-square downlights, glossy streaks on wet asphalt), not painted discs; `Streetlights` has a `soft` mode with physical falloff for the real lights.
 - Still to do: decals from Blender anchors (shopfronts, signs, AC units: grime, rust, posters, litter) and lamp and street-furniture irregularity.
 

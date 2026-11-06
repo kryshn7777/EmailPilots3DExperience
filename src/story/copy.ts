@@ -1,237 +1,231 @@
 /**
- * Every word the site says, sourced from FEATURES.md (2026-08-08 audit).
- * Hard rules (FEATURES.md Appendix A/B):
+ * Every word the site says, sourced from FEATURES.md (2026-08-08 audit) and the live site's own copy.
+ * Hard rules (FEATURES.md Appendix A/B, scene direction v2 §0):
  *  - none of the Appendix B banned phrases may appear anywhere in this file
  *    (verification greps for them — do not even quote them in comments)
  *  - "spam" only for the folder / filter checks
- *  - no tiers, license keys, or "upgrade"; no Buy button; no dark-mode claims
+ *  - no price, no plan or tier names, no trial, no license keys, no "upgrade"; no Buy button; no dark-mode claims
+ *  - no inbox-placement promise of any kind (no tool can promise placement), no bounce-rate stat
+ *  - opens are not tracked, by design: success is counted in replies
+ *  - the campaign the flight shows (names, clock times, "0 bounces") is the site's own hero mock-up, so on
+ *    screen it is always labelled SAMPLE CAMPAIGN (story/fleet.ts holds it: names come from there)
  *  - AI reply-labels framed for Gmail/app-password inboxes, never "every account"
  *  - the AI "suggests fixes" — it never "rewrites before sending"
  *  - unsubscribe machinery is claimed only for Bulk mode
+ *  - the installer link lives in ONE place: `DOWNLOAD.cta.href`
  */
+import { CAMPAIGN, FLEET, OFFICE_ROW } from './fleet';
+
+// ---- the flight's titles --------------------------------------------------------------------------
+
+export interface PinnedTitle {
+  /** the spot it stands at (webgl/actors/PinnedTitles.ts SPOTS) and, but for `ocean`, the chapter it titles */
+  id: string;
+  /** the small line over the lockup: it names the product feature the chapter shows */
+  kicker: string;
+  /** heavy / thin / heavy, four words or so in all (drawn in capitals) */
+  lines: [string, string, string];
+  /** under the lockup, in the beam colour: at most twelve words, at most two lines */
+  sub?: string;
+  /** a big claim in place of the sub (pre-flight only), with the Outlook mark beside it */
+  note?: string;
+  logo?: 'outlook';
+  /** the feature in a few words: the progress rail's tick labels and the flight HUD */
+  feature: string;
+}
+
+/**
+ * The titles pinned into the world (webgl/actors/PinnedTitles.ts), in flight order. Read in order they are
+ * the whole pitch: from your own inbox → ready for takeoff → one by one → follow-ups that stop themselves →
+ * don't BCC 100 people → never a flood → cleared for delivery → never the wrong person → a note, not a
+ * broadcast → never phones home → the reply is the landing. Title windows: direction §4.3 (SPOTS).
+ */
+export const PINNED_TITLES: PinnedTitle[] = [
+  {
+    id: 'desk', kicker: 'Email Pilots · AI-powered outreach', feature: 'Your own inbox',
+    lines: ['From', 'your own', 'inbox'], sub: 'Write one email. Everyone gets their own.',
+  },
+  {
+    id: 'preflight', kicker: 'CH 02 · Pre-flight check', feature: 'Pre-flight check',
+    lines: ['Ready', 'for', 'takeoff'], note: 'Works with Gmail · Outlook · any email', logo: 'outlook',
+  },
+  {
+    id: 'takeoff', kicker: 'CH 03 · Human pacing', feature: 'Human pacing',
+    lines: ['One', 'by', 'one'], sub: 'Minutes apart, never all at once, like you’d send them by hand.',
+  },
+  {
+    id: 'formation', kicker: 'CH 04 · Sequences', feature: 'Sequences',
+    lines: ['Follow-ups', 'that stop', 'themselves'], sub: 'Someone replies? Their next emails stand down. Automatically.',
+  },
+  {
+    id: 'storm', kicker: 'CH 05 · The storm · Spam filters', feature: 'Spam-filter check',
+    lines: ['Don’t BCC', '100', 'people'], sub: 'One email to a hundred is a one-way ticket to the spam folder.',
+  },
+  {
+    // over the open sea on the way in to the lighthouse, before the tower is out of the fog (no chapter of its own)
+    id: 'ocean', kicker: 'CH 06 · Open water · Safe limits', feature: 'Safe limits',
+    lines: ['Never', 'a', 'flood'], sub: 'About 50 a day per mailbox. New mailboxes warm up from 5.',
+  },
+  {
+    id: 'beacon', kicker: 'CH 06 · The beacon · Domain check', feature: 'Domain check',
+    lines: ['Cleared', 'for', 'delivery'], sub: 'SPF, DKIM and DMARC checked, with the exact fix if not.',
+  },
+  {
+    id: 'no-fly', kicker: 'CH 07 · Do-not-send list', feature: 'Do-not-send list',
+    lines: ['Never', 'the wrong', 'person'], sub: 'Bounced or unsubscribed? No mailbox will email them again.',
+  },
+  {
+    id: 'city', kicker: 'CH 08 · City of inboxes', feature: 'City of inboxes',
+    lines: ['A note,', 'not a', 'broadcast'], sub: 'From your own address, it lands like you typed it yourself.',
+  },
+  {
+    id: 'copilot', kicker: 'CH 09 · Local AI copilot', feature: 'Local AI copilot',
+    lines: ['Never', 'phones', 'home'], sub: 'The AI runs on your PC. Zero data leaves it. Full stop.',
+  },
+  {
+    id: 'landing', kicker: 'CH 10 · The last mile', feature: 'The last mile',
+    lines: ['The reply', 'is the', 'landing'], sub: 'They write back. You step in for the conversations that matter.',
+  },
+];
 
 export interface ChapterCopy {
   id: string;
   kicker: string;
+  /** the lockup's three lines as a sentence */
   title: string;
-  body: string;
-  chips: string[];
+  sub: string;
+  feature: string;
 }
 
-export const HOME_CHAPTERS: ChapterCopy[] = [
-  {
-    id: 'desk',
-    kicker: 'CH 01 · The Desk',
-    title: 'Some emails deserve a pilot.',
-    body: 'Email Pilots is a Windows desktop app for personal outreach and follow-up — the emails you would write yourself if you had the time. Write once with merge fields like {{name}}; every contact gets their own values, with fallbacks so a missing one never prints a blank.',
-    chips: ['Windows desktop · no cloud account', 'Per-person subject & message', 'A real mail-client preview, HTML + plain text'],
-  },
-  {
-    id: 'preflight',
-    kicker: 'CH 02 · Preflight',
-    title: 'Ready for takeoff.',
-    body: 'Connect any mailbox: sign in with Microsoft through Microsoft’s own page — no password ever touches the app — or use Gmail and custom SMTP with a guided app password. Every account is test-authenticated before it’s saved, and a pre-flight check audits your whole setup with a verdict and jump-to-fix buttons.',
-    chips: ['Up to 5 mailboxes, in parallel', 'Provider settings auto-detected', 'One-click test email to yourself'],
-  },
-  {
-    id: 'takeoff',
-    kicker: 'CH 03 · Takeoff',
-    title: 'Write once. It flies the follow-ups.',
-    body: 'Sending stays human: weekly schedules with a ±minutes wobble, randomized pauses between emails, a daily cap per mailbox, and fresh accounts eased in from ~5 to ~50 a day. You hold the throttle — pause everything with one switch, and the dashboard always shows the next run and a 7-day plan.',
-    chips: ['Warm-up ramp ~5 → ~50 a day', 'Max 3 emails to the same person per day', 'Live Today’s Usage meter'],
-  },
-  {
-    id: 'formation',
-    kicker: 'CH 04 · Formation',
-    title: 'Your sequences, in formation.',
-    body: 'Build a first email plus follow-ups with chosen waits, assign the sequence, and the app takes it from there. Before every follow-up it checks all your connected inboxes — the moment someone replies, their sequence stands down. Progress is saved after every single send, so a crash never re-sends a step.',
-    chips: ['Stops the moment they reply', 'Vacation-proof with the optional local AI', 'CSV import — every column becomes a merge field'],
-  },
-  {
-    id: 'storm',
-    kicker: 'CH 05 · The Storm',
-    title: 'Filters ground the fakes.',
-    body: 'Before anything flies, subject, wording, links, and formatting are scored against common spam-filter triggers with plain-language findings. The on-device AI gives a second opinion and suggests concrete fixes — you decide what to apply. Dead addresses are caught early, before a send is wasted.',
-    chips: ['Deliverability check in every preview', 'Mail-server checks catch bad domains first', 'Errors translated into plain English'],
-  },
-  {
-    id: 'beacon',
-    kicker: 'CH 06 · The Beacon',
-    title: 'Cleared for delivery.',
-    body: 'Email Pilots checks your domain’s SPF, DKIM, and DMARC records and hands you the exact DNS values to paste, with step-by-step instructions for common registrars. Personal Gmail and Outlook addresses are told, correctly, that there’s nothing to set up.',
-    chips: ['Exact DNS values, ready to paste', 'Mismatch warnings before they hurt you', 'Personal vs Bulk sending style'],
-  },
-  {
-    id: 'no-fly',
-    kicker: 'CH 07 · The No-Fly List',
-    title: 'Never the wrong person twice.',
-    body: 'One do-not-send list covers every mailbox: bounced, unsubscribed, complained, or blocked by you. Hard bounces are detected at send time and from bounce messages that arrive later, and the address is retired automatically — forged bounce messages are recognized and ignored.',
-    chips: ['Shared across all accounts, instantly', 'No accidental double-sends, ever', 'Block anyone in one click — undoable'],
-  },
-  {
-    id: 'city',
-    kicker: 'CH 08 · City of Inboxes',
-    title: 'Delivered where it matters.',
-    body: 'Emails are filed into your mailbox’s real Sent folder, so your phone and webmail show the full story. Replies are collected every 15 minutes into one view, every contact has a story drawer, and a running flight log narrates every action the app takes — including scheduled sends the moment they fire.',
-    chips: ['Live Sent history — searchable, real time', '"While you were away" digest', 'Runs quietly from the system tray'],
-  },
-  {
-    id: 'copilot',
-    kicker: 'CH 09 · The Copilot',
-    title: 'An AI that never phones home.',
-    body: 'An optional on-device copilot: one click downloads the curated 2.3 GB model (integrity-verified, resumable) or point it at any GGUF you already have. It drafts, improves, and fixes grammar in five tones, personalizes from each contact’s own details, and labels replies on Gmail and app-password inboxes into eight useful buckets. Inference runs 100% on your machine.',
-    chips: ['NVIDIA · Vulkan · Metal acceleration', 'Learns from replies that went well', 'Zero cloud servers — nothing leaves your PC'],
-  },
-  {
-    id: 'landing',
-    kicker: 'CH 10 · The Landing',
-    title: 'The reply is the landing.',
-    body: 'No open tracking, no hidden pixels, no rewritten links — success is measured the honest way: by replies, with reply-rate analytics built in. Contacts, history, and credentials stay in plain local files on your PC, protected by Windows’ own vault. Try the whole cockpit in explore mode, rehearse in Practice Mode, and your first real send gets confetti.',
-    chips: ['7-day free trial · no credit card', 'Everything stays on your PC', 'Sign out wipes it all'],
-  },
-];
+/**
+ * The ten chapters of the scroll stage (Experience.astro), generated from the pinned titles so the page's
+ * hidden copy and the words in the flight are one source. The ocean title stands inside the storm-to-beacon
+ * stretch and has no section of its own.
+ */
+export const HOME_CHAPTERS: ChapterCopy[] = PINNED_TITLES.filter((p) => p.id !== 'ocean').map((p) => ({
+  id: p.id,
+  kicker: p.kicker,
+  title: `${p.lines.join(' ').replace(/\s+/g, ' ').replace(/,$/, '')}.`.replace(/^./, (c) => c.toUpperCase()),
+  sub: p.sub ?? p.note ?? '',
+  feature: p.feature,
+}));
 
-/** What the software is, in plain words: the first thing the website says once the flight has landed. */
+/** the rail's ticks and the flight HUD, one per chapter (page.ts reads them off the page) */
+export const CHAPTER_NAMES = HOME_CHAPTERS.map((c) => c.feature.toUpperCase());
+
+// ---- the words in the 3D scene ------------------------------------------------------------------
+
+/**
+ * The desk laptop (webgl/actors/LaptopScreen.ts): the app's composer, the site's own mock. `{{Name}}` spins
+ * like a slot machine and lands on each of the three that leave the screen (fleet.ts DESK_NAMES); the other
+ * fields resolve with it. `companies` are the site mock's own sample values, one per desk name.
+ */
+export const DESK_SCREEN = {
+  app: 'EMAIL PILOTS',
+  campaign: `Campaign: ${CAMPAIGN.name}`,
+  recipients: `${CAMPAIGN.total} recipients`,
+  label: CAMPAIGN.label,
+  /** `{{Field}}` marks a merge field: it glows teal until it resolves */
+  subject: 'Subject: Quick idea for {{Company}}',
+  greeting: { before: 'Hi ', token: '{{Name}}', after: ',' },
+  body: ['I came across {{Company}}', 'and wanted to reach out', 'personally about…'],
+  attachment: 'Deck_{{Co}}.pdf',
+  attachmentNote: '· for each recipient',
+  companies: ['Acme', 'TechFlow', 'Globex'],
+  queueTitle: 'Live queue',
+  /** the foot while it resolves */
+  merging: 'Personalising…',
+  /** the foot once one has gone */
+  sent: (name: string): string => `→ ${name} · sent from your own inbox`,
+};
+
+/** the names in the queue behind the three on the desk, in delivery order (#3 to #41): the envelope tunnel */
+export const QUEUE_NAMES = FLEET.slice(2, FLEET.length - 1).map((r) => r.name);
+
+/**
+ * The pre-flight board (webgl/actors/Panel.ts, CanvasTextures.panelTexture): an airport departures board
+ * whose rows flip like a split-flap display, and whose verdict flips from the app's real "Grounded" to
+ * "Ready for takeoff" as the dart passes it (FEATURES.md §7: a verdict with a jump-to-fix next to every
+ * blocker).
+ */
+export const PREFLIGHT_BOARD = {
+  title: 'PRE-FLIGHT CHECK',
+  flight: `${CAMPAIGN.name.toUpperCase()} · ${CAMPAIGN.total}`,
+  grounded: 'GROUNDED',
+  ready: 'READY FOR TAKEOFF',
+  /** the first row's value cycles through the mailboxes it works with */
+  rows: [
+    { label: 'INBOX CONNECTED', values: ['GMAIL', 'OUTLOOK', 'SMTP'] },
+    { label: 'ACCOUNTS HEALTHY', values: ['OK'] },
+    { label: 'SUBJECT WRITTEN', values: ['OK'] },
+    { label: 'STYLE: PERSONAL', values: ['OK'] },
+    { label: `TODAY 0/${CAMPAIGN.cap}`, values: ['OK'] },
+  ],
+  pending: 'CHECK',
+} as const;
+
+/** The lighthouse card (webgl/interact/DeliveryPopup.ts): a clearance, not a delivery. */
+export const AUTH_CARD = {
+  bar: 'AUTH CHECK // LIGHTHOUSE',
+  live: 'LIVE',
+  title: 'CLEARED FOR DELIVERY',
+  rows: [
+    ['SPF', 'PASS'],
+    ['DKIM', 'PASS'],
+    ['DMARC', 'ALIGNED'],
+    ['VERDICT', 'CLEARED'],
+  ],
+  foot: [CAMPAIGN.from.split('@')[1]!.toUpperCase(), 'EXACT FIX IF NOT'],
+} as const;
+
+/** the banner the biplane tows through the storm (webgl/actors/Biplane.ts) */
+export const BANNER = 'ONE BY ONE';
+
+/**
+ * The IT office (the detour through the tower, webgl/actors/Office.ts): forty screens with the old way on
+ * them, one laptop lit warm with a personal note drafted on this PC. Lena is fleet.ts OFFICE_ROW.
+ */
+export const DETOUR_COPY = {
+  /** every monitor flickers red with it for a moment, then dies */
+  bcc: ['Dear all,', 'BCC: +231'],
+  /** the one warm laptop (RoomTextures.arrivalScreens opts) */
+  screen: {
+    name: OFFICE_ROW.name,
+    subject: 'Your team’s launch',
+    snippet: `Hi ${OFFICE_ROW.name}, saw your team just shipped…`,
+  },
+  badge: '✨ drafted on this PC · 0 bytes to the cloud',
+  /** the office card (the same HUD card as the lighthouse's) */
+  card: {
+    bar: `INBOX // IT OFFICE · ${OFFICE_ROW.clock}`,
+    title: `DELIVERED · ${OFFICE_ROW.name}`,
+    sub: 'Personalised on this PC.',
+    rows: [
+      ['TO', `${OFFICE_ROW.name.toUpperCase()} · ${OFFICE_ROW.role.split(',')[0]!.toUpperCase()}`],
+      ['DRAFTED', 'ON THIS PC'],
+      ['TO THE CLOUD', '0 BYTES'],
+    ],
+  },
+} as const;
+
+// ---- after the flight -----------------------------------------------------------------------------
+
+/** The whole website after the flight (Landing.astro): one block over the last frame. */
 export const INTRO = {
-  kicker: 'Optional local AI · Runs on your machine',
+  kicker: 'Email Pilots · Windows desktop app',
   title: 'AI-powered outreach, sent from your own inbox.',
-  body: 'Email Pilots is your private sending assistant. It personalizes every email, sends each one on its own at a natural human pace, and stops following up the moment someone replies. The AI runs on your PC, so nothing you write leaves it.',
-  proof: ['Works with Gmail', 'Works with Outlook', 'Works with any email (SMTP)', '100% private', '7-day free trial · no credit card'],
+  body: 'Personal emails, sent one by one at a human pace from your Gmail, Outlook or any SMTP. Follow-ups stop when they reply. The AI runs on your PC.',
+  tags: ['Gmail · Outlook · any email', '100% local & private', 'Windows 10/11'],
+  replay: 'Replay the flight',
 };
 
-export interface PointCopy {
-  kicker?: string;
-  title: string;
-  body: string;
-}
-
-export interface BlockCopy {
-  kicker: string;
-  title: string;
-  lede?: string;
-  items: PointCopy[];
-}
-
-/** The problem it solves, as a before and after. */
-export const PROBLEM = {
-  kicker: 'Stop hurting your reputation',
-  title: 'Don’t BCC 100 people. Let Email Pilots send them one by one.',
-  body: 'Put a hundred people in BCC and your mail looks like a broadcast, and filters treat it like one. Write each email by hand and you burn hours you don’t have. Email Pilots sends every message on its own, with natural pauses in between, exactly like a person would. You do the real work while it does the sending.',
-  before: {
-    label: 'One message to everyone',
-    points: ['A hundred hidden recipients on one email', 'Nothing in it is personal', 'Reads like a broadcast, and filters notice'],
-  },
-  after: {
-    label: 'One email per person',
-    points: ['Each message sent on its own, from your address', 'Minutes between sends, never milliseconds', 'Personalized with {{Name}} and the rest of your columns'],
-  },
-  wins: ['Kinder to your sender reputation', 'Hours back every week', 'From zero to sending in minutes'],
+/** The live site: the brand's home and its legal pages (the footer links them). */
+export const SITE = {
+  home: 'https://emailpilots.com/',
+  label: 'emailpilots.com',
+  terms: 'https://emailpilots.com/terms/',
+  privacy: 'https://emailpilots.com/privacy/',
 };
-
-export const STEPS: BlockCopy = {
-  kicker: 'From zero to sending',
-  title: 'Set up in minutes.',
-  lede: 'If you can send an email, you can run a campaign.',
-  items: [
-    { kicker: '01', title: 'Connect your inbox', body: 'Sign in with Microsoft, or add Gmail or any SMTP host with a guided app password. It sends through the mailbox you already trust, and every account is test-authenticated before it is saved.' },
-    { kicker: '02', title: 'Add your contacts', body: 'Upload a spreadsheet or add people by hand. Drop in variables like {{Name}} to personalize every message, or write a custom note for anyone special.' },
-    { kicker: '03', title: 'Hit send and walk away', body: 'Email Pilots paces every send like a person and retires bounced addresses automatically. Watch it fly on the live dashboard.' },
-  ],
-};
-
-/** What protects the sender's reputation (FEATURES.md §5, §7). No placement promises. */
-export const SAFEGUARDS: BlockCopy = {
-  kicker: 'Deliverability engine',
-  title: 'Built to protect your sender reputation.',
-  lede: 'No tool can promise inbox placement. These are the habits that earn it, running on every send.',
-  items: [
-    { kicker: 'Safeguard 1', title: 'Natural send pacing', body: 'Randomized gaps and a ±minutes wobble on every schedule make your sends look like they were typed by hand, not fired by a script.' },
-    { kicker: 'Safeguard 2', title: 'Sensible daily limits', body: 'A daily cap per mailbox (about 50 by default) and no more than 3 emails to the same person in a day keep delivery steady.' },
-    { kicker: 'Safeguard 3', title: 'Automated warm-up', body: 'A fresh mailbox ramps from about 5 to about 50 emails a day instead of going full speed on day one.' },
-    { kicker: 'Safeguard 4', title: 'Checked before it sends', body: 'Recipient domains are checked for working mail servers, and every draft gets a deliverability review with plain-language findings.' },
-    { kicker: 'Safeguard 5', title: 'Domain authentication', body: 'Email Pilots checks your SPF, DKIM and DMARC records and hands you the exact DNS values to paste, with steps for common registrars.' },
-    { kicker: 'Safeguard 6', title: 'Looks hand-typed', body: 'Personal mode sends emails that look like ones you wrote yourself, with a clean plain-text version generated for every message.' },
-  ],
-};
-
-export const LAST_MILE: BlockCopy = {
-  kicker: 'The last mile',
-  title: 'The last mile is the whole point.',
-  items: [
-    { kicker: 'Inbound', title: 'Your message lands.', body: 'Sent at a natural pace from your own address, it arrives like a note from a person, not a broadcast.' },
-    { kicker: 'Reply', title: 'They write back.', body: 'Your inboxes are checked for replies every 15 minutes. No tracking pixels, no rewritten links.' },
-    { kicker: 'Cleared', title: 'Follow-ups stop on their own.', body: 'The moment someone replies, their sequence stands down. You step in only for the conversations that matter.' },
-  ],
-};
-
-/** The on-device AI (FEATURES.md §9): optional, 100% local. */
-export const LOCAL_AI = {
-  kicker: 'Capabilities',
-  title: 'Privacy-first local AI.',
-  body: 'Your AI assistant runs on your own machine, using your GPU where it can. No cloud APIs: nothing you write or receive is sent to OpenAI, to us, or to any server. The only network traffic it ever creates is the one-time model download.',
-  cloud: { label: 'Typical AI tools', points: ['Your drafts travel to someone else’s servers', 'Your contacts leave your machine', 'Your privacy is only as good as their policy'] },
-  local: { label: 'Email Pilots', points: ['An on-device model, integrity-verified before it runs', 'Drafts, rewrites and grammar fixes in five tones', 'Reply labels on Gmail and app-password inboxes'] },
-};
-
-export const MAILBOXES = {
-  kicker: 'One dashboard',
-  title: 'Up to 5 mailboxes, one dashboard.',
-  body: 'Run all your outreach from one local command center. Extra accounts send in parallel, each with its own daily allowance and health indicator, so the load is spread and no single mailbox is pushed.',
-  accounts: [
-    { address: 'you@gmail.com', kind: 'Gmail' },
-    { address: 'you@outlook.com', kind: 'Outlook' },
-    { address: 'you@yourdomain.com', kind: 'Custom SMTP' },
-  ],
-};
-
-/** Who it is for. */
-export const AUDIENCES: BlockCopy = {
-  kicker: 'Now boarding',
-  title: 'Who is Email Pilots for?',
-  items: [
-    { kicker: '01 · Applicant', title: 'Job-seekers', body: 'Reach hiring managers with a personal intro and a tailored CV, and run your own search instead of refreshing job boards.' },
-    { kicker: '02 · Sourcing', title: 'Recruiters', body: 'Personalize every message from your own spreadsheet. A candidate who replies is never chased again.' },
-    { kicker: '03 · Contractor', title: 'Freelancers', body: 'Pitch local businesses on a schedule you set, and keep your calendar full without the copy-paste grind.' },
-    { kicker: '04 · Builder', title: 'Community', body: 'Personally invite early users, speakers and members to your project without burning out before launch day.' },
-    { kicker: '05 · Agency', title: 'Agencies', body: 'Run client outreach side by side, each campaign with its own subject and template, without the overhead.' },
-    { kicker: '06 · Advisor', title: 'Consultants', body: 'Put sharp, tailored proposals in front of decision-makers and follow up without chasing.' },
-    { kicker: '07 · Founder', title: 'Founders', body: 'Reach investors and early adopters directly, in your own voice, minus the busywork.' },
-    { kicker: '08 · Sales', title: 'Sales professionals', body: 'Keep your pipeline moving with timely, relevant follow-ups that stop when the reply arrives.' },
-  ],
-};
-
-export const WHY: BlockCopy = {
-  kicker: 'Why Email Pilots',
-  title: 'Honest by design.',
-  items: [
-    { title: 'Measured by replies, not pixels', body: 'No open tracking, no hidden pixels, no rewritten links. Reply-rate analytics are built in.' },
-    { title: 'Rehearse before it is real', body: 'Practice Mode reroutes every send to your own inbox, with the same rendering, pacing and limits, so the first real send is not a leap of faith.' },
-    { title: 'One plan, no meter', body: '$2.9 a week covers up to 5 mailboxes. No per-seat or per-contact fees.' },
-  ],
-};
-
-/**
- * The titles pinned into the flight itself (webgl/actors/PinnedTitles): three stacked lines each,
- * heavy / thin / heavy, in the chapter's own words, and optionally a small tracked line under them.
- */
-/**
- * The titles pinned into the world (webgl/actors/PinnedTitles.ts): `id` names the spot it stands at and,
- * unless `kicker` is given, the chapter whose label it carries.
- */
-export const PINNED_TITLES: { id: string; lines: [string, string, string]; note?: string; logo?: 'outlook'; kicker?: string }[] = [
-  { id: 'desk', lines: ['Some emails', 'deserve', 'a pilot'] },
-  { id: 'preflight', lines: ['Ready', 'for', 'takeoff'], note: 'Works with Outlook', logo: 'outlook' },
-  { id: 'takeoff', lines: ['Write once', 'it flies the', 'follow-ups'] },
-  { id: 'formation', lines: ['Your sequences', 'in', 'formation'] },
-  { id: 'storm', lines: ['Filters', 'ground the', 'fakes'] },
-  // over the open sea on the way in to the lighthouse, before the tower is out of the fog
-  { id: 'ocean', lines: ['Send mail to', 'anyone, anywhere', 'in the world'], kicker: 'CH 06 · Open water' },
-  { id: 'beacon', lines: ['Cleared', 'for', 'delivery'] },
-  { id: 'no-fly', lines: ['Never the', 'wrong person', 'twice'] },
-  { id: 'city', lines: ['Delivered', 'where it', 'matters'] },
-  { id: 'copilot', lines: ['An AI that', 'never', 'phones home'] },
-  { id: 'landing', lines: ['The reply', 'is the', 'landing'] },
-];
 
 export interface ManualItem {
   title: string;
@@ -245,7 +239,7 @@ export interface ManualSection {
   items: ManualItem[];
 }
 
-/** The Flight Manual — every FEATURES.md claim, §1–11 + §13. */
+/** The Flight Manual (/features, linked from the footer) — every FEATURES.md claim, §1–11 + §13. */
 export const MANUAL: ManualSection[] = [
   {
     id: 'connect',
@@ -322,7 +316,7 @@ export const MANUAL: ManualSection[] = [
   {
     id: 'deliverability',
     system: 'SYS 07 · Deliverability',
-    title: 'Land in the inbox',
+    title: 'Built to protect your sender reputation',
     items: [
       { title: 'A pre-flight check before anything flies', body: 'A dashboard card audits your whole setup — inbox connected, accounts healthy, subject written, sending style chosen, schedules in place, today’s allowance — and gives a verdict: Ready for takeoff, or Grounded with a jump-to-fix button next to every blocker.' },
       { title: 'Deliverability check before you send', body: 'Subject, wording, links, and formatting are scored against common spam-filter triggers, with plain-language findings — in the preview of every email and in a dedicated Deliverability lab.' },
@@ -370,7 +364,7 @@ export const MANUAL: ManualSection[] = [
     title: 'Private by design',
     items: [
       { title: 'Everything stays on your PC', body: 'Contacts, history, replies, settings — plain local files you can open, back up, or delete. No cloud account, no telemetry, no tracking.' },
-      { title: 'Credentials in the OS vault', body: 'Passwords, Microsoft sign-in tokens, and your license are encrypted with Windows’ built-in protection. The app never displays a stored password back — not even to you.' },
+      { title: 'Credentials in the OS vault', body: 'Passwords and Microsoft sign-in tokens are encrypted with Windows’ built-in protection. The app never displays a stored password back — not even to you.' },
       { title: 'Previews are sandboxed', body: 'Email HTML renders in a locked frame that can’t run scripts or touch the app.' },
       { title: 'Sign out means gone', body: 'Signing out wipes credentials, tokens, and account state completely.' },
     ],
@@ -396,49 +390,18 @@ export const MANUAL: ManualSection[] = [
       { title: 'No cloud sync or team workspaces', body: 'All data lives on one machine, by design.' },
       { title: 'No automatic DNS editing', body: 'The domain checker verifies and recommends exact records; you paste them at your registrar yourself.' },
       { title: 'No drag-and-drop email builder', body: 'Templates are HTML you write or export from a design tool.' },
-      { title: 'No "Sign in with Google"', body: 'Google connects via an app password (guided in-app); one-click sign-in exists for Microsoft accounts only.' },
     ],
   },
 ];
 
-export const PRICING = {
-  kicker: 'Boarding pass',
-  title: 'One simple plan.',
-  price: '$2.9',
-  period: '/week',
-  bullets: [
-    '7-day free trial — no credit card to start',
-    'Cancel anytime',
-    'One subscription, your own mailbox',
-    'No per-seat or per-contact fees',
-    'Up to 5 mailboxes',
-  ],
-  note: 'Runs entirely on your PC. Your mailbox, your data.',
-  cta: { label: 'Start the free trial', href: '/download' },
-};
-
-export const FAQ = [
-  { q: 'Who is Email Pilots for?', a: 'People who write to other people: job-seekers, recruiters, freelancers, founders, agencies, consultants and sales teams. It is built for personal outreach and follow-up — one person writing to people they want to reach — not for impersonal broadcasts.' },
-  { q: 'Which email providers work?', a: 'Gmail, Outlook, Hotmail and Microsoft 365, or any custom SMTP host. Microsoft accounts sign in through Microsoft’s own page with no password; Gmail and custom hosts connect with a guided app password. Nothing to migrate and no shared sending pools.' },
-  { q: 'How long does setup take?', a: 'Minutes. Connect a mailbox (every account is tested before it is saved), import a CSV or add people by hand, check the preview, and send.' },
-  { q: 'Will my computer need to stay on?', a: 'Yes, because Email Pilots runs on your PC. Close the window and scheduling carries on from the system tray, and you can have it start with Windows.' },
-  { q: 'How does it help my emails reach the inbox?', a: 'No tool can promise placement, but it does what helps: one email per person at a human pace, daily caps, a warm-up ramp for new mailboxes, a check of your SPF, DKIM and DMARC records, a deliverability review of every draft, and emails that look hand-typed.' },
-  { q: 'Is this for sending to huge lists?', a: 'No. It is for personal outreach: about 50 emails a day per mailbox by default, never more than 3 to the same person in a day, one do-not-send list across every mailbox, and a sequence that stops the moment someone replies.' },
-  { q: 'Will it keep my mailbox in good standing?', a: 'That is the design goal. Sends are paced and capped, bounced addresses are retired automatically, nobody is emailed twice by accident, and the app warns you if your sign-in address does not match the domain you send as.' },
-  { q: 'Where does my data live, and is it secure?', a: 'On your PC, as plain local files you can open, back up or delete. No cloud account, no telemetry, no tracking. Passwords and sign-in tokens are encrypted with Windows’ own protection, email previews run in a locked frame, and signing out wipes it all.' },
-  { q: 'Does the AI send my text to a server?', a: 'Never. The optional copilot runs 100% on your machine; its only network traffic is the one-time model download.' },
-  { q: 'Does it track opens or clicks?', a: 'No. There are no hidden pixels and no rewritten links. You measure success by replies, and reply-rate analytics are built in.' },
-  { q: 'What happens when someone replies?', a: 'Their sequence stands down automatically — any of your connected inboxes counts — and the reply appears in your Replies view within 15 minutes.' },
-  { q: 'Can I try it before I connect my real mailbox?', a: 'Yes. Explore mode tours the whole app with sample data, and Practice Mode reroutes every send to your own inbox so you can rehearse safely.' },
-  { q: 'How does the free trial work?', a: '7 days, full app, no credit card to start. Cancel anytime.' },
-];
-
+/**
+ * The Windows installer. The owner confirms the 1.0.0 URL stays valid; this is the only place it is written.
+ */
 export const DOWNLOAD = {
-  kicker: 'The Runway',
-  title: 'Land it on your desktop.',
-  body: 'Email Pilots runs entirely on your Windows PC — your mailbox, your data, no cloud account. Download, connect a mailbox (or just explore with sample data), and rehearse in Practice Mode before anything real flies.',
+  kicker: 'Download',
+  title: 'Email Pilots for Windows.',
+  body: 'It runs entirely on your PC: your mailbox, your data, no cloud account. Install it, connect a mailbox (or explore with sample data first), and rehearse in Practice Mode before anything real flies.',
   requirements: 'Windows 10/11 · 64-bit',
   smartScreenNote: 'Windows SmartScreen may warn about new publishers. Choose "More info" → "Run anyway" — the installer is unmodified from this page.',
-  // release URL lands with the deploy phase; the button is disabled until then
-  cta: { label: 'Download for Windows', href: '#', pending: true },
+  cta: { label: 'Download for Windows', href: 'https://github.com/kryshn7777/Email-Pilots/releases/download/1.0.0/Email.Pilots.Setup.1.0.0.exe' },
 };
