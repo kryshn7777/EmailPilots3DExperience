@@ -5,7 +5,7 @@ import type { FlightPath } from './FlightPath';
 import { HERO_RELEASE, heroParam, launchAttitude } from './launch';
 import { studyShot } from './studyShot';
 import { endingPose, type EndingPose } from './endingShot';
-import { DETOUR_TIMING, DETOUR_TOWER } from './pathPoints.mjs';
+import { DETOUR_TIMING, DETOUR_TOWER, HANDOFF } from './pathPoints.mjs';
 import type { PaperPlane } from '../actors/PaperPlane';
 
 /** the story-t the dart reaches the tower's west face, and leaves its east face (pathPoints.mjs) */
@@ -57,6 +57,8 @@ interface Beat {
 const CHASE_SMOOTH = 0.005;
 /** how long (story-t) a following hold takes to come up to its share of the dart's speed */
 const FOLLOW_EASE = 0.025;
+/** the hand-off onto the ending's line (pathPoints.mjs), where the line's speed per unit of story-t steps up */
+const HAND_T = HANDOFF.t;
 
 /**
  * Off the tower's far face, where the camera waits for the dart to burst out (see the 'burst' beat): north of the
@@ -189,7 +191,7 @@ export class CameraRig {
   mainPose(t: number, pos: Vector3, look: Vector3, holds = false): number {
     const rig = this.beatRig(t);
     this.chasePosition(t, rig, pos);
-    this.path.pointAt(Math.min(t + rig.lookAhead, 1), look);
+    this.path.pointAt(Math.min(this.along(t, rig.lookAhead), 1), look);
     look.y += rig.lookUp ?? 0;
     let fovMul = 1;
     let holdW = 0;
@@ -307,6 +309,23 @@ export class CameraRig {
     private options: CameraRigOptions = { reducedMotion: false },
   ) {}
 
+  /** the line's speed per unit t just after the hand-off over just before it (lazily: the path is a parameter) */
+  private handK = 0;
+  /**
+   * The story-t at the distance a lag or look-ahead `d` (story-t, at the copilot's speed) reaches from `t`: t + d
+   * everywhere but across the hand-off. The ending's line is about four times as fast per unit of story-t as the
+   * copilot's (FlightPath: a step in its speed at H; the pace warp gives the ending as many more pixels per unit t,
+   * so the dart's speed per pixel carries straight across), and an offset in story-t that crossed H would stretch to
+   * four times its distance within a few pixels: the chase would drop back, and the look run on, in a jerk. Measured
+   * at the copilot's speed the chase stays the same distance behind the dart, and looks the same distance ahead.
+   */
+  private along(t: number, d: number): number {
+    const k = this.handK || (this.handK = this.path.speedAt(HAND_T + 1e-3) / Math.max(this.path.speedAt(HAND_T - 1e-3), 1e-6));
+    const u = t <= HAND_T ? t : HAND_T + (t - HAND_T) * k;
+    const v = u + d;
+    return v <= HAND_T ? v : HAND_T + (v - HAND_T) / k;
+  }
+
   /**
    * Where the chase camera stands for story-t `t`, with no turbulence: the chapter's lag and
    * offsets, kept a minimum distance off the dart. Pure in t, so a held shot can ask where the
@@ -324,7 +343,7 @@ export class CameraRig {
       tangent.add(this.path.tangentAt(Math.min(t + k, 1), this.tSmooth)).normalize();
     }
     const side = this.sideScratch.crossVectors(tangent, UP).normalize();
-    this.path.pointAt(Math.max(t - rig.camLag, 0), out);
+    this.path.pointAt(Math.max(this.along(t, -rig.camLag), 0), out);
     out.addScaledVector(UP, rig.offsetUp);
     out.addScaledVector(side, rig.offsetSide);
     out.addScaledVector(tangent, -rig.offsetBack);
@@ -465,7 +484,7 @@ export class CameraRig {
     if (ew > 0) this.camPos.lerp(end.camPos, ew);
     this.camera.position.copy(this.camPos);
 
-    const lookT = Math.min(t + rig.lookAhead, 1);
+    const lookT = Math.min(this.along(t, rig.lookAhead), 1);
     this.path.pointAt(lookT, this.lookAtPoint);
     this.lookAtPoint.y += rig.lookUp ?? 0;
     if (!this.lookInitialized) {

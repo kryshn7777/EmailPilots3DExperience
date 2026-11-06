@@ -313,7 +313,7 @@ export const PATH_KNOTS = [
   [CITY_LINE.canyonEnd, CITY_LINE.canyonEndT, 'left'],
   [CITY_LINE.west, DETOUR_TIMING.T_S + DETOUR_TIMING.cutIn * DETOUR_TIMING.D_T, 'mean'],
   [CITY_LINE.east, DETOUR_TIMING.T_S + DETOUR_TIMING.cutOut * DETOUR_TIMING.D_T, 'mean'],
-  [CITY_LINE.handoff, HANDOFF.t, 'right'],
+  [CITY_LINE.handoff, HANDOFF.t],
 ];
 
 /**

@@ -13,9 +13,10 @@ import type { CameraRig } from './CameraRig';
  * warp of scroll -> t. The dart stands at the same place for every t; only the number of pixels each
  * stretch of t is given changes. The Engine maps
  *
- *   scroll p -> detourMap(p).t = tl (linear, as before) -> t = paceT(tl)
+ *   scroll p -> detourMap(p, W, gap).t = tl (linear) -> t = paceT(tl)
  *
- * and the inverse (idle presets, the progress rail's ticks, jumps) is `progressOf(paceLin(t), W)`.
+ * and the inverse (idle presets, the progress rail's ticks, jumps) is `progressOf(paceLin(t), W, gap)`
+ * (mapScroll / scrollFor below).
  *
  * Why: `toArcT` is linear per chapter, so the world's speed per pixel jumped at every chapter seam
  * (2.35 -> 5.0 world units per 100 px at preflight -> takeoff) and ran from 0.9 at the desk to 5.0 in
@@ -25,8 +26,11 @@ import type { CameraRig } from './CameraRig';
  * per pixel is 1/sigma, continuous across the seams (the steps in the flight line's own speed are
  * cancelled by the pixel density rho = s' * sigma).
  *
- * `paceLin` is the cumulative integral of rho, normalised separately on [0, T_S] and [T_E, 1], so 0, T_S, T_E
- * and 1 stay fixed: the office detour's stretch of scroll is where it always was.
+ * `paceLin` is the cumulative integral of rho, normalised once over the whole flight but the detour's own stretch
+ * of story-t (T_S..T_E, which is the spacer's), so 0 and 1 stay fixed and every chapter lends the ending's long
+ * line a little of its scroll. The spacer then sits at linear story-t `gap`, where the warp reaches T_S (it was
+ * at T_S when [0, T_S] and [T_E, 1] were normalised apart, which made the ending take all its pixels from the
+ * copilot's chapter).
  *
  * Inside the detour (story-t T_S..T_E, its own spacer of scroll) the office clock `u` has its own pace (paceU):
  * outside the two cuts the dart is on the flight line in the city, and there the pixels per unit u are matched
@@ -47,6 +51,14 @@ const SMOOTH_T = 0.012;
 /** the new pixels per stretch of t stay within this factor of today's */
 const RATIO_MIN = 0.5;
 const RATIO_MAX = 2.0;
+/**
+ * From the hand-off at the crest on (the communications-tower ending, endingPoints.mjs) the line is about three
+ * times as fast per unit of story-t as the rest of the flight (186 world units in 0.12 of t), so it may take up to
+ * this many times today's pixels: otherwise the clamp leaves it at twice today's and it runs at twice the world
+ * speed per pixel of the rest of the flight. The pixels come from every chapter (the normalisation is global).
+ */
+const ENDING_FROM = 0.88;
+const ENDING_RATIO_MAX = 4.0;
 /** heights clamp (world units) */
 const H_MIN = 0.8;
 const H_MAX = 14;
@@ -56,7 +68,7 @@ const H_MAX = 14;
  * Checked against the scene: the study desk top (Desk at y 1.29), the town's ground (cityGen's
  * ROOFTOP_BASE_Y, -3.2), the formation cloud deck (centred on chapterAnchor(3).y ~25, puffs from about
  * 21 up), the sea under the storm and the lighthouse (Beacon: anchor 19.9 - 13 + 0.15 ~ 7), the city
- * street (0) and the airfield (0.5).
+ * street (0), and the ending's meadow and runway (0).
  */
 export function floorAt(t: number, _camY?: number): number {
   const k = (a: number, b: number): number => smooth(t, a, b);
@@ -65,7 +77,7 @@ export function floorAt(t: number, _camY?: number): number {
   y += (21 - y) * k(0.27, 0.3); // into the formation's cloud deck
   y += (7 - y) * k(0.38, 0.42); // the storm lets down over the sea, the lighthouse
   y += (0 - y) * k(0.58, 0.62); // the no-fly zones over the city, the canyon, the copilot climb
-  y += (0.5 - y) * k(0.9, 0.92); // the airfield
+  // (the ending's meadow, runway and house floor are at 0 too: Landing.ts, endingPoints.mjs)
   return y;
 }
 
@@ -144,6 +156,13 @@ export function paceInputs(path: FlightPath, rig: CameraRig): PaceInputs {
 }
 
 export interface Pace {
+  /**
+   * the linear story-t the detour's spacer sits at (where the warp reaches T_S; the warp's input runs gap ->
+   * gap + D_T across the spacer): pass it to detourMap / progressOf. It moves with the ending's share.
+   */
+  readonly gap: number;
+  /** where the spacer starts in scroll progress, for a detour share `w` (detourStart(w, gap)) */
+  spacerStart(w: number): number;
   /** linear story-t (from the scroll) -> story-t */
   paceT(tl: number): number;
   /** story-t -> linear story-t (then progressOf(..., W) for the scroll) */
@@ -156,6 +175,11 @@ export interface Pace {
   ratioAt(t: number): number;
   /** the detour's share of the scroll (measured by the Engine): the office clock's pace depends on it */
   setDetourShare(w: number): void;
+  /**
+   * the ending's own spacer's share of the scroll (Experience.astro `[data-ending]`, measured by the Engine; 0 for
+   * none): the ending's pixels come out of it instead of every chapter's
+   */
+  setEndingShare(e: number): void;
   /** the office's pixel density in u (relative to the spacer's even 1): its slope at the cuts is 1 over this */
   officeDensity(): number;
 }
@@ -170,67 +194,120 @@ export function buildPace(inp: PaceInputs): Pace {
   const logSigma = new Float64Array(N);
   const logR = new Float64Array(N);
   let mean = 0;
+  let nMean = 0;
   for (let i = 0; i < N; i++) {
     const t = (i + 0.5) / N;
     // 1/v* = dwell / h^0.6: pixels per world unit asked for
     const ls = BLEND * Math.log(dwellAt(t) / Math.pow(height[i]!, 0.6)) + (1 - BLEND) * Math.log(1 / speed[i]!);
     logR[i] = ls + Math.log(speed[i]!); // vs today's sigma = 1/s'
-    mean += logR[i]!;
+    // (centred on the flight before the ending: the ending's long line would otherwise pull every chapter's ratio
+    // down onto the clamp, and the flight's own balance with it)
+    if (t < ENDING_FROM) {
+      mean += logR[i]!;
+      nMean++;
+    }
   }
-  mean /= N;
+  mean /= nMean;
   // centred (the total length is kept: Q2), clamped to [0.5, 2] of today's, BEFORE the smoothing so
   // the world speed stays continuous wherever the clamp bites
   const lo = Math.log(RATIO_MIN);
-  const hi = Math.log(RATIO_MAX);
+  const step = new Float64Array(N);
   for (let i = 0; i < N; i++) {
+    const t = (i + 0.5) / N;
+    // (the ending's line is about four times as fast per unit of story-t as the rest: it may take more of the scroll)
+    const hi = Math.log(t >= ENDING_FROM ? ENDING_RATIO_MAX : RATIO_MAX);
     const floor = Math.log(Math.min(Math.max(Math.sqrt(camAcc[i]! / acc95), RATIO_MIN), 1));
     const r = Math.min(Math.max(logR[i]! - mean, lo, floor), hi);
     logSigma[i] = r - Math.log(speed[i]!);
+    step[i] = t >= ENDING_FROM ? 1 : 0;
   }
-  // Gaussian smoothing of log sigma (edges clamped)
-  const sm = new Float64Array(N);
+  // Gaussian smoothing of log sigma (edges clamped), and of the ending's step (the boost below is laid on log sigma
+  // before the smoothing, as one more term: the smoothing is linear, so it is smoothed once here)
   const sd = SMOOTH_T * N;
   const rad = Math.ceil(sd * 3);
   const kern: number[] = [];
   for (let k = -rad; k <= rad; k++) kern.push(Math.exp(-0.5 * (k / sd) * (k / sd)));
-  for (let i = 0; i < N; i++) {
-    let acc = 0;
-    let wsum = 0;
-    for (let k = -rad; k <= rad; k++) {
-      const j = Math.min(Math.max(i + k, 0), N - 1);
-      const w = kern[k + rad]!;
-      acc += logSigma[j]! * w;
-      wsum += w;
+  const gauss = (src: Float64Array): Float64Array => {
+    const out = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      let acc = 0;
+      let wsum = 0;
+      for (let k = -rad; k <= rad; k++) {
+        const j = Math.min(Math.max(i + k, 0), N - 1);
+        const wk = kern[k + rad]!;
+        acc += src[j]! * wk;
+        wsum += wk;
+      }
+      out[i] = acc / wsum;
     }
-    sm[i] = acc / wsum;
-  }
-  // pixel density per unit t, and its integral at the bin edges
-  const cum = new Float64Array(N + 1);
-  const ratio = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    const rho = speed[i]! * Math.exp(sm[i]!);
-    ratio[i] = rho;
-    cum[i + 1] = cum[i]! + rho / N;
-  }
-  // normalised separately on [0, T_S] and [T_E, 1]: 0, T_S, T_E and 1 stay fixed (the detour's own stretch,
-  // T_S..T_E, is the spacer's: paceU below; the identity here)
+    return out;
+  };
+  const sm = gauss(logSigma);
+  const smStep = gauss(step);
+
   const iS = Math.round(T_S * N);
   const iE = Math.round(T_E * N);
-  const cS = cum[iS]!;
-  const cE = cum[iE]!;
-  const c1 = cum[N]!;
+  const iH = Math.round(ENDING_FROM * N);
+  const cum = new Float64Array(N + 1);
   const lin = new Float64Array(N + 1);
-  for (let i = 0; i <= N; i++) {
-    lin[i] = i <= iS ? (T_S * cum[i]!) / cS
-      : i < iE ? T_S + ((T_E - T_S) * (i - iS)) / (iE - iS)
-        : T_E + ((1 - T_E) * (cum[i]! - cE)) / (c1 - cE);
-  }
-  lin[0] = 0;
-  lin[iS] = T_S;
-  lin[iE] = T_E;
-  lin[N] = 1;
-  // relative density vs today's (1/N per bin), each part on its own normalisation
-  for (let i = 0; i < N; i++) ratio[i] = (lin[i + 1]! - lin[i]!) * N;
+  const ratio = new Float64Array(N);
+  // pixel density per unit t with the ending's density times e^b, and its integral at the bin edges
+  const integrate = (b: number): void => {
+    for (let i = 0; i < N; i++) cum[i + 1] = cum[i]! + (speed[i]! * Math.exp(sm[i]! + b * smStep[i]!)) / N;
+  };
+  // the ending's share of the linear story-t outside the detour
+  const endShare = (): number => (cum[N]! - cum[iH]!) / (cum[N]! - (cum[iE]! - cum[iS]!));
+
+  let w = W_HOME;
+  let e = 0;
+  let gap = T_S;
+  let U = buildU(w, 1, 1);
+  // Normalised over the whole flight but the detour (whose stretch of story-t, T_S..T_E, is the spacer's, paced by
+  // paceU below), so 0 and 1 stay fixed. The spacer then sits where the warp reaches T_S: at linear story-t `gap`
+  // (detour.ts maps the scroll around it).
+  //
+  // The ending (0.88 on) is a long, fast line: 186 world units, against 297 for the whole flight before it. With its
+  // own spacer of scroll (share e) the flight before it keeps exactly the pixels it had when the ending was a short
+  // stub (its linear share), and the ending gets its linear share plus the spacer: its density is scaled by one
+  // factor e^b, the step smoothed over the seam at 0.88 like everything else (so the world speed per pixel carries
+  // across). Without a spacer (e = 0) it takes what its density asks for, clamped to ENDING_RATIO_MAX of today's,
+  // out of every chapter's pixels alike.
+  const layout = (): void => {
+    let b = 0;
+    if (e > 0) {
+      const ex = Math.min(e / (1 - w), 0.9);
+      const target = ((1 - ENDING_FROM) / (1 - D_T)) * (1 - ex) + ex;
+      let lo2 = -6;
+      let hi2 = 6;
+      for (let q = 0; q < 50; q++) {
+        const m = (lo2 + hi2) / 2;
+        integrate(m);
+        if (endShare() < target) lo2 = m;
+        else hi2 = m;
+      }
+      b = (lo2 + hi2) / 2;
+    }
+    integrate(b);
+    const cS = cum[iS]!;
+    const cE = cum[iE]!;
+    const norm = (1 - D_T) / (cum[N]! - (cE - cS));
+    gap = cS * norm;
+    for (let i = 0; i <= N; i++) {
+      lin[i] = i <= iS ? cum[i]! * norm
+        : i < iE ? gap + (D_T * (i - iS)) / (iE - iS)
+          : gap + D_T + (cum[i]! - cE) * norm;
+    }
+    lin[0] = 0;
+    lin[iS] = gap;
+    lin[iE] = gap + D_T;
+    lin[N] = 1;
+    // relative density vs today's (1/N per bin)
+    for (let i = 0; i < N; i++) ratio[i] = (lin[i + 1]! - lin[i]!) * N;
+    // --- the office clock: the line's pixel density either side of the detour, as density in u ---
+    // world per unit scroll just outside the spacer is s' (1 - D_T) / ((1 - W) ratio); inside it s' D_T / (W rho)
+    U = buildU(w, ratio[iS - 1]!, ratio[iE]!);
+  };
+  layout();
 
   const paceLin = (t: number): number => {
     if (t <= 0) return 0;
@@ -242,8 +319,8 @@ export function buildPace(inp: PaceInputs): Pace {
   const paceT = (tl: number): number => {
     if (tl <= 0) return 0;
     if (tl >= 1) return 1;
-    if (tl === T_S) return T_S;
-    if (tl === T_E) return T_E;
+    if (tl === gap) return T_S;
+    if (tl === gap + D_T) return T_E;
     let a = 0;
     let b = N;
     while (b - a > 1) {
@@ -255,13 +332,11 @@ export function buildPace(inp: PaceInputs): Pace {
     return (a + (d > 0 ? (tl - lin[a]!) / d : 0)) / N;
   };
 
-  // --- the office clock: the line's pixel density either side of the detour, as density in u ---
-  // world per unit scroll just outside the spacer is s' (1 - D_T) / ((1 - W) ratio); inside it s' D_T / (W rho)
-  const ratioS = ratio[iS - 1]!;
-  const ratioE = ratio[iE]!;
-  let w = W_HOME;
-  let U = buildU(w, ratioS, ratioE);
   return {
+    get gap() {
+      return gap;
+    },
+    spacerStart: (share) => detourStart(share, gap),
     paceT,
     paceLin,
     paceU: (ul) => U.paceU(ul),
@@ -270,21 +345,37 @@ export function buildPace(inp: PaceInputs): Pace {
     setDetourShare(share: number): void {
       if (!(share > 0) || Math.abs(share - w) < 1e-6) return;
       w = share;
-      U = buildU(w, ratioS, ratioE);
+      layout();
+    },
+    setEndingShare(share: number): void {
+      const v = share > 0 ? share : 0;
+      if (Math.abs(v - e) < 1e-6) return;
+      e = v;
+      layout();
     },
     officeDensity: () => U.office,
   };
 }
 
-/** the detour's share of the scroll on the home page (Experience.astro: a 120vh spacer in a 1220vh timeline) */
-export const W_HOME = 120 / 1220;
+/**
+ * The home page's scroll stage (Experience.astro), in vh: ten chapters, then the office detour's spacer
+ * (`[data-detour]`, after the copilot's chapter) and the ending's (`[data-ending]`, after the last). The checks
+ * measure on it; the Engine measures the real page.
+ */
+export const HOME_STAGE = { chapters: 10, chapterVh: 120, detourVh: 120, endingVh: 240 } as const;
+/** the scroll range in vh: the stage's height less one viewport */
+export const HOME_RANGE_VH = HOME_STAGE.chapters * HOME_STAGE.chapterVh + HOME_STAGE.detourVh + HOME_STAGE.endingVh - 100;
+/** the detour's share of the scroll on the home page */
+export const W_HOME = HOME_STAGE.detourVh / HOME_RANGE_VH;
+/** the ending's spacer's share of the scroll on the home page */
+export const E_HOME = HOME_STAGE.endingVh / HOME_RANGE_VH;
 
 /**
  * Scroll progress -> story-t and the detour clock, through the pace: the Engine's mapping (check-pace and
  * check-line replay it). Outside the detour the warp of story-t; inside it the office clock's pace, and t follows u.
  */
 export function mapScroll(pace: Pace, p: number, w: number): DetourState {
-  const m = detourMap(p, w);
+  const m = detourMap(p, w, pace.gap);
   if (m.active) {
     const u = pace.paceU(m.u);
     return { t: tOfU(u), u, active: true };
@@ -296,10 +387,10 @@ export function mapScroll(pace: Pace, p: number, w: number): DetourState {
 export function scrollFor(pace: Pace, w: number, t: number, u?: number): number {
   if (u !== undefined || (t > T_S && t < T_E)) {
     const uu = Math.min(Math.max(u ?? (t - T_S) / D_T, 0), 1);
-    if (!(w > 0)) return progressOf(pace.paceLin(tOfU(uu)), w);
-    return detourStart(w) + pace.paceUinv(uu) * w;
+    if (!(w > 0)) return progressOf(pace.paceLin(tOfU(uu)), w, pace.gap);
+    return pace.spacerStart(w) + pace.paceUinv(uu) * w;
   }
-  return progressOf(pace.paceLin(t), w);
+  return progressOf(pace.paceLin(t), w, pace.gap);
 }
 
 /**

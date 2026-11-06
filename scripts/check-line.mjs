@@ -257,10 +257,11 @@ row('office: the dart\'s heading across the room', 'constant +-3 deg', 'constant
 row('office: the dart\'s speed (per unit u)', 'variation <= 10%', '<= 10%', `${(vSpread * 100).toFixed(2)}%`, vSpread <= 0.1);
 // and per pixel: the office's density in u is even between the cuts
 const VH = 900;
-const STAGE = (10 * 1.2 + 1.2) * VH - VH;
-const W = (1.2 * VH) / STAGE;
+const STAGE = (pace.HOME_RANGE_VH / 100) * VH; // the home page's stage (rig/pace.ts HOME_STAGE), less one viewport
+const W = pace.W_HOME;
 const warp = pace.buildPace(pace.paceInputs(path, rig));
 warp.setDetourShare(W);
+warp.setEndingShare(pace.E_HOME);
 const slopeAt = (u) => {
   const ul = warp.paceUinv(u);
   return (warp.paceU(ul + 1e-4) - warp.paceU(ul - 1e-4)) / 2e-4;
@@ -311,7 +312,7 @@ const DP = 0.0002;
 const pxPerStep = DP * STAGE;
 const tOfP = (p) => pace.mapScroll(warp, p, W).t;
 const shown = (p) => {
-  const m = detourMap(p, W);
+  const m = detourMap(p, W, warp.gap);
   if (!m.active) return true;
   const u = warp.paceU(m.u);
   return !insideAt(u) && flareAt(u) < 0.5;

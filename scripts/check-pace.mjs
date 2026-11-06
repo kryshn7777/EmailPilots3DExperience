@@ -1,5 +1,5 @@
 // The scroll's pace: how much world each pixel of scroll carries, chapter by chapter.
-// Run: node --experimental-transform-types scripts/check-pace.mjs [--baseline] [--json out.json]
+// Run: node --experimental-transform-types scripts/check-pace.mjs [--baseline] [--json out.json] [--no-ending-spacer]
 //
 // Sweeps scroll progress p over the home page's stage at a 900 px viewport (10 chapters of 120vh + the
 // office detour's 120vh, minus one viewport: 10980 px), maps p -> story-t exactly as the Engine does
@@ -37,19 +37,25 @@ const { detourMap, T_S, T_E, DETOUR, MAX_U_RATE, flareAt, insideAt } = await imp
 const pace = await import('../src/webgl/rig/pace.ts');
 
 const VH = 900;
-const STAGE = (10 * 1.2 + 1.2) * VH - VH; // 10980 px
-const W = (1.2 * VH) / STAGE; // the detour's share
+// the home page's stage (rig/pace.ts HOME_STAGE): ten chapters of 120vh, the detour's spacer (120vh) and the
+// ending's (200vh), less one viewport: 1420vh, 12780 px. --no-ending-spacer measures the page without the ending's
+// spacer (the pace's fallback; reported, the assertions are for the page as built)
+const noEnding = args.includes('--no-ending-spacer');
+const STAGE = ((pace.HOME_RANGE_VH - (noEnding ? pace.HOME_STAGE.endingVh : 0)) / 100) * VH;
+const W = (pace.HOME_STAGE.detourVh / 100) * VH / STAGE; // the detour's share
+const E = noEnding ? 0 : (pace.HOME_STAGE.endingVh / 100) * VH / STAGE; // the ending's spacer's
 const path = new FlightPath();
 const camera = new PerspectiveCamera(45, 16 / 9, 0.1, 1000);
 const rig = new CameraRig(path, camera, /** @type any */ ({}), { reducedMotion: false });
 const warp = baseline ? null : pace.buildPace(pace.paceInputs(path, rig));
 warp?.setDetourShare(W);
+warp?.setEndingShare(E);
 
 // p -> story-t exactly as the Engine does (in the detour, t runs with the office clock: t = T_S + D_T u)
 const tOf = (p) => (warp ? pace.mapScroll(warp, p, W).t : detourMap(p, W).t);
 // the frames where the camera is in the office (its own stage and its own camera: check-line measures those)
 const inOffice = (p) => {
-  const m = detourMap(p, W);
+  const m = detourMap(p, W, warp ? warp.gap : undefined);
   return m.active && insideAt(warp ? warp.paceU(m.u) : m.u);
 };
 const camAt = (t, out) => pace.cameraAt(path, rig, t, out);
@@ -72,6 +78,14 @@ const C1 = new Vector3();
 const C2 = new Vector3();
 let prevT = tOf(0);
 const speeds = []; // [t, world per 100 px]
+// The ending's own camera (rig/endingShot.ts, WP-D's: the intake hold, the crane up the tower, the dive, the push into
+// the screen) has the frame to itself from 0.889 on. Its hand-overs are authored moves, checked by
+// scripts/check-ending.mjs (never through a solid; the largest move per 1e-4 of t); the flight's camera is the chase.
+// Its acceleration per px^2 is reported apart and not held to the chase's baseline (it would set the flight's p95:
+// it is a quarter of the scroll).
+const ENDING_OWN = 0.889;
+const accFlight = [];
+const accEnding = [];
 for (let i = 1; i <= N; i++) {
   const pa = (i - 1) * DP;
   const pb = i * DP;
@@ -106,6 +120,7 @@ for (let i = 1; i <= N; i++) {
   if (acc > row.acc) row.accAt = tm;
   row.acc = Math.max(row.acc, acc);
   row.accs.push(acc);
+  (tm < ENDING_OWN ? accFlight : accEnding).push(acc);
   row.vh6 += v / Math.pow(h, 0.6);
   row.px += pxPerStep;
   speeds.push([tm, v]);
@@ -165,16 +180,19 @@ const v6 = rows.map((r) => r.vh6 / r.n);
 const v6Mean = v6.reduce((a, b) => a + b) / v6.length;
 const v6Spread = (Math.max(...v6) - Math.min(...v6)) / v6Mean;
 const maxSeam = Math.max(...seams.map((s) => s.ratio));
-const accP95 = p95(rows.flatMap((r) => r.accs));
-const maxAcc = Math.max(...rows.map((r) => r.acc));
+const accP95 = p95(accFlight);
+const maxAcc = Math.max(...accFlight);
+const endP95 = p95(accEnding);
+const endMax = Math.max(0, ...accEnding);
 console.log(
   `spread of world units per 100 px across chapters (max-min)/mean: ${(spread * 100).toFixed(1)}%` +
     ` | of v/h: ${(vhSpread * 100).toFixed(1)}% | of v/h^0.6: ${(v6Spread * 100).toFixed(1)}%` +
-    ` | worst seam ratio ${maxSeam.toFixed(3)} | cam acc p95 ${(accP95 * 1e4).toFixed(2)}, max ${(maxAcc * 1e4).toFixed(2)} (1e-4/px^2)`,
+    ` | worst seam ratio ${maxSeam.toFixed(3)} | cam acc p95 ${(accP95 * 1e4).toFixed(2)}, max ${(maxAcc * 1e4).toFixed(2)} (1e-4/px^2, the flight to ${ENDING_OWN})` +
+    ` | the ending's own camera from ${ENDING_OWN}: p95 ${(endP95 * 1e4).toFixed(2)}, max ${(endMax * 1e4).toFixed(2)} (reported)`,
 );
 
 if (jsonOut) {
-  writeFileSync(jsonOut, JSON.stringify({ viewport: VH, stagePx: STAGE, W, chapters: table, seams, spread, vhSpread, v6Spread, maxSeam, accP95, maxAcc }, null, 2) + '\n');
+  writeFileSync(jsonOut, JSON.stringify({ viewport: VH, stagePx: STAGE, W, E, chapters: table, seams, spread, vhSpread, v6Spread, maxSeam, accP95, maxAcc, endP95, endMax }, null, 2) + '\n');
   console.log('wrote', jsonOut);
 }
 
@@ -191,7 +209,9 @@ if (warp) {
     const m = pace.mapScroll(warp, pace.scrollFor(warp, W, T_S, u), W);
     assert(Math.abs(m.u - u) < 1e-4, `progressFor({ u: ${u} }) lands on u ${m.u}`);
   }
-  assert(Math.abs(warp.paceT(T_S) - T_S) < 1e-9 && Math.abs(warp.paceT(T_E) - T_E) < 1e-9 && warp.paceT(0) === 0 && warp.paceT(1) === 1, 'T_S, T_E, 0 and 1 stay fixed');
+  // the spacer sits where the warp reaches T_S (the warp's input runs gap -> gap + D_T across it)
+  assert(Math.abs(warp.paceT(warp.gap) - T_S) < 1e-9 && Math.abs(warp.paceT(warp.gap + (T_E - T_S)) - T_E) < 1e-9 && warp.paceT(0) === 0 && warp.paceT(1) === 1, 'the spacer edges map to T_S and T_E; 0 and 1 stay fixed');
+  assert(Math.abs(warp.paceLin(T_S) - warp.gap) < 1e-9 && Math.abs(warp.paceLin(T_E) - warp.gap - (T_E - T_S)) < 1e-9, 'paceLin(T_S) = gap, paceLin(T_E) = gap + D_T');
   // the office clock: monotone, ends fixed, never faster than u_lin at the cuts (so MAX_U_RATE keeps each flare
   // on screen); the office itself one even density
   let prevU = 0;
@@ -230,6 +250,8 @@ if (warp) {
   const base = JSON.parse(readFileSync(new URL('./pace-baseline.json', import.meta.url), 'utf8'));
   assert(spread <= base.spread, `world speed spread ${(spread * 100).toFixed(1)}% grew (today ${(base.spread * 100).toFixed(1)}%)`);
   assert(v6Spread <= base.v6Spread * 0.8, `v/h^0.6 spread ${(v6Spread * 100).toFixed(1)}% not 20% under today's ${(base.v6Spread * 100).toFixed(1)}%`);
+  // (today's p95 is the whole flight's, its old landing chase included; the flight's is held to it up to the ending's
+  // own camera)
   assert(accP95 <= base.accP95 * 1.05, `camera acceleration p95 ${(accP95 * 1e4).toFixed(2)} over today's ${(base.accP95 * 1e4).toFixed(2)}`);
   console.log(`vs today: world speed spread ${(base.spread * 100).toFixed(0)}% -> ${(spread * 100).toFixed(0)}%, v/h^0.6 spread ${(base.v6Spread * 100).toFixed(0)}% -> ${(v6Spread * 100).toFixed(0)}%, worst seam ${base.maxSeam.toFixed(2)} -> ${maxSeam.toFixed(2)}, cam acc p95 ${(base.accP95 * 1e4).toFixed(2)} -> ${(accP95 * 1e4).toFixed(2)}`);
   console.log('pace OK');

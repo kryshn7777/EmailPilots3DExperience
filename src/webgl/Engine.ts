@@ -103,7 +103,7 @@ import { asset } from './asset';
 import { mulberry32 } from './util';
 // office detour (rig/detour.ts)
 import { Office, OFFICE_GRADE } from './actors/Office';
-import { MAX_U_RATE, T_S, detourStart, insideAt } from './rig/detour';
+import { MAX_U_RATE, T_S, insideAt } from './rig/detour';
 // --- scroll feel ---
 import gsap from 'gsap';
 import { step as springStep, capDetour, type SpringState } from './scroll/spring';
@@ -230,7 +230,7 @@ export class Engine {
     if (document.visibilityState === 'visible') this.lastTime = performance.now();
   };
   /**
-   * The pace warp (rig/pace.ts): scroll -> linear t (detourMap) -> story-t. Built once at init from the
+   * The pace warp (rig/pace.ts): scroll -> linear t (detourMap around the spacer at pace.gap) -> story-t. Built once at init from the
    * flight line and the camera (a few ms).
    */
   private pace!: Pace;
@@ -1186,7 +1186,7 @@ export class Engine {
     this.spring.x = MathUtils.clamp(this.spring.x, 0, 1);
     // office detour: a flick may not carry the detour clock faster than MAX_U_RATE, so both cuts
     // always play under their flare (keyed on u) instead of being stepped over between two frames
-    if (W > 0 && !this.idlePreset) capDetour(this.spring, this.renderP, detourStart(W), W, MAX_U_RATE, dt);
+    if (W > 0 && !this.idlePreset) capDetour(this.spring, this.renderP, this.pace.spacerStart(W), W, MAX_U_RATE, dt);
     this.renderP = this.spring.x;
     this.scrubVel = this.spring.v;
     // --- end scroll feel ---

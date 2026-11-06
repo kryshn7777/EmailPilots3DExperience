@@ -69,32 +69,38 @@ export interface DetourState {
   active: boolean;
 }
 
-/** where the detour starts in scroll progress */
-export function detourStart(w: number): number {
-  return (T_S * (1 - w)) / (1 - D_T);
+/**
+ * Where the detour starts in scroll progress. `gap` is the linear story-t the spacer sits at: T_S for the plain
+ * linear map; the pace warp (rig/pace.ts) puts it where its own pixels reach T_S, so it passes its `gap` here.
+ */
+export function detourStart(w: number, gap = T_S): number {
+  return (gap * (1 - w)) / (1 - D_T);
 }
 
-/** scroll progress (0..1) to story-t and the detour clock */
-export function detourMap(p: number, w: number): DetourState {
+/**
+ * Scroll progress (0..1) to linear story-t and the detour clock. With the default `gap` the linear story-t IS
+ * story-t (no pace warp); with the pace's `gap` it is the warp's input (the detour runs gap -> gap + D_T in it).
+ */
+export function detourMap(p: number, w: number, gap = T_S): DetourState {
   const q = Math.min(Math.max(p, 0), 1);
   if (!(w > 0)) return { t: q, u: 0, active: false };
-  const ps = detourStart(w);
+  const ps = detourStart(w, gap);
   const k = (1 - D_T) / (1 - w);
   if (q < ps) return { t: q * k, u: 0, active: false };
-  if (q > ps + w) return { t: Math.min(T_E + (q - ps - w) * k, 1), u: 0, active: false };
+  if (q > ps + w) return { t: Math.min(gap + D_T + (q - ps - w) * k, 1), u: 0, active: false };
   const u = (q - ps) / w;
-  return { t: T_S + D_T * u, u, active: u > 0 && u < 1 };
+  return { t: gap + D_T * u, u, active: u > 0 && u < 1 };
 }
 
-/** the inverse: the scroll progress that shows story-t `t` (exact; inside the detour `t` and `u` are the same thing) */
-export function progressOf(t: number, w: number): number {
+/** the inverse: the scroll progress that shows linear story-t `t` (exact; inside the detour `t` and `u` are the same thing) */
+export function progressOf(t: number, w: number, gap = T_S): number {
   const q = Math.min(Math.max(t, 0), 1);
   if (!(w > 0)) return q;
-  const ps = detourStart(w);
+  const ps = detourStart(w, gap);
   const k = (1 - D_T) / (1 - w);
-  if (q < T_S) return q / k;
-  if (q > T_E) return ps + w + (q - T_E) / k;
-  return ps + ((q - T_S) / D_T) * w;
+  if (q < gap) return q / k;
+  if (q > gap + D_T) return ps + w + (q - gap - D_T) / k;
+  return ps + ((q - gap) / D_T) * w;
 }
 
 /** in the office (the room is on screen and the rest of the world is hidden) */
