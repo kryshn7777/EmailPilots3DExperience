@@ -333,36 +333,23 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   };
 
   const { x0, x1, D } = room;
-  // dado: a darker lower band and a chair rail, on all three walls
-  addBox(navyLow, 'back', 0, 0.52, x1 - x0, 1.04, 0.012);
-  addBox(trim, 'back', 0, 1.06, x1 - x0, 0.045, 0.03);
+  void x0;
+  void x1;
+  // dado: a darker lower band and a chair rail, on the two side walls (the walls at z = 0 and z = D are glass: the
+  // dart comes in through one and leaves through the other)
   addBox(slate, 'left', D / 2, 0.52, D, 1.04, 0.012);
   addBox(trim, 'left', D / 2, 1.06, D, 0.045, 0.03);
   addBox(slate, 'right', D / 2, 0.52, D, 1.04, 0.012);
   addBox(trim, 'right', D / 2, 1.06, D, 0.045, 0.03);
 
-  // back wall
-  for (const [x, mat] of [[-6.75, feltTeal], [-5.45, feltAmber], [-4.15, feltGrey]] as const) {
-    addBox(mat, 'back', x, 2.0, 1.1, 0.7, 0.045);
-    addBox(mat, 'back', x + 0.62 - 0.0, 2.0, 0.01, 0.7, 0.01); // seam shadow line
+  // felt acoustic panels high on the right wall by the far windows, over the racks
+  for (const [a, mat] of [[7.55, feltTeal], [8.7, feltAmber], [9.6, feltGrey]] as const) {
+    addBox(mat, 'right', a, 2.45, 0.9, 0.5, 0.045);
   }
-  poster('pilot', 'back', 3.75, 1.95, 0.8, 1.1);
-  poster('warning', 'back', 5.75, 2.35, 0.56, 0.37, null);
-  // the TV on its bracket: bezel, the live display in front of it
-  addBox(frameDark, 'back', 0.2, 1.72, 1.56, 0.92, 0.05);
-  addBox(m.metal, 'back', 0.2, 1.72, 0.18, 0.22, 0.012, 0.0);
-  const tv = new PlaneGeometry(1.5, 0.84);
-  tv.applyMatrix4(wallMatrix('back', 0.2, 1.72, room, 0.057));
-  // a shelf over the coffee station with mugs and a box
-  addBox(wood, 'back', 2.3, 1.72, 1.1, 0.035, 0.22);
-  for (const [dx, mug] of [[-0.35, '#d9d4c8'], [-0.18, '#2f6f78'], [0.2, '#b57a2e']] as const) addBox(std(mug, 0.5), 'back', 2.3 + dx, 1.72 + 0.075, 0.075, 0.115, 0.075, 0.05);
-  addBox(std('#8d6e4c', 0.8), 'back', 2.3 + 0.38, 1.72 + 0.1, 0.18, 0.17, 0.15, 0.04);
-  // the conduit that runs from the rack along the ceiling and down the corner
-  addBox(m.metal, 'back', 5.6, 2.78, 3.0, 0.05, 0.05, 0.05);
-  addBox(m.metal, 'back', 5.6, 2.9, 3.0, 0.03, 0.03, 0.05);
-  for (const x of [4.3, 5.6, 6.9]) addBox(m.metal, 'back', x, 2.78, 0.14, 0.14, 0.08, 0.04);
-  // outlets and a switch by the coffee station
-  for (const x of [1.35, 3.15]) { addBox(white, 'back', x, 1.12, 0.08, 0.12, 0.012); addBox(frameDark, 'back', x, 1.12, 0.05, 0.05, 0.014); }
+  poster('pilot', 'left', 0.75, 1.95, 0.8, 1.1);
+  poster('warning', 'right', 7.7, 2.0, 0.56, 0.37, null);
+  void navyLow;
+  void wood;
 
   // left wall: the door (with its exit sign), prints, switch, extinguisher, filing wall
   addBox(trim, 'left', 1.95, 1.06, 1.12, 2.16, 0.06);
@@ -372,7 +359,6 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   poster('doorsign', 'left', 1.95, 1.9, 0.5, 0.15, null);
   poster('network', 'left', 4.4, 1.7, 1.2, 0.88);
   poster('cork', 'left', 6.45, 1.95, 1.1, 0.82);
-  poster('kanban', 'left', 8.55, 1.75, 1.5, 0.75);
   addBox(white, 'left', 3.05, 1.25, 0.08, 0.12, 0.012);
   // a fire extinguisher on its bracket with a sign
   const extG = new CylinderGeometry(0.075, 0.075, 0.42, 14);
@@ -383,12 +369,13 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   addBox(m.dark, 'left', 3.6, 0.9, 0.05, 0.1, 0.12, 0.0);
   addBox(white, 'left', 3.6, 1.35, 0.3, 0.3, 0.012);
 
-  // right wall: org chart, calendar, plan, IT sign over the bench, vent, the electrical panel
+  // right wall: org chart, calendar, IT sign over the bench, vent, the electrical panel (the racks stand by the
+  // far windows now, so the fire plan moved up front)
   poster('org', 'right', 2.9, 1.9, 1.4, 0.88);
   poster('calendar', 'right', 4.15, 1.62, 0.52, 0.7);
-  poster('fireplan', 'right', 8.3, 1.5, 0.7, 0.5);
+  poster('fireplan', 'right', 0.55, 1.6, 0.7, 0.5);
   poster('itsign', 'right', 5.9, 2.5, 1.1, 0.3, frameDark);
-  poster('lock', 'right', 7.4, 1.6, 0.34, 0.45);
+  poster('lock', 'right', 7.15, 1.6, 0.34, 0.45);
   addBox(white, 'right', 1.35, 1.5, 0.5, 0.7, 0.06);
   addBox(frameDark, 'right', 1.35, 1.5, 0.44, 0.64, 0.065, 0.0);
   for (let i = 0; i < 6; i++) addBox(m.metal, 'right', 3.6, 2.62 + (i - 2.5) * 0.045, 0.62, 0.012, 0.03, 0.03); // vent slats
@@ -400,6 +387,10 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   batch.add(m.dark, exitBack);
   exitBack.dispose();
 
+  // the TV's bezel and bracket (its screen is drawn below)
+  addBox(frameDark, 'left', 3.2, 2.0, 1.06, 0.62, 0.05);
+  addBox(m.metal, 'left', 3.2, 2.0, 0.16, 0.2, 0.012, 0.0);
+
   // the posters and the screen
   for (const mesh of batch.build({ castShadow: false, receiveShadow: high })) group.add(mesh);
   const merged = mergeGeometries(posters, false);
@@ -408,6 +399,9 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   group.add(postersMesh);
   posters.forEach((p) => p.dispose());
 
+  // the TV: on the left wall between the door and the network poster, its live dashboard
+  const tv = new PlaneGeometry(1.0, 0.56);
+  tv.applyMatrix4(wallMatrix('left', 3.2, 2.0, room, 0.057));
   const tvMesh = new Mesh(tv, new MeshBasicMaterial({ map: own(tvTexture()), toneMapped: false }));
   own(tvMesh.geometry);
   own(tvMesh.material as MeshBasicMaterial);
@@ -420,7 +414,7 @@ export function buildOfficeWalls(room: { x0: number; x1: number; D: number; h: n
   group.add(new Mesh(exitGeom, exitMat));
   const clockMat = own(new MeshBasicMaterial({ map: own(clockTexture()), side: DoubleSide }));
   const clockGeom = new CircleGeometry(0.19, 40);
-  clockGeom.applyMatrix4(wallMatrix('back', -2.2, 2.62, room, 0.035));
+  clockGeom.applyMatrix4(wallMatrix('right', 5.0, 2.62, room, 0.035));
   own(clockGeom);
   group.add(new Mesh(clockGeom, clockMat));
 
