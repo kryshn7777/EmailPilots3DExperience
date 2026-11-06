@@ -211,6 +211,7 @@ attribute vec4 aCol0;
 attribute vec4 aCol1;
 uniform vec3 uPiv[16];
 uniform vec4 uLeg;
+uniform float uAdduct;
 uniform vec4 uFoot;
 uniform float uTime;
 uniform float uFar;
@@ -342,7 +343,9 @@ void pose(inout vec3 p, inout vec3 n) {
   vec3 q;
   if (bone == 9 || bone == 12) {                 // feet
     vec4 lg = bone == 9 ? L : R;
-    q = uPiv[bone]; p = q + rotZ(p - q, lg.z * w); n = rotZ(n, lg.z * w);
+    // undo the hip's inward turn at the ankle so the sole stays flat on the ground
+    float fr = (bone == 9 ? uAdduct : -uAdduct) * w;
+    q = uPiv[bone]; p = q + rotX(rotZ(p - q, lg.z * w), fr); n = rotX(rotZ(n, lg.z * w), fr);
     bone -= 1; w = 1.0;
   }
   if (bone == 8 || bone == 11) {                 // shins
@@ -352,7 +355,9 @@ void pose(inout vec3 p, inout vec3 n) {
   }
   if (bone == 7 || bone == 10) {                 // thighs
     vec4 lg = bone == 7 ? L : R;
-    q = uPiv[bone]; p = q + rotZ(p - q, lg.x * w); n = rotZ(n, lg.x * w);
+    // in toward the midline first (left leg sits at -z), then the stride
+    float ad = (bone == 7 ? -uAdduct : uAdduct) * w;
+    q = uPiv[bone]; p = q + rotZ(rotX(p - q, ad), lg.x * w); n = rotZ(rotX(n, ad), lg.x * w);
     bone = 0; w = 1.0;
   }
   if (bone == 4 || bone == 6) {                  // forearms
@@ -459,8 +464,14 @@ function figureMaterials(v: Variant, shared: Shared, atlas: Atlas | null = null)
   const dog = v.kind === 'dog';
   const pivots = Array.from({ length: 16 }, (_, k) => new Vector3(...(v.pivots[k] ?? v.pivots[0]!) as [number, number, number]));
   const legLen = v.legs[0]! + v.legs[1]!;
+  // the people are modelled in an A-stance (ankles ~1.8x the hips' spread), so walking, the feet stayed wide
+  // and the legs read as a triangle: each thigh turns inward at the hip until its ankle sits a little inside
+  // the hip line, the narrow base a person actually walks on
+  const hip = pivots[7]!, ankle = pivots[9]!;
+  const adduct = dog ? 0 : Math.max(0, Math.atan2(Math.abs(ankle.z) - 0.6 * Math.abs(hip.z), hip.y - ankle.y));
   const uniforms = {
     uPiv: { value: pivots },
+    uAdduct: { value: adduct },
     uLeg: { value: [v.legs[0]!, v.legs[1]!, WALK_REACH * legLen, JOG_REACH * legLen] },
     uFoot: { value: v.foot },
     ...shared,
