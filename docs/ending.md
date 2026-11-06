@@ -133,12 +133,16 @@ beside it. No door. HIGH 4.6k triangles, LOW 0.6k, one draw each (`house-color/-
 `endingPose(t, aspect, out)` is pure in t (it flies the same `FlightPath` the Engine flies) and is meant to be laid
 over the chase last, blended by `weight` (0 at 0.88, 1 from 0.889). Shots: a chase down the descent; the low pass,
 0.6 over the dart, looking ahead and up at the tower; the camera runs on and stops short of the hall (it never moves
-back) while the dart dives into the bell-mouth; it tilts up with the light in the tube (portrait: a tall frame, the
-lens at about 70 degrees); a crane up the tower's north-west side to the main dish as the dart bursts out past its
-rim (the dart only ever moves away from the lens or left to right); a wide chase
+back) while the dart dives into the bell-mouth; then it rises with the light up the tower's north-west side, an
+elevator alongside the streak that watches it climb (portrait: a tall frame, the lens at about 70 degrees), and
+arrives at the main dish as the dart bursts out past its rim (the dart only ever moves away from the lens or left to
+right); a wide chase
 over the crest and down at the house with sky above it (the pinned title's spot) and the lit window below; down to
 the window and through it behind the dart; the push into the screen, the bars opening. Phones keep a minimum
-horizontal field, and the final push stands further back so the message spans the frame.
+horizontal field, and the final push stands further back so the message spans the frame. Each hand-over runs over
+several hundredths of a percent of t (the largest camera move per 1e-4 of t is 0.36 units); check-pace's camera
+acceleration for CH10 is p95 51e-4 / max 145e-4 per px^2, high against the flight's 6.95e-4 because the line covers
+12 world units per 100 px (see Integration, pace).
 
 ## Integration (other owners' files)
 
@@ -161,7 +165,7 @@ Still wanted:
 - `rig/pace.ts` (C), and why `scripts/check-line.mjs` now fails two rows: the ending's line is 186 units (the stub's
   56) because the beat timetable needs it (see "Why the tower stands at x 336.7"); the warp asks pixels for it by
   its speed and normalises 0.80 to 1.0 as one block, so the copilot chapter pays: 993 px with the stub, 654 with this
-  line (check-pace: landing 1557 px, about 12 world units per 100 px; the seams stay smooth, 1.02). Camera
+  line (check-pace: landing 1546 px, about 12 world units per 100 px; the seams stay smooth, 1.02). Camera
   acceleration over 0.74 to 0.90 then fails: as shot p95 19.5e-4 (stub 6.1), the chase alone 17.9e-4 (stub 5.0).
   With this camera off it is 16.9 / 8.8, and the shortest line this geometry allows (no low pass, about 140 units)
   still fails (16.3 / 7.9), so no line meeting the beats can pass while the copilot pays for the ending's pixels.

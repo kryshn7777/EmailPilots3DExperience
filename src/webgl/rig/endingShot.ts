@@ -14,8 +14,8 @@ import { FlightPath } from './FlightPath';
  *   descent       chase from behind and above, down through the cloud seam onto the runway's centreline
  *   low pass      low chase 0.6 over the dart, looking ahead and up at the tower growing over the rabbit
  *   intake        the camera runs on and stops at the relay hall's glass; the dart is swallowed by the bell-mouth
- *   rise          held at the foot, dollying back and tilting up with the light in the tube (a tall frame on phones)
- *   pop           a crane up the tower's north-west side to the main dish as the dart bursts out past its rim
+ *   rise          the camera rises with the light up the tower's north-west side, watching it climb (a tall frame on phones)
+ *   pop           it arrives at the main dish as the dart bursts out past the rim, and watches it go over
  *   arc and dive  a wide chase over the crest and down at the house, sky above, the lit window below
  *   window        down to the window and through it behind the dart, into the warm room
  *   screen        the push into the laptop's screen: EMAIL RECEIVED, the message, Cara's reply; the bars open
@@ -100,8 +100,9 @@ const HOLD_AT = [TX - 11.4, 2.3, Z + 3.2] as const;
  * +x is always away or to the right).
  */
 const CRANE: Key[] = [
-  [B.tubeTop - 0.001, HOLD_AT[0], HOLD_AT[1], HOLD_AT[2]],
-  [B.tubeTop + 0.0022, TX - 11.2, 13.0, Z + 7.0],
+  [B.tube - 0.001, HOLD_AT[0], HOLD_AT[1], HOLD_AT[2]],
+  [B.tube + 0.004, TX - 11.3, 7.0, Z + 5.2],
+  [B.tubeTop, TX - 10.8, 17.0, Z + 8.2],
   [B.exit + 0.0012, TX - 9.6, 24.6, Z + 9.6],
   [B.crest + 0.003, TX - 6.6, 27.4, Z + 9.8],
 ];
@@ -150,23 +151,27 @@ export function endingPose(t: number, aspect: number, out: EndingPose): EndingPo
     bars = MathUtils.lerp(bars, 0.75, hold);
   }
 
-  // 3. the crane to the dish and the pop: watching the feed, then the dart as it bursts out and over
-  const crane = ss(t, B.tubeTop - 0.0012, B.tubeTop + 0.0022);
+  // 3. the crane: the camera rises with the light up the tower's north-west side (an elevator alongside the
+  // streak, watching it climb), arrives at the main dish as the dart bursts out, and watches it go over
+  const crane = ss(t, B.tube - 0.002, B.tube + 0.003);
   if (crane > 0) {
     keyed(CRANE, t, A);
     dart(t, Q);
-    // the feed until the dart is out, then between the dish and the dart (the dish stays in frame as it flies off)
-    // (a phone's narrow frame stays nearer the dish)
-    D.fromArray(TUBE.exit).lerp(Q, MathUtils.lerp(0.6, 0.45, portrait) * ss(t, B.exit - 0.001, B.exit + 0.004));
-    D.y += 1.0;
+    // the light in the tube (leading it), then the feed, then between the dish and the dart as it flies off (the dish
+    // stays in frame; a phone's narrow frame stays nearer the dish)
+    const yDart = MathUtils.lerp(TUBE.foot[1], TUBE.top[1], MathUtils.clamp((t - B.tube) / (B.tubeTop - B.tube), 0, 1));
+    D.set(TUBE.foot[0], Math.min(yDart + 3.0, TUBE.top[1] + 2.5), Z).lerp(Q.fromArray(TUBE.exit), ss(t, B.tubeTop - 0.004, B.tubeTop + 0.0005));
+    dart(t, Q);
+    D.lerp(Q, MathUtils.lerp(0.6, 0.45, portrait) * ss(t, B.exit - 0.001, B.exit + 0.004));
+    D.y += 1.0 * ss(t, B.tubeTop - 0.004, B.tubeTop);
     C.lerp(A, crane);
     L.lerp(D, crane);
-    fov = MathUtils.lerp(fov, lens(56, 44, aspect), crane);
-    bars = MathUtils.lerp(bars, 0.55, crane);
+    fov = MathUtils.lerp(fov, MathUtils.lerp(lens(60, 38, aspect), lens(56, 44, aspect), ss(t, B.tubeTop - 0.003, B.exit)), crane);
+    bars = MathUtils.lerp(bars, MathUtils.lerp(0.75, 0.55, ss(t, B.tubeTop - 0.003, B.exit)), crane);
   }
 
   // 4. the arc and the dive: a wide chase from behind and above, sky over the house, the lit window below
-  const dive = ss(t, B.crest + 0.0035, B.dive + 0.003);
+  const dive = ss(t, B.crest + 0.002, B.dive + 0.006);
   if (dive > 0) {
     dart(t, Q);
     // pulls in closer as the dart comes down and flares
@@ -187,12 +192,12 @@ export function endingPose(t: number, aspect: number, out: EndingPose): EndingPo
   }
 
   // 5. through the window and the push into the screen
-  const into = ss(t, B.window - 0.0042, B.window - 0.0012);
+  const into = ss(t, B.window - 0.0072, B.window - 0.0032);
   if (into > 0) {
     // how far from the screen the camera ends: landscape fills with the screen, a phone keeps the message across
     const dEnd = MathUtils.lerp(1.38, 2.25, portrait);
     const keys: Key[] = [
-      [B.window - 0.0042, WX - 6.5, SY + 2.0, Z + 0.55],
+      [B.window - 0.0072, WX - 15.4, SY + 2.4, Z + 0.6],
       [B.window - 0.0008, WX - 1.4, SY + 0.32, Z + 0.06],
       [B.screen, SX - Math.max(2.9, dEnd + 0.6), SY + 0.2, Z],
       [0.995, SX - dEnd - 0.25, SY + 0.12, Z],
