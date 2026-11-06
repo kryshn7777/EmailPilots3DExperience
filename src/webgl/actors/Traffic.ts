@@ -27,8 +27,10 @@ export class Traffic {
 
   constructor(path: FlightPath) {
     const rand = mulberry32(260809);
-    // window centers avoid the room, the landing, and the copilot's silence
-    const CENTERS = [0.148, 0.205, 0.268, 0.335, 0.455, 0.53, 0.7, 0.79];
+    // window centers avoid the room, the landing, and the copilot's silence; and the climb to the office tower
+    // and the burst out of it (0.735-0.83), where the one line has to read on its own (a cameo used to cross it
+    // at 0.79)
+    const CENTERS = [0.148, 0.205, 0.268, 0.335, 0.455, 0.53, 0.7];
     for (const center of CENTERS) {
       const width = 0.028 + rand() * 0.014;
       const anchor = path.storyPoint(center + width / 2);

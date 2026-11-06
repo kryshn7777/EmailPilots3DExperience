@@ -46,7 +46,7 @@ import { ReflectionProbe } from './materials/ReflectionProbe';
 import {
   CONTRAIL_FROM,
   FOLD_WINDOW,
-  TOUCHDOWN_T,
+  RECEIVED_T,
   UNFOLD_WINDOW,
   gradeBlendAt,
   type GradeParams,
@@ -103,11 +103,11 @@ import { asset } from './asset';
 import { mulberry32 } from './util';
 // office detour (rig/detour.ts)
 import { Office, OFFICE_GRADE } from './actors/Office';
-import { MAX_U_RATE, T_S, detourMap, detourStart, insideAt, progressOf } from './rig/detour';
+import { MAX_U_RATE, T_S, detourStart, insideAt } from './rig/detour';
 // --- scroll feel ---
 import gsap from 'gsap';
 import { step as springStep, capDetour, type SpringState } from './scroll/spring';
-import { buildPace, floorAt, paceInputs, type Pace } from './rig/pace';
+import { buildPace, floorAt, mapScroll, paceInputs, scrollFor, type Pace } from './rig/pace';
 import { Perf } from './debug/Perf';
 import { CHAPTERS } from '../story/chapters';
 import { Readiness } from './load/Readiness';
@@ -234,14 +234,23 @@ export class Engine {
    * flight line and the camera (a few ms).
    */
   private pace!: Pace;
-  /** scroll progress (0..1) to story-t and the detour clock, through the pace warp */
+  /**
+   * scroll progress (0..1) to story-t and the detour clock, through the pace warp (in the detour, t runs with u:
+   * t = T_S + D_T u; rig/pace.ts mapScroll)
+   */
   private mapScroll(p: number): { t: number; u: number; active: boolean } {
-    const m = detourMap(p, this.detourW);
-    return { t: this.pace.paceT(m.t), u: m.active ? this.pace.paceU(m.u) : m.u, active: m.active };
+    return mapScroll(this.pace, p, this.detourW);
   }
-  /** the scroll progress that shows story-t `t` (outside the detour) */
+  /** the scroll progress that shows story-t `t` (exact everywhere, the detour included) */
   progressForT(t: number): number {
-    return progressOf(this.pace.paceLin(t), this.detourW);
+    return scrollFor(this.pace, this.detourW, t);
+  }
+  /**
+   * The scroll progress that shows story-t `t`, or the office detour at its clock `u` (the screenshot tools and the
+   * checks address the office's frames this way): `progressFor({ u: 0.45 })` is the envelope going into the laptop.
+   */
+  progressFor(at: { t?: number; u?: number }): number {
+    return scrollFor(this.pace, this.detourW, at.t ?? T_S, at.u);
   }
   /** the dart's speed for the eye (world speed over the camera's height), smoothed; and 0..1 of it */
   private vp = 0;
@@ -666,6 +675,8 @@ export class Engine {
     }
     const end = stage.getBoundingClientRect().bottom + window.scrollY - window.innerHeight;
     this.detourW = end > 1 ? MathUtils.clamp(spacer.offsetHeight / end, 0, 0.5) : 0;
+    // the office clock's pace matches the line's speed either side of the detour, which depends on its share
+    this.pace?.setDetourShare(this.detourW);
     // scroll feel: where each chapter starts on the scroll, for the rail's ticks (they move with the pace)
     if (this.pace) window.dispatchEvent(new CustomEvent('flight:rail', { detail: CHAPTERS.map((c) => this.progressForT(c.t0)) }));
   }
@@ -798,21 +809,22 @@ export class Engine {
   private warmOffice(): void {
     const { office, renderer, scene } = this;
     office.refineTarget();
-    const bake = office.backdropCameraIfStale();
+    const bakes = office.backdropCamerasIfStale();
     try {
-      if (bake) {
+      if (bakes.length) {
         this.applyGrade(T_S);
         this.applyVisibility(T_S, false);
-        this.city.update(T_S, (performance.now() - this.startTime) / 1000, this.rig.planeWorldPos);
         const hidden = this.probeHidden.map((o) => [o, o.visible] as const);
         for (const [o] of hidden) o.visible = false;
-        this.sky.followCamera(bake.position);
-        office.bakeBackdrop(renderer, scene, bake);
-        // and the tower close up, with the city's detail drawn toward the entry, as the dart flies in
-        if (office.entry) {
-          this.city.update(T_S, (performance.now() - this.startTime) / 1000, office.entry);
-          office.warmApproach(renderer, scene, this.composer.inputBuffer);
+        // the views out of both window walls, each with the city's detail drawn toward that face
+        for (const bake of bakes) {
+          this.city.update(T_S, (performance.now() - this.startTime) / 1000, bake.position);
+          this.sky.followCamera(bake.position);
+          office.bakeBackdrop(renderer, scene, bake);
         }
+        // and the tower close up, as the dart flies in and bursts out
+        this.city.update(T_S, (performance.now() - this.startTime) / 1000, office.entry);
+        office.warmApproach(renderer, scene, this.composer.inputBuffer);
         for (const [o, v] of hidden) o.visible = v;
       }
       this.applyVisibility(T_S, true);
@@ -889,7 +901,8 @@ export class Engine {
     // 0.635 and 0.65 there was nothing under the flight at all. The city's own
     // ground sheet is what fills it — 30+ units out and deep in fog.
     // switched on inside the weather (the fog has closed in around the lens by then), not out in the open
-    this.city.group.visible = t > 0.622 && t < 0.83;
+    // (to 0.86: the copilot climb now crests over the city's east end, and its last window wave lands at 0.853)
+    this.city.group.visible = t > 0.622 && t < 0.86;
     this.copilot.group.visible = t > 0.75 && t < 0.9;
     // up through the weather as the flight comes down out of it (the fog and the deck cover the arrival)
     this.landing.group.visible = t > 0.83;
@@ -1180,7 +1193,7 @@ export class Engine {
     const mapped = this.mapScroll(this.renderP); // scroll feel: through the pace warp
     this.renderT = this.idlePreset ? this.idlePreset.t : mapped.t;
     this.detourU = this.idlePreset ? 0 : mapped.u;
-    this.inside = mapped.active && !this.idlePreset && insideAt(this.detourU) && !!this.office.scene?.exit;
+    this.inside = mapped.active && !this.idlePreset && insideAt(this.detourU);
 
     // speed blur: fast scrubbing streaks the frame along the flight line,
     // easing off as the world catches up (never under reduced motion)
@@ -1201,7 +1214,7 @@ export class Engine {
     const unfold = MathUtils.smoothstep(t, UNFOLD_WINDOW.start, UNFOLD_WINDOW.end);
     this.plane.setFold(foldIn * (1 - unfold));
     // (the fold's puff of flecks is BatchSend's: pure in t, so it scrubs)
-    if (this.prevT < TOUCHDOWN_T && t >= TOUCHDOWN_T) {
+    if (this.prevT < RECEIVED_T && t >= RECEIVED_T) {
       this.confetti.trigger(this.rig.planeWorldPos, time);
     }
     this.prevT = t;
@@ -1418,11 +1431,14 @@ export class Engine {
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.office.update(this.detourU, this.inside, this.camera, !this.idlePreset && !this.warming);
+    // TODO(WP-B, office detour): once BatchFleet.state(t, base, aspect, u) takes the office clock, pass
+    // this.detourU as its 4th argument in the call below (story-t also runs through the detour now:
+    // t = T_S + D_T u, so a row keyed on t already lands; u is the office's own beat).
     // --- BatchFleet: the card counts the whole batch (was this.batch.state(t)) ---
     this.batchHud.update(this.fleet.state(t, this.batch.state(t), this.camera.aspect), this.camera, !this.idlePreset && !this.warming);
     // --- end BatchFleet ---
     this.city.update(t, time, this.rig.planeWorldPos, this.camera.position);
-    const onLine = this.rig.detour.weight > 0; // office detour: the copilot holds the main line
+    const onLine = this.rig.detour.weight > 0; // office detour: in the office the copilot holds the main line (unseen)
     this.copilot.update(
       onLine ? this.rig.detour.mainPlanePos : this.rig.planeWorldPos,
       onLine ? this.rig.detour.mainPlaneQuat : this.plane.group.quaternion,

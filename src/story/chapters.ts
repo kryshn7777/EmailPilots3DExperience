@@ -186,8 +186,13 @@ export const CHAPTERS: Chapter[] = [
       filmic: 1, exposure: 1.05, sat: 0.94, balance: [0.95, 1.0, 1.1] },
   },
   {
+    // out of the tower and up over the city: the camera rides close (it used to trail ten units back, which would
+    // put it inside the tower the dart has just crossed: CameraRig's 'burst' beat holds it beside the tower until
+    // the chase is clear of it), a little high and to the canyon side, with the copilot docking on the far wing;
+    // close enough behind that a phone's narrow frame keeps the dart in it. The line only climbs, crests and
+    // descends here, so the lens hardly banks.
     id: 'copilot', t0: 0.78, t1: 0.88,
-    rig: { fov: 40, camLag: 0.024, lookAhead: 0.014, turbAmp: 0.05, offsetUp: 1.4, offsetSide: 1.3, offsetBack: 1.6, bank: 0.45 },
+    rig: { fov: 46, camLag: 0.011, lookAhead: 0.007, turbAmp: 0.03, offsetUp: 1.0, offsetSide: 1.0, offsetBack: 1.0, bank: 0.2 },
     grade: { zenith: '#05070f', horizon: '#0a0f1c', sunColor: '#9be8ff', sunIntensity: 0.25, sunDir: [-0.5, 0.4, -0.2], fogColor: '#05070f', fogNear: 30, fogFar: 260, envIntensity: 0.15, cloud: 0.1, wet: 0.3, bounce: 0.8 },
   },
   {
@@ -210,11 +215,17 @@ export const FOLD_WINDOW = { start: 0.037, end: 0.055 };
 /** Contrail becomes visible once airborne. */
 export const CONTRAIL_FROM = 0.17;
 
-/** Touchdown moment inside CH10 — confetti fires crossing it. */
+/**
+ * The hero's email arrives in the recipient's laptop (the screen flips to EMAIL RECEIVED): confetti fires crossing
+ * it (the first real send gets confetti in the app too). The ending's beats are in docs/ending.md.
+ */
+export const RECEIVED_T = 0.99;
+
+/** @deprecated the old ending's touchdown on the runway (there is no touchdown now); kept for imports, use RECEIVED_T */
 export const TOUCHDOWN_T = 0.952;
 
-/** The dart unfolds back into the letter after rollout. */
-export const UNFOLD_WINDOW = { start: 0.958, end: 0.985 };
+/** The dart unfolds back into the letter as it comes through the recipient's window, and slides toward the screen. */
+export const UNFOLD_WINDOW = { start: 0.976, end: 0.986 };
 
 const BLEND_BAND = 0.025;
 

@@ -1,0 +1,97 @@
+# The flight line: the city canyon, the IT-office tower, the copilot climb (WP-C)
+
+From the city canyon (story-t about 0.69) to the hand-off to the ending (H, t 0.88), the dart flies ONE line:
+the canyon at one height and one side, one climb out of the street, one straight through the IT-office tower (in
+by its west face, out by its east face), one crest and one straight descent. It never turns back, never circles a
+building and never goes round the city. The office detour is part of that line now, not a loop off it.
+
+What it replaced: a pull-up that jinked 40 degrees left and right around the tower, and an office detour that
+froze story-t, flew the dart into the tower, circled it inside the room, flew it back out of the SAME facade (a
+U-turn), climbed it to y 40 over the city, swung it north, dived and joined the line where it had left it (a
+360-degree loop).
+
+## Where it is authored
+
+| piece | file | what |
+| :-- | :-- | :-- |
+| the line | `src/webgl/rig/pathPoints.mjs` (`LINE`, `cityLine()`) | built from numbers that mean something: the canyon's z (0.7), where the climb leaves the street (x 197.2), its two bends (radius 6 up, 8 down), the tower straight's pitch (24 deg) and how far before the west face it starts (5), its z on the west face (-2.35), the crest's radius (25) and the straight descent into H. Height is arcs and straights in x; the sideways move toward the tower is one smooth heading ramp in x (`driftX`..`driftFull`..`driftEase`); x only grows. It is sampled into control points densely enough that the Catmull-Rom through them is that line. |
+| the tower | `pathPoints.mjs` `DETOUR_TOWER` | the city lot at (217.11, -2.72), 2.9 deep, 1.94 wide, 22.9 tall; fixed offline (it used to be picked at runtime) |
+| the hand-off | `pathPoints.mjs` `HANDOFF` | H = (250, 19, -3.5) at t 0.88, flying (0.883, -0.469, 0). The ending's points (`endingPoints.mjs`, docs/ending.md) start at H; while that file is still the day-0 stub (the old landing line, which starts behind H), `pathPoints.mjs` leads from H onto the stub's runway so the branch still flies to the end |
+| the timing | `pathPoints.mjs` `PATH_KNOTS`, `rig/FlightPath.ts` | story-t at control points. Between plain knots the speed is constant (as every chapter always was); across a knot with a mode it eases (cubic Hermite in arc length). The chapter starts are knots, except the copilot's: from the end of the canyon run (x 194, t 0.72238, the old line's pace kept) the line is timed by the tower, so the dart is ON the west face at T_S + cutIn D_T and on the east face at T_S + cutOut D_T exactly, and at H at 0.88 |
+| the detour's clock | `rig/detour.ts` | story-t runs T_S -> T_E = T_S + D_T across the detour's spacer (T_S 0.79, D_T 0.012), u = (t - T_S) / D_T |
+| the office | `rig/officeShot.ts`, `actors/Office.ts`, `OfficeProps.ts`, `OfficeWalls.ts` | between the cuts: one straight, level, constant-speed crossing over the live laptop; a side-tracking dolly |
+| the camera | `rig/CameraRig.ts` (`BEATS`), `story/chapters.ts` | the push to the glass, the burst watched from beside the tower, the copilot chase; the ending's own camera (`endingShot.ts`) laid on last |
+| the pace | `rig/pace.ts` | the office clock's pace matches the line's speed per pixel either side of the detour |
+
+## The beats, in order
+
+| story-t / u | what you see | camera |
+| :-- | :-- | :-- |
+| 0.69 - 0.73 | the canyon run at lamp height, z 0.7; from x 194 (t 0.722) the line starts drifting toward the tower side | the city chase, low, `canyon` dutch |
+| 0.733 - 0.78 | one climb out of the street (up to 61 deg), the heading easing onto the tower's line (about -12 deg at most, then -3), levelling to 24 deg about 5 units before the west face, over the low block in front of the tower (roof 13.8, the line 1.5 above it) | the chase, closing in (`glass`: lag x0.82, lens x0.88, light bars) |
+| 0.78 - 0.791 (u 0 - 0.08) | straight at the lit west face; the dart hits the glass at speed | the chase; white flare, cut |
+| u 0.08 - 0.66 | the office: every monitor flickers red on the same `Dear all, BCC: +231` (u 0.10 - 0.135) and dies; the dart crosses the room in one straight level line at one speed (x -0.7, y 1.55 m, z 0 -> 10 m), over the one live laptop; the envelope drops out of its belly at u 0.33 and goes into the screen by 0.45; the screen flips to received at 0.47; the card `DELIVERED · Lena` 0.48 - 0.64 | a dolly beside the dart (1.05 m to its right, 1.85 m up, 1.55 m behind), looking ahead and, over the laptop, down at the screen |
+| u 0.66 | the dart reaches the far window: flare, cut | |
+| u 0.66 - 1 (t 0.798 - 0.802) | the dart and the glass shards burst out of the EAST face, slow at first, picking up to the line's speed by u 0.99 | `burst`: off the tower's north side over the canyon (x 211.6, y 19.8, z 2.35), dollying after the dart (follow 0.65); the dart comes out past the tower's far corner |
+| 0.802 - 0.84 | the same climb carries on (24 deg), the copilot docks on the far wing (from 0.806), the camera settles into the chase as the chase position clears the tower (by 0.84) | the copilot chase: close (lag 0.011), high and out to the canyon side (offsetSide 2.3) |
+| 0.82 - 0.86 | one crest, radius 25, top (234.4, 24.0) | |
+| 0.86 - 0.88 | one straight descent at -28 deg into H | |
+
+## The office detour's mapping
+
+Story-t no longer stops. Across the spacer (`[data-detour]`, W of the scroll):
+
+    p <  Ps          t = p (1 - D_T) / (1 - W)
+    Ps <= p <= Pe    t = T_S + D_T u,  u = (p - Ps) / W
+    p >  Pe          t = T_E + (p - Pe) (1 - D_T) / (1 - W)
+
+with Ps = T_S (1 - W) / (1 - D_T), Pe = Ps + W. `progressOf` is its exact inverse. `scripts/check-detour.mjs`.
+On top, the pace (`rig/pace.ts`): outside the detour the warp of story-t, normalised on [0, T_S] and [T_E, 1];
+inside it the office clock's own pace, `paceU`. Its density (pixels per unit u) is the main warp's at T_S
+before the cut (so the dart keeps the line's speed per pixel right up to the glass: the run-in is a few pixels of
+scroll and the cut is a hard flash), one even density through the office (about 1.33: the room is crossed at one
+speed per pixel, and u never runs faster than the scroll there, so `MAX_U_RATE` keeps both flares on screen: 16
+and 25 ms at the cap), and out of the far face an ease from the office's speed up to the line's at an even
+acceleration per pixel (the speed's square on a smoothstep in u), so the burst is slow and then picks up.
+`__engine.progressFor({ t })` and `__engine.progressFor({ u })` give the scroll for any frame (the screenshot
+tools address office frames by u).
+
+## The checks
+
+`node --experimental-transform-types scripts/check-line.mjs` measures every row of the scene direction's table
+(§4.2) on the line, the office shot, the camera rig and the pace, without rendering, and prints each with the
+direction's limit, the limit this line is held to, and the measurement. `check-detour`, `check-pace`,
+`check-spring` and `check-citygen` run alongside.
+
+### What the direction asked and what is possible
+
+Five of the direction's numbers cannot all hold with this tower and this H; the line takes the closest it can and
+the check says so:
+
+- **The climb (direction: <= 50 deg).** The low block in front of the tower's west face has its roof at 13.8, so
+  the line must be at 15.3 or more from x 210.7. The street is at y 1.15 and the canyon run (B's deliveries pick
+  their spots from it) lasts to about x 197. That is 14 up in 13.5 along, with a bend out of the street and a bend
+  onto the tower's pitch: it peaks at 61 deg (bends of radius 6 and 8). Starting the climb sooner would move the
+  canyon run; a lower entry would hit the block.
+- **The straight (+-6 units of the tower).** It starts 5 before the west face (the climb needs the rest) and runs
+  5.6 past the east face, where the crest (radius 25, worked back from H) begins; the Catmull-Rom rounds the last
+  unit at each end, so it is held to < 1 deg from 4.4 before to 4.1 after.
+- **The heading in the pull-up (one sign).** The canyon is at z 0.7, the tower's face spans z -3.69..-1.75 and H
+  is at z -3.5: the move toward the tower has to end on the tower's line, so the heading goes out (to -12 deg) and
+  back (to -3) once: one change of the turn's direction in all, total 24 deg (<= 25 holds).
+- **The canyon run within 0.5 of today's to 0.745.** It is to 0.73; the climb leaves the street at t 0.733.
+- **The crest at y 25-27 near x 240.** With radius 25 and H at (250, 19) flying -28 deg, the crest tops out at
+  (234.4, 24.0); a higher crest would need a steeper climb into the tower.
+
+### Numbers (before -> after)
+
+See the WP-C report for the full table; the headline rows:
+
+| row | before | after |
+| :-- | --: | --: |
+| x reversal (city -> H) | the detour reversed x 215 -> 195 | none |
+| office: the dart's heading in the room | a full circle | constant (0.0 deg) |
+| largest yaw rate outside the pull-up | 7.1 deg/unit | 0.4 |
+| total yaw variation | 40 + 86 deg | 24 deg, one change of direction |
+| crest pushover | 8.6 deg/unit | <= 4 (radius 25) |
+| copilot camera acceleration p95 (check-pace) | 28.8e-4 /px^2 | about 6 - 8e-4 |
