@@ -66,12 +66,13 @@ export class BatchHud {
     this.el.innerHTML = `
       <div class="fleet-card__bar">
         <span class="fleet-card__brand">${CARD.brand}</span>
-        <span class="fleet-card__head">${CAMPAIGN.name} · <em>${CAMPAIGN.label}</em></span>
+        <span class="fleet-card__head">${CAMPAIGN.name}</span>
         <span class="fleet-card__badge"></span>
       </div>
       <div class="fleet-card__main">
         <span class="fleet-card__count"><span class="fleet-card__sample">Sample</span><b>0</b><small>/${CAMPAIGN.total}</small></span>
         <span class="fleet-card__word">${CARD.countWord}</span>
+        <span class="fleet-card__tag">${CAMPAIGN.label}</span>
         <span class="fleet-card__foot fleet-card__short"></span>
       </div>
       <div class="fleet-card__meter" aria-hidden="true"><i></i></div>
@@ -174,12 +175,13 @@ export class BatchHud {
 
     // where each shown chip goes: projected, held inside the frame's gutter, then stacked clear of each other
     let n = 0;
-    this.chips.forEach((chip, i) => {
+    for (let i = 0; i < this.chips.length; i++) {
+      const chip = this.chips[i]!;
       const ch = state.chips[i];
       const on = show && !!ch && ch.shown;
       const flag = on ? 'true' : 'false';
       if (chip.dataset.visible !== flag) chip.dataset.visible = flag;
-      if (!on || !ch) return;
+      if (!on || !ch) continue;
       if (chip.dataset.mode !== ch.mode) chip.dataset.mode = ch.mode;
       if (chip.textContent !== ch.label) chip.textContent = ch.label;
       const p = this.toScreen(ch.anchor, camera);
@@ -191,13 +193,13 @@ export class BatchHud {
       const over = p ? Math.max(lo - p.x, p.x - hi, 0) : Infinity;
       const onScreen = !!p && over < innerWidth * 0.18 && p.y > 40 && p.y < innerHeight - 30;
       chip.style.opacity = onScreen ? '' : '0';
-      if (!p || !onScreen) return;
+      if (!p || !onScreen) continue;
       this.lay[n * 4] = Math.min(Math.max(p.x, lo), Math.max(hi, lo));
       this.lay[n * 4 + 1] = p.y;
       this.lay[n * 4 + 2] = half;
       this.lay[n * 4 + 3] = i;
       n++;
-    });
+    }
     // nudge any chip that sits on another one up by a chip's height (a few passes settle it)
     for (let pass = 0; pass < 3; pass++) {
       for (let a = 0; a < n; a++) {
@@ -217,7 +219,8 @@ export class BatchHud {
       chip.style.setProperty('--y', `${Math.round(Math.max(this.lay[k * 4 + 1]!, 70))}px`);
     }
 
-    this.stamps.forEach((el, i) => {
+    for (let i = 0; i < this.stamps.length; i++) {
+      const el = this.stamps[i]!;
       const st = state.stamps[i];
       const p = st && show && st.shown ? this.toScreen(st.anchor, camera) : null;
       const on = p ? 'true' : 'false';
@@ -232,7 +235,7 @@ export class BatchHud {
         el.style.setProperty('--x', `${Math.round(Math.min(Math.max(p.x, 16 + half), innerWidth - 16 - half))}px`);
         el.style.setProperty('--y', `${Math.round(Math.min(Math.max(p.y, 90), innerHeight - 90))}px`);
       }
-    });
+    }
   }
 
   dispose(): void {

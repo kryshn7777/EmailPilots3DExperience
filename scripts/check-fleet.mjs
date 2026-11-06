@@ -175,7 +175,8 @@ for (const DT of [0.01, 0.012, 0.014]) {
 
 // ---- honesty --------------------------------------------------------------------------------------------
 check(REPORT.rows.some(([a, b]) => `${a} ${b}`.includes('SAMPLE CAMPAIGN')), 'the report says SAMPLE CAMPAIGN');
-check(CARD.head.includes('SAMPLE CAMPAIGN'), 'the card head says SAMPLE CAMPAIGN');
+check(CAMPAIGN.label === 'SAMPLE CAMPAIGN', 'the campaign is labelled SAMPLE CAMPAIGN');
+check(/CAMPAIGN\.label/.test(readFileSync(new URL('../src/webgl/interact/BatchHud.ts', import.meta.url), 'utf8')), 'the card shows CAMPAIGN.label');
 const sources = ['src/story/fleet.ts', 'src/webgl/actors/BatchFleet.ts', 'src/webgl/interact/BatchHud.ts', 'src/webgl/actors/BatchSend.ts', 'src/styles/fleet.css']
   .map((f) => [f, readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')]);
 const BANNED = ['cold email', 'cold outreach', 'mass email', 'bulk blast', 'email blast', 'anti-ban', 'bypass spam', 'spintax', 'primary inbox', '/week', '/mo', 'first class', 'trial'];

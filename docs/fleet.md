@@ -45,9 +45,9 @@ at `T_S` while u runs, or t running `T_S → T_E` with `u = (t − T_S)/D_T`). T
 | 1–2 | ~0.196, ~0.206 | the scouts land on lawns in the street | `BatchSend` |
 | 3–5 | 0.285, 0.292, 0.299 | the three wing mates dive off one by one; a column rises from each house | `WingPlanes` + `BatchFleet` columns |
 | 6–12 | 0.312 – 0.344 | the V (risen one plane at a time, 0.262–0.302, first in first out) peels off into the town, a column per house; Hugo (#7) and Jude (#9) land on lawns | `BatchFleet` |
-| — | 0.309–0.347 | Hugo's two ghost follow-ups ride his empty place; a gold "Re:" dart rises from his lawn (0.3215) and as it passes (0.329) they unfold and flutter down | `BatchFleet` (3 instances) |
-| — | 0.39–0.44 | the BCC bomber lumbers out of the storm, is struck at the red gate (0.415): `550 — SPAM FLAGGED`, ~100 scraps fall into the sea | `BatchFleet` (bomber, bolt, burst) + HUD stamp |
-| 13–16 | 0.462 – 0.504 | four columns on the sea horizon at an even beat; the card meter becomes `Today n/50 · daily cap` | `BatchFleet` columns |
+| — | 0.309–0.347 | Hugo's two ghost follow-ups (screen-door translucent, pale blue, chip `2 follow-ups · day 3 · day 7`) ride just inboard of his empty place; a gold "Re:" dart rises from his lawn (0.3215), reaches them from ahead (0.329) and climbs away; they unfold into sheets and flutter down (`✕ 2 follow-ups cancelled`) | `BatchFleet` (3 instances) |
+| — | 0.39–0.44 | the BCC bomber (the dart x5 in grey paper, `To: undisclosed-recipients;` and the BCC list stencilled on its wings, banked toward the lens, chip `BCC: amy, ben, dev, eli … +231 more`) lumbers out of the storm ahead-right and below the line (the biplane crosses high on the left); a bolt strikes it at the red gate (0.415): `550 — SPAM FLAGGED`, ~100 scraps fall into the sea | `BatchFleet` (bomber, bolt, burst) + HUD stamp |
+| 13–16 | 0.462 – 0.504 | four columns on the sea horizon at an even beat, either side of the lighthouse (on HIGH the sea mirrors them); the card reads `Today n/50 · daily cap` the whole way across the water (the columns' chips carry the names) | `BatchFleet` columns |
 | — | 0.518–0.574 | the beam locks onto the hero; three auth rings stamp out of the lamp: SPF ✓, DKIM ✓, DMARC ✓ | `Beacon.lockOn` + `BatchFleet` rings |
 | 17–18 | 0.548, 0.561 | two darts glide onto the freighter | `BatchFleet` |
 | ✕ | 0.588–0.62 | a red dart slides in, is stamped DO-NOT-SEND, unfolds and drops away | `BatchFleet` + HUD stamp |
@@ -70,8 +70,14 @@ storm, beacon, skip, copilot, report, tower, end) > a fresh toast (held 0.005, a
 > the ambient line. The count pops on each step. `body.is-landing` hides the HUD under the site.
 
 Chips (`.fleet-chip`) are pinned over the 3D: `→ name` while flying, the timetable slot `Gail · 09:29` in
-the V (the next three to leave), `✓ name` for a moment after landing; ghost/cancelled, reply, bad and auth
-modes for the beats. Stamps (`.fleet-stamp`) slam over the bomber (550) and the 43rd (DO-NOT-SEND).
+the V (the next three to leave; two on a phone), `✓ name` for a moment after landing; ghost/cancelled, reply,
+bad and auth modes for the beats. A landing just past the frame's edge keeps its chip, held in the gutter;
+chips that would overlap are stacked. Stamps (`.fleet-stamp`) slam over the bomber (550) and just above the
+43rd (DO-NOT-SEND).
+
+A far column comes up just before its landing's toast and flashes as it lands. Where City cannot show a
+wave window (the Engine hides the city from 0.83), the row's column is placed through a point the camera sees
+and rises from the city's ground below it, its chip at that point.
 
 ## Cost
 
@@ -81,8 +87,15 @@ ghosts, the reply, the skip; unfolding, screen-door ghosting and the gold/red gl
 attribute in one patched material), one for the 42 light columns, one for the rings; the bomber, its bolt
 and its burst only between 0.39 and 0.44; on HIGH one LineSegments of contrails, and the columns join the
 sea's planar reflection. City's five envelopes and five window darts are two InstancedMeshes now (they were
-ten meshes). No real-time lights, no shadow casters, no per-frame allocation in the paths that run every
-frame (labels are built once, the HUD writes the DOM only when what it shows changes).
+ten meshes). The additive materials (columns, rings, bolt) draw in one pass (`forceSinglePass`), not
+three's two for a transparent DoubleSide. No real-time lights, no shadow casters, no per-frame allocation
+in the paths that run every frame (labels are built once, the HUD writes the DOM only when what it shows
+changes).
+
+Measured on LOW (390 x 800, `?probe`, `renderer.info` over every pass, the fleet's objects removed vs.
+present, against the build before this work): t 0.31 the fleet draws 2 calls (was 1), t 0.415 2 (was 0:
+the bomber and its bolt), t 0.72 the frame totals 189 calls before and after (City's two instanced draws
+replace its envelope and PaperPlane meshes); at most +3.1k triangles at any of the listed t.
 
 ## Checks
 

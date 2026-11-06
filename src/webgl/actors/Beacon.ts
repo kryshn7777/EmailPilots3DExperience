@@ -904,10 +904,13 @@ varying vec3 vBeamWorld;
     // the lock-on (BatchFleet): the sweep swings round the short way onto the dart and tips down to it
     let beamTilt = BEAM_TILT;
     if (this.lock > 0) {
-      const dx = this.lockAim.x - this.towerTop.x;
-      const dz = this.lockAim.z - this.towerTop.z;
+      // on the dart itself while it is out in the rain; within a few units of the lamp, held on the way it came in
+      const near = MathUtils.smoothstep(planePos.distanceTo(this.towerTop), 3, 6);
+      this.tmpV.copy(this.lockAim).lerp(planePos, near);
+      const dx = this.tmpV.x - this.towerTop.x;
+      const dz = this.tmpV.z - this.towerTop.z;
       const aimYaw = Math.atan2(-dz, dx);
-      const aimTilt = MathUtils.clamp(Math.atan2(this.lockAim.y - this.towerTop.y, Math.hypot(dx, dz)), -0.9, 0.5);
+      const aimTilt = MathUtils.clamp(Math.atan2(this.tmpV.y - this.towerTop.y, Math.hypot(dx, dz)), -0.9, 0.5);
       const wrapped = this.beamYaw - Math.floor(this.beamYaw / (Math.PI * 2)) * Math.PI * 2;
       let d = aimYaw - wrapped;
       d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
@@ -956,7 +959,7 @@ varying vec3 vBeamWorld;
     // first thing a phone saw of the lighthouse). The sea's glint, the lit rain and the flare all follow it.
     const lampSeen = MathUtils.smoothstep(towerClear, 0.0, 0.35);
     this.beamMaterial.uniforms.uIntensity!.value =
-      0.8 * lampOn * lampSeen * (1 - MathUtils.smoothstep(t, 0.575, 0.61));
+      0.8 * lampOn * lampSeen * (1 - MathUtils.smoothstep(t, 0.575, 0.61)) * (1 + 0.7 * this.lock);
     this.oceanMaterial.uniforms.uTime!.value = time;
     (this.oceanMaterial.uniforms.uCamPos!.value as Vector3).copy(camera.position);
     // lightning lights the sea, the lamp's sweep rakes across it

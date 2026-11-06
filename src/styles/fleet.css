@@ -26,7 +26,7 @@
   z-index: 60;
   top: max(14px, calc(env(safe-area-inset-top, 0px) + 8px));
   left: clamp(16px, 3vw, 44px);
-  width: min(360px, calc(100vw - 32px));
+  width: min(392px, calc(100vw - 32px));
   padding: 10px 14px 11px;
   opacity: 0;
   translate: 0 -12px;
@@ -133,6 +133,21 @@
 
 .fleet-card__sample { display: none; }
 
+/* SAMPLE CAMPAIGN, always in view: the campaign on the card is the site's own mock-up */
+.fleet-card__tag {
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 6px;
+  border: 1px solid #ffd9a8;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #ffd9a8;
+}
+
 .fleet-card__meter {
   position: relative;
   height: 4px;
@@ -211,6 +226,7 @@
 
   .fleet-card__bar,
   .fleet-card__word,
+  .fleet-card__tag,
   .fleet-card__long { display: none; }
 
   .fleet-card__short { display: inline; }

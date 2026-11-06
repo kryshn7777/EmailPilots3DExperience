@@ -369,8 +369,10 @@ export class BatchFleet {
     gx.fillStyle = grad;
     gx.fillRect(0, 0, 4, 64);
     this.beamFade = new CanvasTexture(gc);
+    // additive, so the order of its faces does not matter: one pass, not three's two for a transparent DoubleSide
     this.beamMaterial = new MeshBasicMaterial({
       color: '#ffffff', alphaMap: this.beamFade, transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, fog: false,
+      forceSinglePass: true,
     });
     this.beams = new InstancedMesh(this.beamGeometry, this.beamMaterial, FLEET.length);
     this.beams.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -389,6 +391,7 @@ export class BatchFleet {
     // the rings: three auth rings out of the lamp (SPF, DKIM, DMARC) and the do-not-send pulse
     this.ringMaterial = new MeshBasicMaterial({
       color: '#ffffff', transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, fog: false, toneMapped: false,
+      forceSinglePass: true,
     });
     this.rings = new InstancedMesh(this.ringGeometry, this.ringMaterial, 4);
     this.rings.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -457,6 +460,7 @@ export class BatchFleet {
     boltGeometry.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
     this.boltMaterial = new MeshBasicMaterial({
       color: '#efe8ff', transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, fog: false, toneMapped: false,
+      forceSinglePass: true,
     });
     this.bolt = new Mesh(boltGeometry, this.boltMaterial);
     this.bolt.visible = false;
@@ -1151,8 +1155,8 @@ export class BatchFleet {
       this.path.tangentAt(t, this.tan);
       this.m4.lookAt(this.p1.copy(this.p0).add(this.tan), this.p0, UP);
       this.q.setFromRotationMatrix(this.m4);
-      // overloaded: it wallows (a slow heavy roll) and sags nose-down a touch
-      this.qRoll.setFromAxisAngle(this.tan, 0.16 * Math.sin(t * 260) + 0.05);
+      // overloaded: it wallows (a slow heavy roll), banked toward the lens so the list on its wings shows
+      this.qRoll.setFromAxisAngle(this.tan, 0.12 * Math.sin(t * 260) - 0.55);
       this.q.premultiply(this.qRoll);
       const grow = MathUtils.smoothstep(t, BOMBER.from, BOMBER.from + 0.008);
       this.bomber.position.copy(this.p0);
@@ -1160,7 +1164,7 @@ export class BatchFleet {
       this.bomber.scale.setScalar(5 * grow);
       // the strike lights it up white-violet
       const hit = MathUtils.smoothstep(t, BOMBER.strike - 0.002, BOMBER.strike);
-      this.bomberMaterial.emissiveIntensity = 0.12 + 2.2 * hit;
+      this.bomberMaterial.emissiveIntensity = 0.42 + 2.2 * hit;
     }
     // the bolt, just before it bursts
     const bx = (t - (BOMBER.strike - 0.0022)) / 0.004;
@@ -1280,7 +1284,7 @@ export class BatchFleet {
     // the bomber's list, readable
     if (t > BOMBER.from + 0.006 && t < BOMBER.strike) {
       this.bomberPos(t, aspect, this.p0);
-      this.p0.y += 2.2;
+      this.p0.y += 0.4;
       this.chip(this.p0, 'bad', BOMBER_CHIP);
     }
     // the far columns, the freighter, the terrace and the phones: `✓ name · clock` as each lands
@@ -1304,8 +1308,9 @@ export class BatchFleet {
       if (t < t0 + 0.001 || t > t0 + 0.014) continue;
       const x = Math.min((t - t0) / 0.012, 1);
       const r = 0.9 + 6.5 * (1 - Math.pow(1 - x, 2.2));
-      this.camRight.setFromMatrixColumn(this.modelCamera(t, aspect).matrixWorld, 0);
-      this.p0.copy(this.beacon.lantern).addScaledVector(UP, r * 0.72).addScaledVector(this.camRight, r * 0.7);
+      // each label rides its ring's lowest point, under the lamp (the lighthouse card stands beside it)
+      this.camRight.setFromMatrixColumn(this.modelCamera(t, aspect).matrixWorld, 1);
+      this.p0.copy(this.beacon.lantern).addScaledVector(this.camRight, -r);
       this.chip(this.p0, 'auth', AUTH_CHIPS[k]!);
     }
     // the refused 43rd

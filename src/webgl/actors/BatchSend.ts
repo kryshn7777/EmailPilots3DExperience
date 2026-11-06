@@ -554,7 +554,8 @@ export class BatchSend {
     if (!this.scoutChips.length) {
       this.scouts.forEach((s) => this.scoutChips.push({ anchor: s.chip, shown: false, mode: 'flying', label: '' }));
     }
-    this.scouts.forEach((s, i) => {
+    for (let i = 0; i < this.scouts.length; i++) {
+      const s = this.scouts[i]!;
       const landed = !!s.leg && t >= s.landT;
       const c = this.scoutChips[i]!;
       c.mode = landed ? 'landed' : 'flying';
@@ -562,7 +563,7 @@ export class BatchSend {
       // tagged from the window on (at the desk they are the whole frame), the landed tag for a short while
       c.shown = !!s.leg && t >= TAG_FROM && t < s.landT + 0.014;
       this.scoutLandings[i] = s.leg ? s.landT : NaN;
-    });
+    }
     return { chips: this.scoutChips, landings: this.scoutLandings };
   }
 

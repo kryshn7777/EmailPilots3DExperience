@@ -422,9 +422,9 @@ let capStr = '';
 
 /**
  * What the fleet card shows at story-t `t` (detour clock `u`), written into `out`. Pure in its
- * arguments: a special moment (the reply, the storm, the beacon, the skip, the copilot, the report,
- * the tower, the end) wins, then a fresh delivery's green toast, then the ambient line (the
- * desk, the pre-flight, the orange countdown, the ocean's daily cap).
+ * arguments: a special moment (the reply, the storm, the beacon, the skip, the ocean's daily cap,
+ * the copilot, the report, the tower, the end) wins, then a fresh delivery's green toast, then the
+ * ambient line (the desk, the pre-flight, the orange countdown).
  */
 export function cardAt(t: number, u = 0, out: CardState = newCardState(), landings?: Landings): CardState {
   const inOffice = u > 0 && u < 1;
@@ -462,20 +462,15 @@ export function cardAt(t: number, u = 0, out: CardState = newCardState(), landin
   if (t >= 0.8) return put(out, CARD.copilot, CARD.copilot, 'info');
   // the no-fly zone: the 43rd is refused
   if (t >= SKIPPED.t && t < SKIPPED.t + 0.016) return put(out, CARD.skip, CARD.skipShort, 'bad');
-  // the beacon: the three auth rings
-  if (t >= 0.532 && t < 0.547) return put(out, CARD.auth, CARD.auth, 'ok');
+  // the beacon: the beam locks on, the dart goes through the lamp and three auth rings stamp out of it
+  if (t >= 0.54 && t < 0.559) return put(out, CARD.auth, CARD.auth, 'ok');
   // the storm: the bomber is struck, ours flies through
   if (t >= 0.424 && t < 0.448) return put(out, CARD.bccGreen, CARD.bccGreenShort, 'ok');
   if (t >= 0.403 && t < 0.424) return put(out, CARD.bccRed, CARD.bccRed, 'bad');
   // the formation: Hugo's reply cancels his follow-ups
   if (t >= REPLY.rise && t < REPLY.rise + 0.007) return put(out, CARD.reply, CARD.reply, 'reply');
 
-  // a fresh delivery
-  const last = lastLanded(t, u, landings);
-  if (last && last.kind !== 'office' && last.kind !== 'hero' && t < landOf(last, landings) + TOAST_HOLD) {
-    return put(out, TOASTS[last.n - 1]!, TOASTS_SHORT[last.n - 1]!, 'ok');
-  }
-  // the ocean: the cadence against the daily cap
+  // the ocean: the cadence against the daily cap (the horizon's columns carry the names on their chips)
   if (t >= 0.452 && t < 0.515) {
     out.meter = n / CAMPAIGN.cap;
     out.meterKind = 'cap';
@@ -484,6 +479,11 @@ export function cardAt(t: number, u = 0, out: CardState = newCardState(), landin
       capStr = CARD.dailyCap(n);
     }
     return put(out, capStr, capStr, 'wait');
+  }
+  // a fresh delivery
+  const last = lastLanded(t, u, landings);
+  if (last && last.kind !== 'office' && last.kind !== 'hero' && t < landOf(last, landings) + TOAST_HOLD) {
+    return put(out, TOASTS[last.n - 1]!, TOASTS_SHORT[last.n - 1]!, 'ok');
   }
   if (t < 0.098) return put(out, CARD.desk, CARD.desk, 'info');
   if (t < 0.131) return put(out, CARD.preflightCheck, CARD.preflightCheck, 'info');
