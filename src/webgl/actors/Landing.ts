@@ -57,6 +57,7 @@ export class Landing {
   private trees: InstancedMesh;
   /** one jet holding short on the parallel taxiway (a scale cue) */
   private parked: Airliner;
+  private cz = 0;
   private disposables: { dispose(): void }[] = [];
   private readonly col = new Color();
 
@@ -159,13 +160,15 @@ export class Landing {
     this.group.add(pole, this.windsock);
     own(pole.geometry, poleMat, this.windsock.geometry, sockMat);
 
-    // the jet holding short on the taxiway, nose toward the runway's threshold
-    this.parked = new Airliner({ tier: quality.tier });
-    this.parked.group.position.set(cx + 6, 0.008, cz + TAXI_Z);
+    // a jet climbing out sideways across the sky beyond the tower while the dart makes its low pass (see update)
+    this.parked = new Airliner({ tier: quality.tier, running: true });
     this.parked.body.position.y = AIRLINER.wheelDrop;
-    this.parked.group.rotation.y = Math.PI;
+    this.parked.group.rotation.order = 'YXZ';
+    this.parked.group.visible = false;
+    this.parked.rollAndGear(0, 1);
     this.group.add(this.parked.group);
     own(this.parked);
+    this.cz = cz;
 
     this.trees = this.plantTrees(cz, high);
     this.group.add(this.trees);
@@ -280,7 +283,17 @@ export class Landing {
     }
     if (this.rabbit.instanceColor) this.rabbit.instanceColor.needsUpdate = true;
     this.windsock.rotation.y = Math.sin(time * 0.7) * 0.4;
-    this.parked.blink(time + 0.4);
+    // the jet crosses the frame sideways, right to left, in front of the tower and well above the dart's low
+    // pass, climbing with its gear up (t 0.884 -> 0.93; the dart reaches its x at ~0.928, long after it has gone)
+    const u = (t - 0.884) / (0.93 - 0.884);
+    const jet = this.parked;
+    jet.group.visible = u > 0 && u < 1;
+    if (jet.group.visible) {
+      const climb = 0.18;
+      jet.group.position.set(322, 7 + 5 * u, this.cz + 22 - 44 * u);
+      jet.group.rotation.set(0, Math.PI / 2, climb);
+      jet.blink(time + 0.4);
+    }
     this.tower.update(t, time, rabbit);
     this.room.update(t, time);
   }
