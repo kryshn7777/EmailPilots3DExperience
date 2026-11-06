@@ -60,7 +60,7 @@ const WINDOW_AMBER = new Color('#ffc96b');
 /** a delivered window: lit in the flight's teal and left lit, so the canyon keeps a tally in its walls */
 const WINDOW_TEAL = new Color('#6ff2d8');
 /** the Engine shows the city between these story-t (Engine.ts: city.group.visible); a delivery after it is not City's to draw */
-export const CITY_SHOWN = [0.622, 0.83] as const;
+export const CITY_SHOWN = [0.622, 0.856] as const;
 /** how long an envelope and a window dart are in the air before they land, in story-t */
 const ENVELOPE_FLIGHT = 0.022;
 const DART_FLIGHT = 0.03;

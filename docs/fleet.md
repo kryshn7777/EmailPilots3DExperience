@@ -20,7 +20,7 @@ Pure (no three, no DOM), so the HUD, the actors, the checks and the copy all rea
 | `CAMPAIGN` | `{ name: 'Q3 Outreach', from: 'you@yourdomain.com', start: '09:00', cap: 50, total: 42, label: 'SAMPLE CAMPAIGN' }` |
 | `HERO`, `OFFICE_ROW`, `DESK_NAMES` | Cara (#42), Lena (#32, the office), and the three names that leave the desk laptop (Amy, Ben, Cara) |
 | `BOMBER`, `REPLY` | the storm's BCC bomber (0.39–0.44, strike 0.415, its stencil lines and the 550 stamp) and Hugo's reply (rise 0.326, cancel 0.329) |
-| `HERO_RECEIVED_T` = 0.990 | must equal `RECEIVED_T` in `src/story/chapters.ts` (WP-C); `check-fleet` compares them once it exists |
+| `HERO_RECEIVED_T` = 0.990 | must equal `RECEIVED_T` in `src/story/chapters.ts`; `check-fleet` compares them |
 | `delivered(t, u, landings?)` | how many have landed: **pure and monotonic** in t (and in u inside the office) |
 | `clockAt`, `nextIn`, `countdown` | the campaign clock, piecewise-linear through the rows' (land, clock); the minutes to the next row |
 | `CARD`, `cardAt(t, u, out, landings?)` | every word on the card, and what it shows at (t, u), written into a reused object |
@@ -33,10 +33,9 @@ from what the camera sees; each row carries a `window` it must land inside (Amy 
 other. The visuals pass the times they chose (`landings`, index n − 1) and the tally steps exactly on the
 touchdown.
 
-**The office row (#32, Lena)** is keyed on the detour's clock: inside the detour (`0 < u < 1`) she is
-delivered from `u = 0.45`; outside it (`u = 0`) once `t > T_S`. That holds for both detour mappings (t held
-at `T_S` while u runs, or t running `T_S → T_E` with `u = (t − T_S)/D_T`). The Engine passes `detourU` as
-`fleet.state(t, base, aspect, u)`'s last argument (WP-C); without it Lena counts from just past `T_S`.
+**The office row (#32, Lena)** lands at `T_S + D_T · 0.45` (story-t runs through the detour, `t = T_S + D_T u`,
+`rig/detour.ts`); inside the detour her landing is read off `u ≥ 0.45` itself (the same moment). The Engine
+passes `detourU` as `fleet.state(t, base, aspect, u)`'s last argument; the card's office toast reads it.
 
 ## The timeline
 
@@ -54,7 +53,7 @@ at `T_S` while u runs, or t running `T_S → T_E` with `u = (t − T_S)/D_T`). T
 | 19–20 | 0.630, 0.648 | columns on the skyline's roofs ahead | `BatchFleet` columns |
 | 21–31 | 0.697 – 0.772 | envelopes and darts into canyon windows (each window lit teal, and left lit), the terrace, two phones | `City`, `CafeTerrace`, `BatchFleet` |
 | 32 | detour u 0.45 | the envelope into the live laptop | `Office` (WP-C) |
-| 33–41 | 0.806 – 0.853 | two more window darts and the skyline's window wave (a teal flare, left lit), each with a name chip; rows City cannot show (after the Engine hides the city at 0.83, or no window in frame) rise as far columns instead | `City` / `BatchFleet` |
+| 33–41 | 0.806 – 0.853 | two more window darts and the skyline's window wave (a teal flare, left lit), each with a name chip; rows City cannot show (no window in frame, or within 0.004 of the Engine switching the city off at 0.856: `City.CITY_SHOWN` mirrors that gate) rise as far columns instead | `City` / `BatchFleet` |
 | — | 0.855–0.885 | the flight report (41/42) | HUD |
 | 42 | 0.990 | the hero: EMAIL RECEIVED; Cara replies at 0.995 | `Landing` (WP-D) |
 
@@ -76,7 +75,7 @@ chips that would overlap are stacked. Stamps (`.fleet-stamp`) slam over the bomb
 43rd (DO-NOT-SEND).
 
 A far column comes up just before its landing's toast and flashes as it lands. Where City cannot show a
-wave window (the Engine hides the city from 0.83), the row's column is placed through a point the camera sees
+wave window, the row's column is placed through a point the camera sees
 and rises from the city's ground below it, its chip at that point.
 
 ## Cost
@@ -100,7 +99,8 @@ replace its envelope and PaperPlane meshes); at most +3.1k triangles at any of t
 ## Checks
 
 `node --experimental-strip-types scripts/check-fleet.mjs`: 42 rows; `delivered` monotonic at 1e-4 over
-[0, 1] (nominal, and with the runtime windows at their edges); across the office under both mappings; the
+[0, 1] (nominal, and with the runtime windows at their edges); across the office through the real scroll
+mapping (`detourMap`, three spacer shares, with and without u); the
 direction's values (0.19 → 0, 0.21 → 2, 0.35 → 12, 0.51 → 16, 0.57 → 18, 0.66 → 20, 0.78 → 31, after the
 office → 32, 0.86 → 41, 0.995 → 42); never +2 within 0.002; every row's kind is drawn by something; the
 clock runs forward; a frame-by-frame card scrub 0.18 → 1.0 never goes back or jumps; the phone foot fits

@@ -16,7 +16,7 @@
  * `nextRow`, `cardAt` writes into the object it is given). It runs under
  * `node --experimental-strip-types` (scripts/check-fleet.mjs tests it).
  */
-import { T_S } from '../webgl/rig/detour';
+import { D_T, T_S } from '../webgl/rig/detour';
 
 export type FleetKind =
   /** a scout or a V wingtip that lands on a lawn in the town */
@@ -60,13 +60,13 @@ export interface FleetRow {
 }
 
 /**
- * Where in the office detour (its clock u, 0..1) Lena's envelope goes into the live laptop. Her row's
- * `land` is T_S, the detour's story-t, for the table's order and the clock; the landing itself is
- * keyed on u (see `landed`).
+ * Where in the office detour (its clock u, 0..1) Lena's envelope goes into the live laptop. Story-t runs
+ * through the detour (t = T_S + D_T u, rig/detour.ts), so her row simply lands at T_S + D_T * OFFICE_U.
  */
 export const OFFICE_U = 0.45;
+const OFFICE_T = T_S + D_T * OFFICE_U;
 /**
- * The hero's received moment. MUST match `RECEIVED_T` in src/story/chapters.ts (WP-C adds it); the
+ * The hero's received moment. MUST match `RECEIVED_T` in src/story/chapters.ts (check-fleet compares); the
  * screen flips to EMAIL RECEIVED and the confetti fires there.
  */
 export const HERO_RECEIVED_T = 0.99;
@@ -151,7 +151,7 @@ export const FLEET: readonly FleetRow[] = [
   { n: 29, name: 'Chloe', role: 'decision-maker', kind: 'envelope', land: 0.756, clock: '11:23', where: 'a window in the canyon' },
   { n: 30, name: 'Diego', role: 'early user', kind: 'envelope', land: 0.766, clock: '11:26', where: 'a window in the canyon' },
   { n: 31, name: 'Elif', role: 'candidate', kind: 'window', land: 0.772, clock: '11:31', where: 'a window in the canyon' },
-  { n: 32, name: 'Lena', role: 'IT lead, working late', kind: 'office', land: T_S, clock: '11:37', where: 'the IT office' },
+  { n: 32, name: 'Lena', role: 'IT lead, working late', kind: 'office', land: OFFICE_T, clock: '11:37', where: 'the IT office' },
   { n: 33, name: 'Felix', role: 'prospect', kind: 'window', land: 0.806, clock: '11:41', where: 'the city below the climb' },
   { n: 34, name: 'Grace', role: 'client', kind: 'wave', land: 0.812, clock: '11:47', where: 'the skyline' },
   { n: 35, name: 'Hana', role: 'hiring manager', kind: 'wave', land: 0.818, clock: '11:50', where: 'the skyline' },
@@ -189,13 +189,11 @@ export function landOf(r: FleetRow, landings?: Landings): number {
 }
 
 /**
- * Has row `r` landed at story-t `t` (detour clock `u`)? The office row is keyed on u inside the
- * detour (u > 0): landed from OFFICE_U. Outside it (u = 0) it is landed once t is past T_S, which
- * holds for both detour mappings (t frozen at T_S while u runs, or t running T_S -> T_E with
- * u = (t - T_S) / D_T): either way t > T_S with u = 0 only happens after the office.
+ * Has row `r` landed at story-t `t` (detour clock `u`)? Every row by its time; inside the detour
+ * (0 < u < 1) the office row is read off u itself (the same moment, t = T_S + D_T u, without rounding).
  */
 export function landed(r: FleetRow, t: number, u = 0, landings?: Landings): boolean {
-  if (r.kind === 'office') return u > 0 && u < 1 ? u >= OFFICE_U : t > T_S;
+  if (r.kind === 'office' && u > 0 && u < 1) return u >= OFFICE_U;
   return t >= landOf(r, landings);
 }
 
@@ -249,8 +247,7 @@ const ROW_MIN = FLEET.map((r) => minutes(r.clock));
 
 /**
  * The campaign clock at story-t `t`, in minutes after midnight (fractional): CAMPAIGN.start until
- * takeoff, then piecewise-linear through every row's (land, clock), held at the last. Lena's knot is
- * at T_S, so the clock stands at her minute through the office whichever way the detour maps t.
+ * takeoff, then piecewise-linear through every row's (land, clock), held at the last.
  */
 export function clockAt(t: number, _u = 0, landings?: Landings): number {
   let pt = CLOCK_FROM;

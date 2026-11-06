@@ -1431,10 +1431,7 @@ export class Engine {
     this.updateGodRays();
     this.deliveryPopup.update(!this.idlePreset && t > 0.545 && t < 0.586, this.beacon.lantern, this.camera);
     this.office.update(this.detourU, this.inside, this.camera, !this.idlePreset && !this.warming);
-    // TODO(WP-B, office detour): once BatchFleet.state(t, base, aspect, u) takes the office clock, pass
-    // this.detourU as its 4th argument in the call below (story-t also runs through the detour now:
-    // t = T_S + D_T u, so a row keyed on t already lands; u is the office's own beat).
-    // --- BatchFleet: the card counts the whole batch (was this.batch.state(t)) ---
+    // --- BatchFleet: the card counts the whole campaign; the office's toast reads the detour clock ---
     this.batchHud.update(this.fleet.state(t, this.batch.state(t), this.camera.aspect, this.detourU), this.camera, !this.idlePreset && !this.warming);
     // --- end BatchFleet ---
     this.city.update(t, time, this.rig.planeWorldPos, this.camera.position);

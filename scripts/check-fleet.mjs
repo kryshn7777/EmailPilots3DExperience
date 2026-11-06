@@ -21,7 +21,7 @@ register(
 );
 
 const F = await import('../src/story/fleet.ts');
-const { T_S } = await import('../src/webgl/rig/detour.ts');
+const { T_S, T_E, tOfU, detourMap } = await import('../src/webgl/rig/detour.ts');
 const { FLEET, SKIPPED, CAMPAIGN, CARD, REPORT, HERO, HERO_RECEIVED_T, OFFICE_U, delivered, clockAt, cardAt, nextIn } = F;
 
 let failures = 0;
@@ -98,14 +98,15 @@ mixed[23] = FLEET[23].window[1];
 mixed[26] = FLEET[26].window[0];
 scan(mixed, 'windows crossed');
 
-const AFTER_OFFICE = T_S + 0.0005;
+const AFTER_OFFICE = T_E + 0.0005;
 const listed = [
   [0.19, 0, 0], [0.21, 0, 2], [0.35, 0, 12], [0.51, 0, 16], [0.57, 0, 18], [0.66, 0, 20], [0.78, 0, 31],
-  [T_S, 0.3, 31], [T_S, OFFICE_U, 32], [AFTER_OFFICE, 0, 32], [0.8, 0, 32], [0.86, 0, 41], [0.995, 0, 42], [1, 0, 42],
+  [tOfU(0.3), 0.3, 31], [tOfU(OFFICE_U), OFFICE_U, 32], [tOfU(0.6), 0, 32], [AFTER_OFFICE, 0, 32], [0.8, 0, 32], [0.86, 0, 41], [0.995, 0, 42], [1, 0, 42],
 ];
 for (const [t, u, want] of listed) check(delivered(t, u) === want, `delivered(${t.toFixed(4)}, u=${u}) = ${delivered(t, u)}, want ${want}`);
 
-// across the office: (a) t held at T_S while u runs (today's mapping); (b) t runs T_S -> T_E with u (direction §4.2)
+// across the office, through the real scroll mapping (rig/detour.ts: t runs T_S -> T_E while u runs 0 -> 1),
+// for the home page's spacer share and two others; and with u left out (a caller that does not pass it)
 const across = (label, seq) => {
   let prev = -1;
   for (const [t, u] of seq) {
@@ -116,17 +117,18 @@ const across = (label, seq) => {
   }
   return prev;
 };
-const held = [];
-for (let t = 0.76; t < T_S; t += STEP) held.push([t, 0]);
-for (let u = 0; u <= 1; u += 0.001) held.push([T_S, u >= 1 ? 0.999999 : u]);
-for (let t = T_S + STEP; t <= 0.83; t += STEP) held.push([t, 0]);
-across('office, t held', held);
-for (const DT of [0.01, 0.012, 0.014]) {
-  const run = [];
-  for (let t = 0.76; t < T_S; t += STEP) run.push([t, 0]);
-  for (let u = 0; u < 1; u += 0.001) run.push([T_S + u * DT, u]);
-  for (let t = T_S + DT; t <= 0.83; t += STEP) run.push([t, 0]);
-  across(`office, t running (D_T ${DT})`, run);
+for (const W of [120 / 1230, 1 / 11, 0.2]) {
+  const withU = [];
+  const noU = [];
+  for (let p = 0; p <= 1; p += 2e-5) {
+    const m = detourMap(p, W);
+    if (m.t < 0.74 || m.t > 0.84) continue;
+    withU.push([m.t, m.u]);
+    noU.push([m.t, 0]);
+  }
+  check(withU.some(([, u]) => u > 0.4 && u < 0.5), `W ${W.toFixed(4)}: the sweep runs through the office`);
+  across(`office (W ${W.toFixed(4)})`, withU);
+  across(`office, no u (W ${W.toFixed(4)})`, noU);
 }
 
 // ---- the clock and the card --------------------------------------------------------------------------
@@ -167,7 +169,7 @@ for (const DT of [0.01, 0.012, 0.014]) {
   check(card.delivered === 42 && card.foot === CARD.heroReply, 'the end: 42/42 and the reply line');
   cardAt(0.991, 0, card);
   check(card.foot === CARD.received, 'received: 42/42 delivered · 0 bounces · this campaign');
-  cardAt(T_S, 0.5, card);
+  cardAt(tOfU(0.5), 0.5, card);
   check(card.foot.includes('Lena'), 'the office toasts Lena on u');
   cardAt(SKIPPED.t + 0.001, 0, card);
   check(card.tone === 'bad' && card.foot.includes(SKIPPED.email), 'the no-fly skip toast is red');
@@ -199,6 +201,6 @@ if (failures) {
   process.exit(1);
 }
 const last = (t) => delivered(t);
-console.log(`check-fleet ok: 42 rows, monotonic at 1e-4 (3 window variants), office across u (held and running), at most one step per 0.002;`
+console.log(`check-fleet ok: 42 rows, monotonic at 1e-4 (3 window variants), office through detourMap (3 spacer shares, with and without u), at most one step per 0.002;`
   + ` delivered at 0.19/0.21/0.35/0.51/0.57/0.66/0.78/after office/0.86/0.995 = ${[0.19, 0.21, 0.35, 0.51, 0.57, 0.66, 0.78].map(last).join('/')}/${delivered(AFTER_OFFICE)}/${last(0.86)}/${last(0.995)}`);
 assert.ok(true);
