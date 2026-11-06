@@ -80,13 +80,14 @@ const SPOTS: Record<string, Spot> = {
     portrait: { from: -0.007, to: 0.03, pos: [0.62, 1.08, 1.19], width: 1.097, face: [2.03, 1.08, 2.55], over: true },
   },
   preflight: {
-    from: 0.098, to: 0.152, pos: [20.38, 0.9, 8.52], width: 7.21, face: [8.92, 0.9, 2.25],
+    // under the departures board (Panel.ts), which stands over the street behind it
+    from: 0.098, to: 0.152, pos: [20.38, -0.1, 8.52], width: 6.6, face: [8.92, -0.1, 2.25],
     // under the departures board (Panel.ts), which has the top of the frame
     portrait: { to: 0.142, pos: [27.5, -5.87, 12.14], width: 8.273, face: [7, -5.87, 1.15], over: true },
   },
   takeoff: {
-    // crisp: the street's sunlit haze would wash it out at the far end of the run
-    from: 0.163, to: 0.217, pos: [44.47, 0.55, 14.21], width: 12.17, face: [28.47, 0.55, 12.93], fog: false,
+    // crisp and over the street: the sunlit haze would wash it out and the street trees cut its sub
+    from: 0.163, to: 0.217, pos: [44.47, 0.55, 14.21], width: 12.17, face: [28.47, 0.55, 12.93], fog: false, over: true,
     portrait: { to: 0.207, pos: [54.24, -6.23, 13.07], width: 13.511, face: [25.4, -6.23, 12.71], over: true },
   },
   formation: {
@@ -95,7 +96,7 @@ const SPOTS: Record<string, Spot> = {
   },
   storm: {
     // right of the frame's middle: the biplane towing ONE BY ONE crosses on the left
-    from: 0.388, to: 0.442, pos: [156.28, -5.78, 12.5], width: 46, face: [98.45, -5.78, 0.05], fog: false,
+    from: 0.388, to: 0.442, pos: [156.28, -5.78, 26], width: 44, face: [98.45, -5.78, 0.05], fog: false,
     // over the biplane's banner (ONE BY ONE), which sweeps across a phone's frame right here
     portrait: { pos: [158.51, -0.82, -0.34], width: 33.673, face: [98.48, -0.82, 0.05], over: true },
   },
