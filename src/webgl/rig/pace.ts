@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { CHAPTERS } from '../../story/chapters';
-import { T_S, DETOUR, smooth } from './detour';
+import { T_S, T_E, D_T, DETOUR, detourMap, detourStart, progressOf, smooth, tOfU, type DetourState } from './detour';
 import { studyShot } from './studyShot';
 import type { FlightPath } from './FlightPath';
 import type { CameraRig } from './CameraRig';
@@ -25,11 +25,15 @@ import type { CameraRig } from './CameraRig';
  * per pixel is 1/sigma, continuous across the seams (the steps in the flight line's own speed are
  * cancelled by the pixel density rho = s' * sigma).
  *
- * `paceLin` is the cumulative integral of rho, normalised separately on [0, T_S] and [T_S, 1], so 0, T_S
- * and 1 stay fixed: the office detour leaves from and rejoins the same scroll positions as before.
+ * `paceLin` is the cumulative integral of rho, normalised separately on [0, T_S] and [T_E, 1], so 0, T_S, T_E
+ * and 1 stay fixed: the office detour's stretch of scroll is where it always was.
  *
- * The office has its own, smaller dwell on its clock `u` (paceU): slope 1 around both cuts (so
- * MAX_U_RATE and the flares behave exactly as before), slower over the received card.
+ * Inside the detour (story-t T_S..T_E, its own spacer of scroll) the office clock `u` has its own pace (paceU):
+ * outside the two cuts the dart is on the flight line in the city, and there the pixels per unit u are matched
+ * to the main warp's at T_S and T_E, so the dart's world speed per pixel does not jump at the detour's edges; the
+ * office between the cuts gets the rest, at one even density (the dart crosses the room at one speed), never
+ * faster than one unit of u per unit of u_lin around the cuts (so MAX_U_RATE still holds every flare on screen).
+ * Out of the far face the pace eases from the office's up to the line's: the burst through the glass is slow.
  *
  * Pure apart from sampling the path and the rig once (`paceInputs`); scripts/check-pace.mjs tests it.
  */
@@ -79,18 +83,22 @@ const LOOK = new Vector3();
 const STUDY = new Vector3();
 
 /**
- * Dwell: where the pace slows, as a multiplier on the pixels per world unit. The pinned titles
- * (PinnedTitles.ts SPOTS, copied: each over [from + 0.014, to - 0.014]), the lighthouse delivery,
- * touchdown and the launch from the laptop.
+ * Dwell: where the pace slows, as a multiplier on the pixels per world unit. The pinned titles (the title windows
+ * of the scene direction's table, which PinnedTitles.ts SPOTS follow: each over [from + 0.014, to - 0.014]), the
+ * lighthouse delivery, the storm's strike on the BCC bomber, the flight report at the crest, the rise up the
+ * communications tower, the received screen and the reply, and the launch from the laptop.
  */
 const TITLES: [number, number][] = [
   [-0.007, 0.047], [0.098, 0.152], [0.163, 0.217], [0.288, 0.342], [0.388, 0.442], [0.452, 0.512],
-  [0.518, 0.572], [0.568, 0.622], [0.688, 0.742], [0.788, 0.842], [0.93, 0.968],
+  [0.518, 0.572], [0.568, 0.622], [0.688, 0.742], [0.8, 0.85], [0.958, 0.985],
 ];
 const DWELLS: { a: number; b: number; amt: number }[] = [
   ...TITLES.map(([from, to]) => ({ a: from + 0.014, b: to - 0.014, amt: 0.35 })),
   { a: 0.518, b: 0.566, amt: 0.3 }, // the delivery
-  { a: 0.936, b: 0.956, amt: 0.3 }, // touchdown
+  { a: 0.408, b: 0.422, amt: 0.3 }, // the strike on the BCC bomber
+  { a: 0.858, b: 0.882, amt: 0.35 }, // the flight report
+  { a: 0.94, b: 0.955, amt: 0.25 }, // the rise up the tower
+  { a: 0.986, b: 0.998, amt: 0.4 }, // received, and the reply
   { a: 0.02, b: 0.05, amt: 0.2 }, // the launch
 ];
 const RAMP = 0.01;
@@ -116,30 +124,16 @@ export function paceInputs(path: FlightPath, rig: CameraRig): PaceInputs {
   const camAcc = new Float64Array(N);
   const c0 = new Vector3();
   const c2 = new Vector3();
-  const a = new Vector3();
-  const b = new Vector3();
   const cam = new Vector3();
-  // s': the chapter's arc length over its span of t (toArcT is linear per chapter, so this is the
-  // flight line's speed per unit t; sampling it pointwise picks up the arc-length table's ripple)
-  const chapterSpeed = CHAPTERS.map((c) => {
-    let len = 0;
-    path.pointAt(c.t0, a);
-    for (let k = 1; k <= 400; k++) {
-      path.pointAt(c.t0 + ((c.t1 - c.t0) * k) / 400, b);
-      len += a.distanceTo(b);
-      a.copy(b);
-    }
-    return Math.max(len / (c.t1 - c.t0), 1e-3);
-  });
   for (let i = 0; i < N; i++) {
     const t = (i + 0.5) / N;
-    let ci = 0;
-    while (ci < CHAPTERS.length - 1 && t >= CHAPTERS[ci + 1]!.t0) ci++;
-    speed[i] = chapterSpeed[ci]!;
+    // s': the flight line's speed per unit t, exact from its timing knots (FlightPath: constant between plain
+    // knots, easing across a smooth one; sampling positions instead would pick up the arc-length table's ripple)
+    speed[i] = Math.max(path.speedAt(t), 1e-3);
     cameraAt(path, rig, t, cam);
     let h = Math.min(Math.max(cam.y - floorAt(t, cam.y), H_MIN), H_MAX);
     // the city canyon: the walls either side are closer than the street below
-    if (t > 0.69 && t < 0.75) h = Math.min(h, 5);
+    if (t > 0.69 && t < 0.745) h = Math.min(h, 5);
     height[i] = h;
     const d = 1 / N;
     cameraAt(path, rig, Math.max(t - d, 0), c0);
@@ -160,6 +154,10 @@ export interface Pace {
   paceUinv(u: number): number;
   /** pixels per unit t, relative to today's (1 = unchanged), at story-t: for the ?perf overlay */
   ratioAt(t: number): number;
+  /** the detour's share of the scroll (measured by the Engine): the office clock's pace depends on it */
+  setDetourShare(w: number): void;
+  /** the office's pixel density in u (relative to the spacer's even 1): its slope at the cuts is 1 over this */
+  officeDensity(): number;
 }
 
 export function buildPace(inp: PaceInputs): Pace {
@@ -214,18 +212,24 @@ export function buildPace(inp: PaceInputs): Pace {
     ratio[i] = rho;
     cum[i + 1] = cum[i]! + rho / N;
   }
-  // normalised separately on [0, T_S] and [T_S, 1]: 0, T_S and 1 stay fixed
+  // normalised separately on [0, T_S] and [T_E, 1]: 0, T_S, T_E and 1 stay fixed (the detour's own stretch,
+  // T_S..T_E, is the spacer's: paceU below; the identity here)
   const iS = Math.round(T_S * N);
+  const iE = Math.round(T_E * N);
   const cS = cum[iS]!;
+  const cE = cum[iE]!;
   const c1 = cum[N]!;
   const lin = new Float64Array(N + 1);
   for (let i = 0; i <= N; i++) {
-    lin[i] = i <= iS ? (T_S * cum[i]!) / cS : T_S + ((1 - T_S) * (cum[i]! - cS)) / (c1 - cS);
+    lin[i] = i <= iS ? (T_S * cum[i]!) / cS
+      : i < iE ? T_S + ((T_E - T_S) * (i - iS)) / (iE - iS)
+        : T_E + ((1 - T_E) * (cum[i]! - cE)) / (c1 - cE);
   }
   lin[0] = 0;
   lin[iS] = T_S;
+  lin[iE] = T_E;
   lin[N] = 1;
-  // relative density vs today's (1/N per bin), each half on its own normalisation
+  // relative density vs today's (1/N per bin), each part on its own normalisation
   for (let i = 0; i < N; i++) ratio[i] = (lin[i + 1]! - lin[i]!) * N;
 
   const paceLin = (t: number): number => {
@@ -239,6 +243,7 @@ export function buildPace(inp: PaceInputs): Pace {
     if (tl <= 0) return 0;
     if (tl >= 1) return 1;
     if (tl === T_S) return T_S;
+    if (tl === T_E) return T_E;
     let a = 0;
     let b = N;
     while (b - a > 1) {
@@ -250,42 +255,90 @@ export function buildPace(inp: PaceInputs): Pace {
     return (a + (d > 0 ? (tl - lin[a]!) / d : 0)) / N;
   };
 
-  // --- the office clock ---
-  const U = buildU();
+  // --- the office clock: the line's pixel density either side of the detour, as density in u ---
+  // world per unit scroll just outside the spacer is s' (1 - D_T) / ((1 - W) ratio); inside it s' D_T / (W rho)
+  const ratioS = ratio[iS - 1]!;
+  const ratioE = ratio[iE]!;
+  let w = W_HOME;
+  let U = buildU(w, ratioS, ratioE);
   return {
     paceT,
     paceLin,
-    paceU: U.paceU,
-    paceUinv: U.paceUinv,
+    paceU: (ul) => U.paceU(ul),
+    paceUinv: (u) => U.paceUinv(u),
     ratioAt: (t) => ratio[Math.min(Math.max(Math.floor(t * N), 0), N - 1)]!,
+    setDetourShare(share: number): void {
+      if (!(share > 0) || Math.abs(share - w) < 1e-6) return;
+      w = share;
+      U = buildU(w, ratioS, ratioE);
+    },
+    officeDensity: () => U.office,
   };
 }
 
+/** the detour's share of the scroll on the home page (Experience.astro: a 120vh spacer in a 1220vh timeline) */
+export const W_HOME = 120 / 1220;
+
 /**
- * The office dwell. Density in u (pixels per unit u, relative): 1 within 0.03 of either cut, 1/0.65
- * over the received card (0.45..0.62), a constant elsewhere that keeps the total at 1, with 0.01 ramps.
+ * Scroll progress -> story-t and the detour clock, through the pace: the Engine's mapping (check-pace and
+ * check-line replay it). Outside the detour the warp of story-t; inside it the office clock's pace, and t follows u.
  */
-function buildU(): { paceU(ul: number): number; paceUinv(u: number): number } {
+export function mapScroll(pace: Pace, p: number, w: number): DetourState {
+  const m = detourMap(p, w);
+  if (m.active) {
+    const u = pace.paceU(m.u);
+    return { t: tOfU(u), u, active: true };
+  }
+  return { t: pace.paceT(m.t), u: 0, active: false };
+}
+
+/** The inverse: the scroll progress that shows story-t `t`, or the detour at clock `u` (exact). */
+export function scrollFor(pace: Pace, w: number, t: number, u?: number): number {
+  if (u !== undefined || (t > T_S && t < T_E)) {
+    const uu = Math.min(Math.max(u ?? (t - T_S) / D_T, 0), 1);
+    if (!(w > 0)) return progressOf(pace.paceLin(tOfU(uu)), w);
+    return detourStart(w) + pace.paceUinv(uu) * w;
+  }
+  return progressOf(pace.paceLin(t), w);
+}
+
+/**
+ * The office clock's pace. Density in u (pixels per unit u, relative to the spacer's even 1): in the run at the
+ * glass (before the first cut) and out of the far face (after the second), the main warp's density at T_S and
+ * T_E carried across, so the dart's world speed per pixel is the line's; between the cuts and 0.025 either side of
+ * them (where the flare is up) one even density for the office, solved so the total is 1 (about 1.5: it is never
+ * under 1, so u never runs faster than u_lin there and MAX_U_RATE keeps each flare on screen); out of the far face
+ * it eases from the office's density down to the line's over 0.14 of u (the burst through the glass is slow).
+ */
+function buildU(w: number, ratioS: number, ratioE: number): { paceU(ul: number): number; paceUinv(u: number): number; office: number } {
   const M = 2000;
-  const near = (u: number): number => {
-    let k = 0;
-    for (const c of [DETOUR.cutIn, DETOUR.cutOut]) k = Math.max(k, smooth(u, c - 0.04, c - 0.03) * (1 - smooth(u, c + 0.03, c + 0.04)));
-    return k;
-  };
-  const dwell = (u: number): number => smooth(u, 0.44, 0.45) * (1 - smooth(u, 0.62, 0.63));
-  const shape = (u: number, c: number): number => {
-    const base = c + (1 / 0.65 - c) * dwell(u);
-    return base + (1 - base) * near(u);
+  const k = (D_T * (1 - w)) / (w * (1 - D_T));
+  const rhoIn = k * ratioS;
+  const rhoOut = k * ratioE;
+  // On the way in the dart keeps the line's speed right up to the glass (the cut is a hard flash: the run-in is a
+  // few pixels of scroll) and the office's density takes over just after the cut, under the flare's peak, so the
+  // dart never slows down in plain view; the far side of the flare, in the office, is at the office's density.
+  // On the way out the office's density holds through the flare, then eases down to the line's.
+  // The burst eases the speed (u per pixel, 1 / density) up so the pixels see an even acceleration: its square
+  // runs from the office's to the line's on a smoothstep in u (a constant d(v^2)/du is a constant dv/dpx).
+  const R_IN = 0.004;
+  const B_OUT = 0.025;
+  const shape = (u: number, rhoOff: number): number => {
+    if (u < 0.5) return rhoIn + (rhoOff - rhoIn) * smooth(u, DETOUR.cutIn, DETOUR.cutIn + R_IN);
+    const v0 = 1 / rhoOff;
+    const v1 = 1 / rhoOut;
+    const k = smooth(u, DETOUR.cutOut + B_OUT, 0.99);
+    return 1 / Math.sqrt(v0 * v0 + (v1 * v1 - v0 * v0) * k);
   };
   const total = (c: number): number => {
     let s = 0;
     for (let i = 0; i < M; i++) s += shape((i + 0.5) / M, c) / M;
     return s;
   };
-  // solve for the constant (total is increasing in c)
-  let a = 0.2;
-  let b = 2;
-  for (let k = 0; k < 50; k++) {
+  // solve for the office's density (the total is increasing in it)
+  let a = 0.05;
+  let b = 20;
+  for (let q = 0; q < 60; q++) {
     const m = (a + b) / 2;
     if (total(m) < 1) a = m;
     else b = m;
@@ -314,7 +367,7 @@ function buildU(): { paceU(ul: number): number; paceUinv(u: number): number } {
     const d = L[hi]! - L[lo]!;
     return (lo + (d > 0 ? (ul - L[lo]!) / d : 0)) / M;
   };
-  return { paceU, paceUinv };
+  return { paceU, paceUinv, office: c };
 }
 
 /** chapter starts, for the rail's ticks */
