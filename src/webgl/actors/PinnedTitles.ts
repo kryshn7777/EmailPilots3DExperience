@@ -132,7 +132,7 @@ const SPOTS: Record<string, Spot> = {
   copilot: {
     from: 0.8, to: 0.85, pos: [243.23, 24.45, -4.45], width: 22.427, face: [215.46, 24.45, 1.7],
     // over the skyline: on a phone the towers below the climb stand in front of its lower half
-    portrait: { to: 0.838, pos: [243.38, 19.5, -7.84], width: 14.6, face: [212.2, 19.5, 2.21], over: true },
+    portrait: { to: 0.838, pos: [251.71, 22.15, -15.24], width: 21.5, face: [210.6, 22.15, 2.29], over: true },
   },
   // in the dawn sky beyond the small house, as the dart dives out of its arc over the tower toward the one lit
   // window (fitted on WP-D's ending: the camera chases the dive at about -22 degrees), above the roof; crisp in the
