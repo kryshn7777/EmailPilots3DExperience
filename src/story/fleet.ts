@@ -9,7 +9,7 @@
  * Honesty (direction §0, FEATURES.md Appendix B; the same guardrails as copy.ts):
  *  - the names, roles, clock times and "0 bounces" are the site's own hero mock-up, so on screen the
  *    campaign is always labelled SAMPLE CAMPAIGN;
- *  - no price, no tier, no trial, no placement promise; opens are not tracked, by design;
+ *  - no price and no plan names, no placement promise; opens are not tracked, by design;
  *  - "spam" only for the folder / the filters, never for what the user sends.
  *
  * Pure: no three, no DOM, no allocation in the per-frame functions (`delivered`, `clockAt`,
@@ -113,6 +113,9 @@ export const REPLY = {
   /** it passes the ghosts; they unfold and flutter down */
   cancel: 0.329,
   ghosts: ['Follow-up · day 3', 'Follow-up · day 7'],
+  /** the one chip over both ghosts, then once the reply has passed them */
+  waiting: '2 follow-ups · day 3 · day 7',
+  cancelled: '✕ 2 follow-ups cancelled',
 } as const;
 
 /** The 42, in landing order (direction §4.1's table). */
@@ -334,6 +337,13 @@ export function chipLabel(r: FleetRow, isLanded: boolean): string {
 export function slotLabel(r: FleetRow): string {
   return `${r.name} · ${r.clock}`;
 }
+/** the same, built once per row (index n - 1), for the per-frame callers */
+export const CHIP_FLYING: readonly string[] = FLEET.map((r) => chipLabel(r, false));
+export const CHIP_LANDED: readonly string[] = FLEET.map((r) => chipLabel(r, true));
+export const CHIP_SLOT: readonly string[] = FLEET.map((r) => slotLabel(r));
+/** a landed chip with the campaign clock ('✓ Noor · 10:03') and one with the role ('✓ Marco · café owner') */
+export const CHIP_DONE: readonly string[] = FLEET.map((r) => `✓ ${r.name} · ${r.clock}`);
+export const CHIP_ROLE: readonly string[] = FLEET.map((r) => `✓ ${r.name} · ${r.role}`);
 
 /** The flight report at the crest (rows revealed one per REPORT.step from REPORT.from). */
 export const REPORT = {

@@ -28,6 +28,8 @@ import {
 import { HOME_CELL, ROOFTOP_BASE_Y } from '../bake/cityGen.mjs';
 import { glowTexture } from '../bake/CanvasTextures';
 import { rigParamsAt } from '../../story/chapters';
+import { CAMPAIGN, CHIP_FLYING, CHIP_LANDED, FLEET } from '../../story/fleet';
+import type { FleetChip } from '../interact/BatchHud';
 import type { FlightPath } from '../rig/FlightPath';
 import { HERO_RELEASE, JOIN_T, RELEASE_T, STAGE, heroParam, launchAttitude, launchParam, launchPulse, planeScale } from '../rig/launch';
 import { mulberry32 } from '../util';
@@ -36,8 +38,8 @@ import { PaperBurst } from './PaperBurst';
 import { PaperPlane } from './PaperPlane';
 import type { TownSite, TownSites } from './Rooftops';
 
-/** the mail-merge the story sends: "Email Pilots · batch sending 3/42" */
-export const BATCH_TOTAL = 42;
+/** the sample campaign the story sends (src/story/fleet.ts): 42 personal emails, one by one */
+export const BATCH_TOTAL = CAMPAIGN.total;
 export { RELEASE_T };
 
 /** where the display's centre is, and which way it faces (the screen leans back a little from vertical) */
@@ -56,7 +58,7 @@ const LAMP_X = [3.5, 17.5];
 
 /** how long the last glide, off the street and onto a lawn, takes in story-t */
 const LEG_T = 0.038;
-/** the HUD starts tagging the scouts "Plane 1" and "Plane 2" once they are out of the window */
+/** the HUD starts tagging the scouts with their people's names ("→ Amy", "→ Ben") once they are out of the window */
 const TAG_FROM = 0.085;
 /** a scout's contrail: points, and the story-t between them */
 const TRAIL_POINTS = 26;
@@ -475,7 +477,13 @@ export class BatchSend {
           options.push({ leg, rest, branchS, hits: this.countHits(leg, sites, house), landT, view });
         }
       }
+      // the scout lands inside its row's window of the campaign (fleet.ts: Amy, then Ben, never both at once);
       // clear of everything and in frame; failing that, the clear ones nearest the middle of the screen
+      const win = FLEET[i]!.window;
+      if (win) {
+        const inside = options.filter((o) => o.landT >= win[0] && o.landT <= win[1]);
+        if (inside.length) options.splice(0, options.length, ...inside);
+      }
       let pool = options.filter((o) => o.hits === 0 && o.view < IN_VIEW);
       if (!pool.length) {
         const clear = options.filter((o) => o.hits === 0).sort((a, b) => a.view - b.view);
@@ -535,32 +543,27 @@ export class BatchSend {
     return this.scouts.filter((s) => s.leg).map((s) => ({ at: s.rest, t: s.landT }));
   }
 
-  /** What the HUD shows at story-t `t`: the count, and a tag on each scout (in flight, then landed). */
-  state(t: number): {
-    visible: boolean;
-    sent: number;
-    delivered: number;
-    chips: { anchor: Vector3; shown: boolean; mode: 'flying' | 'landed'; label: string }[];
-  } {
-    const sent = RELEASE_T.filter((r) => t >= r).length;
-    const delivered = this.scouts.filter((s) => s.leg && t >= s.landT).length;
-    const last = Math.max(...this.scouts.map((s) => (s.leg ? s.landT : 0)), 0.19);
-    const hideAt = Math.max(last + 0.05, 0.22);
-    return {
-      visible: t > 0.0005 && t < hideAt,
-      sent,
-      delivered,
-      chips: this.scouts.map((s, i) => {
-        const landed = !!s.leg && t >= s.landT;
-        return {
-          anchor: s.chip,
-          // tagged from the window on: at the desk they are the whole frame and need no label
-          shown: !!s.leg && t >= TAG_FROM && t < hideAt,
-          mode: landed ? 'landed' : 'flying',
-          label: `Plane ${i + 1}`,
-        };
-      }),
-    };
+  /**
+   * The scouts for the fleet card (BatchFleet.state): a name chip on each (`→ Amy` in flight, `✓ Amy`
+   * for a moment after it lands) and when each actually lands (NaN until planned), so the tally
+   * steps exactly on the touchdown.
+   */
+  private scoutChips: FleetChip[] = [];
+  private scoutLandings: [number, number] = [NaN, NaN];
+  state(t: number): { chips: FleetChip[]; landings: readonly [number, number] } {
+    if (!this.scoutChips.length) {
+      this.scouts.forEach((s) => this.scoutChips.push({ anchor: s.chip, shown: false, mode: 'flying', label: '' }));
+    }
+    this.scouts.forEach((s, i) => {
+      const landed = !!s.leg && t >= s.landT;
+      const c = this.scoutChips[i]!;
+      c.mode = landed ? 'landed' : 'flying';
+      c.label = (landed ? CHIP_LANDED : CHIP_FLYING)[i]!;
+      // tagged from the window on (at the desk they are the whole frame), the landed tag for a short while
+      c.shown = !!s.leg && t >= TAG_FROM && t < s.landT + 0.014;
+      this.scoutLandings[i] = s.leg ? s.landT : NaN;
+    });
+    return { chips: this.scoutChips, landings: this.scoutLandings };
   }
 
   update(t: number, time: number, sites: TownSites | null, aspect = 16 / 9): void {
