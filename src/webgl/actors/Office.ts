@@ -694,7 +694,15 @@ export class Office {
     let found = 0;
     for (const [at, n, out] of [[f.entry, f.inNormal, f.entryGlass], [f.exit, f.outNormal, f.exitGlass]] as const) {
       const ray = new Raycaster(at.clone().addScaledVector(n, 3), n.clone().negate(), 0, 4.5);
-      const hits = ray.intersectObject(this.city.group, true);
+      // (a Sprite's raycast reads the ray's camera: the city has sprites, and without one the cast threw, which
+      // stopped the warm-up before the views out were ever baked)
+      ray.camera = this.backdrops[0]!.camera;
+      let hits: ReturnType<Raycaster['intersectObject']> = [];
+      try {
+        hits = ray.intersectObject(this.city.group, true);
+      } catch {
+        hits = [];
+      }
       const hit = hits.find((h) => (h.object as Mesh).isMesh);
       if (!hit) continue; // the models are still streaming: try again on the next warm
       out.copy(hit.point).addScaledVector(n, 0.03);

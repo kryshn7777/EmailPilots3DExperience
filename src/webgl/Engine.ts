@@ -901,8 +901,8 @@ export class Engine {
     // 0.635 and 0.65 there was nothing under the flight at all. The city's own
     // ground sheet is what fills it — 30+ units out and deep in fog.
     // switched on inside the weather (the fog has closed in around the lens by then), not out in the open
-    // (to 0.86: the copilot climb now crests over the city's east end, and its last window wave lands at 0.853)
-    this.city.group.visible = t > 0.622 && t < 0.86;
+    // (to 0.856: the copilot climb now crests over the city's east end, and its last window wave lands at 0.853)
+    this.city.group.visible = t > 0.622 && t < 0.856;
     this.copilot.group.visible = t > 0.75 && t < 0.9;
     // up through the weather as the flight comes down out of it (the fog and the deck cover the arrival)
     this.landing.group.visible = t > 0.83;
