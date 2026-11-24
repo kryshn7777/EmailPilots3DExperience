@@ -118,7 +118,9 @@ export function flareAt(u: number): number {
   if (u <= 0 || u >= 1) return 0;
   // the tails are cut off (a faint veil over the dark office read as fog). The way in rises a little earlier:
   // the dart is still on the line at speed until just before the glass, and slows under the white (rig/pace.ts)
-  const f = Math.max(bump(DETOUR.cutIn, 0.02, 0.02), bump(DETOUR.cutOut, 0.014, 0.016));
+  // wide and soft, so the city fades into light and the office fades out of it rather than strobing white
+  // (it was 0.02 / 0.014 wide, a flash); the cut itself still sits under the full white at the bump's top
+  const f = Math.max(bump(DETOUR.cutIn, 0.055, 0.045), bump(DETOUR.cutOut, 0.04, 0.045));
   return Math.max(0, (f - 0.04) / 0.96);
 }
 
