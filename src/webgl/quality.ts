@@ -37,26 +37,22 @@ export interface Quality {
 
 const HIGH: Quality = {
   tier: 'high',
-  maxDpr: 2,
+  maxDpr: 1.35,
   renderScale: 1,
   volumetricClouds: true,
   /**
-   * 26 steps, spread densely near the lens and sparsely far away.
+   * 18 steps, spread densely near the lens and sparsely far away.
    *
-   * It was 22 for the simplex-noise raymarch, and briefly 32 as part of the max-fidelity pass, which is
-   * what made the formation chapter lag: the slab is a fullscreen raymarch and the camera flies INSIDE
-   * it, so every step is paid on every pixel of the frame. The march now reads two baked 3D textures
-   * instead of evaluating noise, which measures about a third cheaper per step on the same frame, so
-   * 26 steps of it still cost less than the old 22 (see cloudVolume.frag.glsl). Every pass still
-   * renders — AO, bloom, the slab itself.
+   * The march reads two baked 3D textures instead of evaluating noise, so 18 steps
+   * hold full volumetric cloud detail while keeping fill-rate fast at 60fps.
    */
-  cloudSteps: 26,
+  cloudSteps: 18,
   // density comes from COUNT, not from fog: thickening the haze instead just
   // turned the climb to flat milk and took the staging with it
   cloudSprites: 640,
   rainCount: 2600,
   dustCount: 250,
-  godRays: { samples: 48, scale: 0.25 },
+  godRays: { samples: 28, scale: 0.25 },
 };
 
 const LOW: Quality = {

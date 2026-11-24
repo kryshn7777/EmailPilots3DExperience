@@ -48,7 +48,7 @@ uniform vec2 uWind;
 varying vec2 vUv;
 ${VIEW_SPACE}
 
-const int STEPS = 32;
+const int STEPS = 18;
 
 float hash13(vec3 p) {
   p = fract(p * 0.1031);
@@ -148,8 +148,8 @@ void main() {
   float z0 = lin(vUv);
   vec4 sum = vec4(0.0);
   float wsum = 0.0;
-  for (int i = -3; i <= 3; i++) {
-    vec2 uv = vUv + uDir * uTexel * float(i) * 1.5;
+  for (int i = -2; i <= 2; i++) {
+    vec2 uv = vUv + uDir * uTexel * float(i) * 1.75;
     float z = lin(uv);
     float w = exp(-abs(z - z0) / (0.05 * max(z0, 1.0))) / (1.0 + float(i * i) * 0.2);
     sum += texture2D(uVol, uv) * w;

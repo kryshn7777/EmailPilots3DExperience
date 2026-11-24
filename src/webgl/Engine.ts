@@ -594,8 +594,8 @@ export class Engine {
           worldProximityThreshold: 0.4,
           worldProximityFalloff: 0.1,
           luminanceInfluence: 0.55,
-          samples: 16,
-          rings: 5,
+          samples: 10,
+          rings: 4,
           radius: 0.06,
           intensity: 1.6,
           resolutionScale: 0.5,
@@ -1823,7 +1823,7 @@ export class Engine {
     if (this.inside) this.isolateOffice();
     const restoreWarmSubtrees = this.warmForceSubmeshes ? this.forceVisibleSubtrees() : null;
     try {
-      this.beacon.renderReflection(this.renderer, this.scene, this.camera);
+      if (refresh || this.warming) this.beacon.renderReflection(this.renderer, this.scene, this.camera);
       this.depthNormals?.invalidate();
       if (this.warmOffscreenOnly) {
         this.renderer.setRenderTarget(this.composer.inputBuffer);
@@ -1929,21 +1929,20 @@ export class Engine {
   private govAt = 0;
 
   private govern(dtMs: number, now: number): void {
+    if (this.warming || this.probe || this.options.reducedMotion || dtMs > 250) return;
     const high = this.quality.tier === 'high';
-    if (high || this.warming || this.probe || this.options.reducedMotion || dtMs > 250) return;
     // a compile or upload hitch is not a slow scene: count it as at most a 50 ms frame
     this.frameEma += (Math.min(dtMs, 50) - this.frameEma) * 0.06;
     if (now - this.govAt < 1400 || now - this.startTime < 2500) return;
     this.govAt = now;
     let next = this.resolution;
-    // a step changes the pixel count by its square: 0.9 takes a 22 ms frame to about 18, and steps
-    // up are held off for a while after a step down so a heavy chapter does not make it flutter
-    const floor = high ? 0.6 : 0.5;
-    if (this.frameEma > (high ? 21 : 27) && next > floor) {
-      next = Math.max(floor, next * (high ? 0.9 : 0.85));
+    // a step changes the pixel count by its square: on HIGH never drop below 0.85 so the frame stays sharp
+    const floor = high ? 0.85 : 0.5;
+    if (this.frameEma > (high ? 22 : 27) && next > floor) {
+      next = Math.max(floor, next * (high ? 0.92 : 0.85));
       this.stepDownAt = now;
-    } else if (this.frameEma < 17.5 && next < 1 && (!high || now - this.stepDownAt > 8000)) {
-      next = Math.min(1, next * 1.1);
+    } else if (this.frameEma < (high ? 18.5 : 17.5) && next < 1 && (!high || now - this.stepDownAt > 3000)) {
+      next = Math.min(1, next * 1.08);
     }
     if (Math.abs(next - this.resolution) > 0.01) {
       this.resolution = next;

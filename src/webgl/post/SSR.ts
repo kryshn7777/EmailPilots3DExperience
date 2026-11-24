@@ -63,10 +63,10 @@ void main() {
   vec3 pos = P + N * (0.02 + 0.002 * -P.z) + R * stepLen * jitter;
   vec2 hitUv = vec2(-1.0);
   float travelled = 0.0;
-  for (int i = 0; i < 48; i++) {
+  for (int i = 0; i < 28; i++) {
     pos += R * stepLen;
     travelled += stepLen;
-    stepLen *= 1.085;
+    stepLen *= 1.14;
     vec2 uv = project(pos);
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || pos.z > -0.05) break;
     float ds = sceneDepth(uv);
@@ -78,9 +78,9 @@ void main() {
     if (behind > 0.0 && behind < max(stepLen * 1.2, 0.04) + 0.006 * -pos.z && dot(px, px) > 16.0
         && dot(viewNormal(uv), R) < -0.05) {
       // home in on the crossing
-      vec3 a = pos - R * stepLen / 1.085;
+      vec3 a = pos - R * stepLen / 1.14;
       vec3 b = pos;
-      for (int j = 0; j < 6; j++) {
+      for (int j = 0; j < 4; j++) {
         vec3 m = (a + b) * 0.5;
         vec2 muv = project(m);
         if (viewPos(muv).z - m.z > 0.0) b = m; else a = m;
@@ -123,6 +123,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 export class SSREffect extends Effect {
   private pass: ScreenPass;
   private depth: Texture | null = null;
+  private frame = 0;
+  private warmed = false;
   /** how wet the ground is, 0..1, set per chapter by the Engine */
   wet = 0.4;
 
@@ -164,6 +166,8 @@ export class SSREffect extends Effect {
   override update(renderer: WebGLRenderer, inputBuffer: WebGLRenderTarget): void {
     if (!this.depth) return;
     this.normals.update(renderer, this.depth, this.camera);
+    if (this.warmed && (this.frame++ & 1) === 0) return;
+    this.warmed = true;
     const u = this.pass.material.uniforms;
     u.uColor!.value = inputBuffer.texture;
     u.uDepth!.value = this.depth;

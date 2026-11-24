@@ -52,6 +52,8 @@ export class ReflectionProbe {
   private materials = new Map<MeshStandardMaterial, number>();
   /** where the cube was last taken (world): the road's box-projected lookup reads from here */
   readonly center = new Vector3();
+  private lastCubeEye = new Vector3(1e9, 1e9, 1e9);
+  private lastGround: number | null = null;
   /** whole cubes rendered so far */
   cubes = 0;
 
@@ -89,6 +91,13 @@ export class ReflectionProbe {
    */
   update(renderer: WebGLRenderer, scene: Scene, eye: Vector3, ground: number | null, hide: Object3D[], lift = 1.4): void {
     if (ground === null) return;
+    if (this.face === 0 && this.cubes >= 1 && ground === this.lastGround && eye.distanceToSquared(this.lastCubeEye) < 18 * 18) {
+      return;
+    }
+    if (this.face === 0) {
+      this.lastCubeEye.copy(eye);
+      this.lastGround = ground;
+    }
     this.cube.position.set(eye.x, Math.min(eye.y, ground + lift), eye.z);
     this.cube.updateMatrixWorld(true);
     this.center.copy(this.cube.position);

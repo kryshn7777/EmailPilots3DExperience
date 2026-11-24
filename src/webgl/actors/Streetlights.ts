@@ -80,6 +80,8 @@ export class Streetlights {
   private spots: { x: number; z: number }[] = [];
   private reach = 0;
   private scale = 1;
+  private level = 1;
+  private frame = 0;
   private local = new Vector3();
   private disposables: { dispose(): void }[] = [];
 
@@ -166,6 +168,8 @@ export class Streetlights {
           spot.shadow.camera.near = 0.05;
           spot.shadow.camera.far = 9 * scale;
           spot.shadow.camera.layers.set(LAMP_CASTER_LAYER);
+          spot.shadow.autoUpdate = false;
+          spot.shadow.needsUpdate = true;
           this.group.add(spot, spot.target);
           this.pool.push(spot);
           continue;
@@ -246,12 +250,17 @@ export class Streetlights {
       const spot = this.spots[best]!;
       const light = this.pool[k]!;
       light.position.set(spot.x, (HEAD_Y - 0.1) * this.scale, spot.z);
-      if ((light as SpotLight).isSpotLight) (light as SpotLight).target.position.set(spot.x, 0, spot.z);
+      if ((light as SpotLight).isSpotLight) {
+        (light as SpotLight).target.position.set(spot.x, 0, spot.z);
+        if (this.level > 0.02 && (this.frame & 1) === 0) light.shadow!.needsUpdate = true;
+      }
     }
+    this.frame++;
   }
 
   /** 0 in full daylight, 1 at night: the lenses, halos and cones follow it */
   setLevel(level: number): void {
+    this.level = level;
     lampField.level.value = level;
     for (const l of this.pool) {
       const spot = (l as SpotLight).isSpotLight;
@@ -259,7 +268,7 @@ export class Streetlights {
       // a lamp that is out casts nothing: its shadow map stops being redrawn (switching the shadow
       // off instead would change every lit material's program)
       if (spot) {
-        l.shadow!.autoUpdate = level > 0.02;
+        l.shadow!.autoUpdate = false;
         // but the map must exist: a shadow sampler bound to nothing is a GL error on every draw
         if (!l.shadow!.map) l.shadow!.needsUpdate = true;
       }

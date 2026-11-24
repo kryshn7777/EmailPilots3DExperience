@@ -26,7 +26,7 @@ uniform float uRadius;
 varying vec2 vUv;
 ${VIEW_SPACE}
 
-const int SAMPLES = 20;
+const int SAMPLES = 12;
 
 void main() {
   float d0 = sceneDepth(vUv);
@@ -71,9 +71,9 @@ void main() {
   vec3 n0 = viewNormal(vUv);
   vec3 sum = vec3(0.0);
   float wsum = 0.0;
-  for (int y = -2; y <= 2; y++) {
-    for (int x = -2; x <= 2; x++) {
-      vec2 uv = vUv + vec2(float(x), float(y)) * uTexel * 1.5;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 uv = vUv + vec2(float(x), float(y)) * uTexel * 1.75;
       float z = viewPos(uv).z;
       float w = exp(-abs(z - z0) / (0.04 * max(-z0, 1.0))) * pow(max(dot(viewNormal(uv), n0), 0.0), 8.0);
       w *= 1.0 / (1.0 + float(x * x + y * y) * 0.25);
@@ -106,6 +106,7 @@ export class SSGIEffect extends Effect {
   private gather: ScreenPass;
   private blur: ScreenPass;
   private depth: Texture | null = null;
+  private frame = 0;
   /** how much bounce light is added, set per chapter by the Engine */
   intensity = 0.8;
 
@@ -159,6 +160,7 @@ export class SSGIEffect extends Effect {
     // built even while the bounce is off: the ambient occlusion, which runs next, reads the same normals
     this.normals.update(renderer, this.depth, this.camera);
     if (this.intensity < 0.01) return;
+    if ((this.frame++ & 1) !== 0) return;
     for (const p of [this.gather, this.blur]) {
       p.material.uniforms.uDepth!.value = this.depth;
       bindCamera(p.material, this.camera);

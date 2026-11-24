@@ -636,10 +636,10 @@ export class KitCity {
    */
   updateTrees(eye: Vector3, camera?: Camera): void {
     if (!this.treeSlots.length) return;
-    // repacked when the camera has moved a little or turned a few degrees (a turn brings culled trees into view)
+    // repacked when the camera has moved a little or turned ~10 degrees (a turn brings culled trees into view)
     let turned = false;
-    if (camera) turned = camera.getWorldDirection(this.treeDirNow).dot(this.treeDir) < 0.9986;
-    if (eye.distanceToSquared(this.treeEye) < 4 && !turned) return;
+    if (camera) turned = camera.getWorldDirection(this.treeDirNow).dot(this.treeDir) < 0.985;
+    if (eye.distanceToSquared(this.treeEye) < 25 && !turned) return;
     this.treeEye.copy(eye);
     this.group.updateWorldMatrix(true, false);
     let frustum: Frustum | null = null;
