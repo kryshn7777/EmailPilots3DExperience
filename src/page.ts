@@ -141,11 +141,16 @@ function bindChromeOnce(): void {
   });
 
   const preloader = document.getElementById('preloader');
+  const preloaderHint = preloader?.querySelector<HTMLElement>('.preloader__hint');
+  window.addEventListener('flight:boot-progress', (e) => {
+    const { label } = (e as CustomEvent<{ pct: number; label: string }>).detail;
+    if (preloaderHint && label) preloaderHint.textContent = label;
+  });
   const dismiss = (): void => preloader?.classList.add('is-done');
   window.addEventListener('flight:ready', dismiss, { once: true });
   // Failsafe so nobody is ever trapped. With WebGL present the engine WILL
-  // fire flight:ready — slow iGPUs take seconds to compile the opening frame,
-  // and dismissing early would reveal a black canvas — so give it long rope.
+  // fire flight:ready after full asset streaming and off-screen GPU warm-up,
+  // so give it enough rope on slower networks/GPUs.
   // Without WebGL there is nothing to wait for: drop the curtain fast.
   let hasWebgl = false;
   try {
@@ -153,7 +158,7 @@ function bindChromeOnce(): void {
   } catch {
     hasWebgl = false;
   }
-  setTimeout(dismiss, hasWebgl ? 15000 : 1200);
+  setTimeout(dismiss, hasWebgl ? 30000 : 1200);
 
   // custom cursor, fine pointers only
   if (matchMedia('(pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches) {

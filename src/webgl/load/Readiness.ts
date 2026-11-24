@@ -44,6 +44,10 @@ export class Readiness {
   private heldGate: Gate | null = null;
   private heldSince = 0;
   private loading = false;
+  private totalStarted = 0;
+  private totalDone = 0;
+  private totalPending = 0;
+  private listeners = new Set<() => void>();
 
   constructor() {
     const m = DefaultLoadingManager;
@@ -54,25 +58,72 @@ export class Readiness {
     // close on itemEnd only
     m.itemStart = (url: string): void => {
       start(url);
+      this.totalStarted++;
+      this.totalPending++;
       const t = gateFor(url);
       if (t !== null) this.gate(t).pending++;
+      this.notify();
     };
     m.itemEnd = (url: string): void => {
       end(url);
+      this.totalDone++;
+      this.totalPending = Math.max(0, this.totalPending - 1);
       const t = gateFor(url);
       if (t !== null) {
         const g = this.gate(t);
         g.pending = Math.max(0, g.pending - 1);
       }
+      this.notify();
     };
+  }
+
+  private notify(): void {
+    for (const fn of this.listeners) fn();
   }
 
   /** Something the story needs from story-t `t` on. */
   register(t: number, promise: Promise<unknown>): void {
     const g = this.gate(t);
     g.pending++;
+    this.totalStarted++;
+    this.totalPending++;
+    this.notify();
     void promise.catch(() => undefined).finally(() => {
       g.pending = Math.max(0, g.pending - 1);
+      this.totalDone++;
+      this.totalPending = Math.max(0, this.totalPending - 1);
+      this.notify();
+    });
+  }
+
+  /**
+   * Resolves once every registered promise and every DefaultLoadingManager request (including nested
+   * GLB/texture loads kicked off after JSON manifests resolve) has settled.
+   */
+  whenAllReady(onProgress?: (loaded: number, total: number) => void, timeoutMs = 20000): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settledTimer = 0;
+      let done = false;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        clearTimeout(settledTimer);
+        clearTimeout(safetyTimer);
+        this.listeners.delete(check);
+        resolve();
+      };
+      const check = (): void => {
+        onProgress?.(this.totalDone, this.totalStarted);
+        clearTimeout(settledTimer);
+        if (this.totalPending === 0 && this.totalStarted > 0) {
+          settledTimer = window.setTimeout(() => {
+            if (this.totalPending === 0) finish();
+          }, 120);
+        }
+      };
+      const safetyTimer = window.setTimeout(finish, timeoutMs);
+      this.listeners.add(check);
+      check();
     });
   }
 

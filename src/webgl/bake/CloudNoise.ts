@@ -31,9 +31,14 @@ function volume(size: number): Data3DTexture {
 export class CloudNoise {
   readonly shape = volume(SHAPE_SIZE);
   readonly detail = volume(DETAIL_SIZE);
+  readonly loaded: Promise<void>;
+  private resolveLoaded!: () => void;
   ready = false;
 
   constructor() {
+    this.loaded = new Promise<void>((res) => {
+      this.resolveLoaded = res;
+    });
     this.start();
   }
 
@@ -56,7 +61,7 @@ export class CloudNoise {
 
   /** no worker support: do the same work on the main thread, after the first frames have been drawn */
   private bakeHere(): void {
-    setTimeout(() => this.fill(bakeShape(), bakeDetail()), 400);
+    setTimeout(() => this.fill(bakeShape(), bakeDetail()), 0);
   }
 
   private fill(shape: Uint8Array, detail: Uint8Array): void {
@@ -65,6 +70,7 @@ export class CloudNoise {
     this.shape.needsUpdate = true;
     this.detail.needsUpdate = true;
     this.ready = true;
+    this.resolveLoaded();
   }
 
   dispose(): void {

@@ -23,6 +23,7 @@ import {
   type InterleavedBufferAttribute,
   type Material,
   type Texture,
+  type WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -196,10 +197,31 @@ export class RecipientRoom {
       this.group.add(this.screenLight, deskLight, roomLight);
     }
     this.disposables.push(card, card.map!, this.glowCard.geometry);
-    // the room has a lot of surface to draw: it is built once the page is idle, or at once if the flight gets here first
-    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
-    if (idle) idle(() => this.ensure(), { timeout: 4000 });
-    else setTimeout(() => this.ensure(), 2500);
+    // build the room immediately during boot so its meshes, textures and GLBs are warmed before scrolling starts
+    this.ensure();
+  }
+
+  private warmMode = false;
+
+  setWarmMode(active: boolean, renderer?: WebGLRenderer): void {
+    this.warmMode = active;
+    this.ensure();
+    if (active) {
+      if (renderer && this.screens) {
+        renderer.initTexture(this.screens.idle);
+        renderer.initTexture(this.screens.received);
+        if (this.screens.open) renderer.initTexture(this.screens.open);
+        if (this.screens.reply) {
+          this.screens.reply.draw(0.5);
+          renderer.initTexture(this.screens.reply.texture);
+        }
+      }
+      this.interior.visible = true;
+      this.glowCard.visible = true;
+    } else {
+      this.interior.visible = false;
+      this.glowCard.visible = true;
+    }
   }
 
   private loadShell(tier: Tier): void {
@@ -546,8 +568,8 @@ export class RecipientRoom {
     if (!this.group.visible) return;
     this.ensure();
     const inside = t > ENDING_BEATS.dive - 0.002;
-    this.interior.visible = inside;
-    this.glowCard.visible = !inside;
+    this.interior.visible = this.warmMode || inside;
+    this.glowCard.visible = this.warmMode || !inside;
     const s = this.screens;
     const m = this.screenMaterial;
     if (!s || !m) return;

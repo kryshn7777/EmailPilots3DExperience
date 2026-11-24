@@ -135,6 +135,8 @@ export class City {
 
   private color = new Color();
   private disposables: { dispose(): void }[] = [];
+  readonly loaded: Promise<void>;
+  private warmMode = false;
 
   constructor(anchor: Vector3, path: FlightPath, quality: Quality) {
     this.group.position.set(anchor.x, 0, 1);
@@ -193,7 +195,7 @@ export class City {
 
     this.buildTraffic(quality);
     this.buildCars(quality);
-    void this.init(path, quality);
+    this.loaded = this.init(path, quality).catch((err) => console.warn('city failed to load', err));
   }
 
   /**
@@ -269,7 +271,7 @@ export class City {
       this.group.add(this.terrace.group);
       this.disposables.push(this.terrace);
     }
-    void this.buildTrees(this.street.trees, path, quality);
+    const treesLoaded = this.buildTrees(this.street.trees, path, quality);
     // the street lived in: clutter, deliveries, roadworks, bikes, roof plant (and the people about them)
     this.life = new CityLife({
       footprints, lots: lots as KitLot[], roofLots: rings.near,
@@ -302,6 +304,13 @@ export class City {
       .filter((b) => b.h > 4)
       .map((b) => new Vector3(b.x, b.h, b.z).add(this.group.position));
     this.path = path;
+    await Promise.all([
+      treesLoaded,
+      this.streetCars?.loaded,
+      this.crossCars?.loaded,
+      this.life?.loaded,
+      this.people?.loaded,
+    ]);
   }
 
   private blinkMaterial!: PointsMaterial;
@@ -963,6 +972,24 @@ export class City {
     // aircraft-warning strobes on the antenna tips
     if (this.blinkMaterial) this.blinkMaterial.opacity = 0.25 + 0.65 * Math.abs(Math.sin(time * 2.1));
     if (this.mail.length) this.updateMail(t);
+    if (this.warmMode) {
+      if (this.envelopes) this.envelopes.visible = true;
+      if (this.mailDarts) this.mailDarts.visible = true;
+    }
+  }
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    this.kitCity?.setWarmMode(active);
+    this.trees?.setWarmMode(active);
+    this.streetCars?.setWarmMode(active);
+    this.crossCars?.setWarmMode(active);
+    this.people?.setWarmMode(active);
+    this.life?.setWarmMode(active);
+    if (active) {
+      if (this.envelopes) this.envelopes.visible = true;
+      if (this.mailDarts) this.mailDarts.visible = true;
+    }
   }
 
   /** People on the canyon sidewalks, round the corners and in the plazas, at the cars' 1.35x (see PedestrianPlans.cityCrowd). */

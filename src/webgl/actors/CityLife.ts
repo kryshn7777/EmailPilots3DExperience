@@ -170,13 +170,15 @@ export class CityLife {
   private eye = new Vector3();
   /** what the last update drew: chunks, triangles (for the probe) */
   readonly stats = { draws: 0, tris: 0, items: 0, chunks: 0 };
+  readonly loaded: Promise<void>;
+  private warmMode = false;
 
   constructor(private input: LifeInput) {
     this.high = input.quality.tier === 'high';
     this.far = this.high ? 70 : 34;
     this.nearDist = this.high ? 24 : 0;
     this.plan();
-    this.load().catch((e: unknown) => console.warn('CityLife: props not loaded', e));
+    this.loaded = this.load().catch((e: unknown) => console.warn('CityLife: props not loaded', e));
   }
 
   // ---- the plan -------------------------------------------------------------------------------
@@ -838,14 +840,22 @@ export class CityLife {
     for (const c of this.chunks) {
       const d = Math.hypot(c.cx - this.eye.x, (c.cy - this.eye.y) * 0.5, c.cz - this.eye.z);
       const far = c.roof ? this.far * 1.5 : this.far;
-      const show = d < far;
+      const show = this.warmMode || d < far;
       const detail = show && (!c.lean || d < this.nearDist);
-      c.near.visible = detail;
-      if (c.lean) c.lean.visible = show && !detail;
+      c.near.visible = this.warmMode || detail;
+      if (c.lean) c.lean.visible = this.warmMode || (show && !detail);
       if (show) { draws++; tris += detail ? c.tris[0] : c.tris[1]; }
     }
     this.stats.draws = draws;
     this.stats.tris = tris;
+  }
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    for (const c of this.chunks) {
+      c.near.visible = active;
+      if (c.lean) c.lean.visible = active;
+    }
   }
 
   dispose(): void {

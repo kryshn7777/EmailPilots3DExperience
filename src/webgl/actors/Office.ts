@@ -187,6 +187,7 @@ export class Office {
   readonly shards: InstancedMesh;
   /** the dart's size this frame relative to the main rig's */
   planeScale = 1;
+  readonly loaded: Promise<void>;
 
   private stage: DetourScene;
   /**
@@ -351,7 +352,7 @@ export class Office {
     }
 
     this.buildLaptops();
-    void this.loadProps();
+    this.loaded = this.loadProps();
   }
 
   private own<T extends { dispose(): void }>(x: T): T {

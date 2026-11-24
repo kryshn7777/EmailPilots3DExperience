@@ -604,6 +604,7 @@ export class KitCity {
           }
         }
         if (!dynamic) indices.forEach((lotIndex, k) => place(lotIndex, k));
+        else if (lots.length > 0) place(0, 0);
         inst.count = dynamic ? 0 : indices.length;
         if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
         inst.castShadow = inst.receiveShadow = shadows;
@@ -674,10 +675,45 @@ export class KitCity {
     for (const tiers of this.treeTiers.values()) {
       for (const t of tiers) {
         if (!t) continue;
-        t.mesh.count = t.fill;
-        t.mesh.visible = t.fill > 0;
+        if (this.warmMode && t.fill === 0 && this.treeLots.length > 0) {
+          t.place(0, 0);
+          t.mesh.count = 1;
+          t.mesh.visible = true;
+        } else {
+          t.mesh.count = t.fill;
+          t.mesh.visible = t.fill > 0;
+        }
         t.mesh.instanceMatrix.needsUpdate = true;
         if (t.mesh.instanceColor) t.mesh.instanceColor.needsUpdate = true;
+      }
+    }
+  }
+
+  private warmMode = false;
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    if (active) {
+      for (const tiers of this.treeTiers.values()) {
+        for (const t of tiers) {
+          if (!t) continue;
+          if (t.mesh.count === 0 && this.treeLots.length > 0) {
+            t.place(0, 0);
+            t.mesh.instanceMatrix.needsUpdate = true;
+            if (t.mesh.instanceColor) t.mesh.instanceColor.needsUpdate = true;
+          }
+          t.mesh.count = Math.max(t.mesh.count, 1);
+          t.mesh.visible = true;
+        }
+      }
+    } else {
+      this.treeEye.set(1e9, 0, 0);
+      for (const tiers of this.treeTiers.values()) {
+        for (const t of tiers) {
+          if (!t) continue;
+          t.mesh.count = t.fill;
+          t.mesh.visible = t.fill > 0;
+        }
       }
     }
   }

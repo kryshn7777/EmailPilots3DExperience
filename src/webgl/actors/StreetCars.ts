@@ -295,6 +295,8 @@ export class StreetCars {
   private sc = new Vector3();
   private Y = new Vector3(0, 1, 0);
   private Z = new Vector3(0, 0, 1);
+  readonly loaded: Promise<void>;
+  private warmMode = false;
 
   constructor(
     private quality: Quality,
@@ -305,7 +307,7 @@ export class StreetCars {
   ) {
     this.qFlip.setFromAxisAngle(this.Y, Math.PI);
     this.k = options?.scale ?? 1;
-    void this.init();
+    this.loaded = this.init().catch((err) => console.warn('street cars failed to load', err));
   }
 
   private async init(): Promise<void> {
@@ -466,6 +468,7 @@ export class StreetCars {
       close: false | 'mid' | 'hero',
     ): Tier => {
       const paint = instance(parts.paint!, paintM, cap);
+      paint.setColorAt(0, new Color(0xffffff));
       const det = instance(parts.detail!, detail, cap);
       const band = typeof close === 'string' ? close : 'lean';
       paint.name = `car-${id}-${band}-paint`;
@@ -703,6 +706,25 @@ export class StreetCars {
     }
 
     const flush = (t: Tier): void => {
+      if (this.warmMode && t.count === 0) {
+        this.m4.makeScale(0.001, 0.001, 0.001);
+        t.paint.setMatrixAt(0, this.m4);
+        for (const m of [t.paint, t.detail, t.glass]) {
+          if (!m) continue;
+          m.count = 1;
+          m.visible = true;
+        }
+        if (t.wheels) {
+          for (let w = 0; w < 4; w++) t.wheels.setMatrixAt(w, this.m4);
+          t.wheels.count = 4;
+          t.wheels.visible = true;
+          t.wheels.instanceMatrix.needsUpdate = true;
+        }
+        t.paint.instanceMatrix.needsUpdate = true;
+        if (t.paint.instanceColor) t.paint.instanceColor.needsUpdate = true;
+        if (t.brake) t.brake.needsUpdate = true;
+        return;
+      }
       for (const m of [t.paint, t.detail, t.glass]) {
         if (!m) continue;
         m.count = t.count;
@@ -727,6 +749,11 @@ export class StreetCars {
     flareCol.needsUpdate = true;
     this.shadows.instanceMatrix.needsUpdate = true;
     this.pools.instanceMatrix.needsUpdate = true;
+  }
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    if (this.ready) this.draw(true);
   }
 
   /**

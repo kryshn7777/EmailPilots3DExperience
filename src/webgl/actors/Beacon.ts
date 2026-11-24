@@ -1133,7 +1133,27 @@ varying vec3 vBeamWorld;
     }
 
     if (this.hovered) this.tooltip.pin(this.towerTop, camera, 30);
+    if (this.warmMode) {
+      this.tower.visible = true;
+      this.ship.visible = true;
+      this.wake.visible = true;
+      this.sea.visible = true;
+      for (const b of this.fogBanks) b.sprite.visible = true;
+    }
     return planeHit;
+  }
+
+  private warmMode = false;
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    if (active) {
+      this.tower.visible = true;
+      this.ship.visible = true;
+      this.wake.visible = true;
+      this.sea.visible = true;
+      for (const b of this.fogBanks) b.sprite.visible = true;
+    }
   }
 
   dispose(): void {

@@ -1008,7 +1008,7 @@ export class BatchFleet {
       this.beacon.lockOn(lw, this.aim);
     } else this.beacon.lockOn(0, this.aim);
 
-    this.group.visible = t > 0.18 && t < 0.9;
+    this.group.visible = this.warmMode || (t > 0.18 && t < 0.9);
     if (!this.group.visible) return;
     // pale paper in the sunset; lit a little from within at night, so it reads against the dark
     this.dartMaterial.emissiveIntensity = t < 0.4 ? 0.14 : 0.55;
@@ -1035,6 +1035,31 @@ export class BatchFleet {
     this.updateBeams(t);
     this.updateRings(t);
     this.updateBomber(t, aspect);
+    if (this.warmMode) {
+      this.darts.visible = true;
+      if (this.trails) this.trails.visible = true;
+      this.beams.visible = true;
+      this.rings.visible = true;
+      this.bomber.visible = true;
+      this.bolt.visible = true;
+      this.burst.visible = true;
+    }
+  }
+
+  private warmMode = false;
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    if (active) {
+      this.group.visible = true;
+      this.darts.visible = true;
+      if (this.trails) this.trails.visible = true;
+      this.beams.visible = true;
+      this.rings.visible = true;
+      this.bomber.visible = true;
+      this.bolt.visible = true;
+      this.burst.visible = true;
+    }
   }
 
   private lookV = new Vector3();

@@ -16,6 +16,7 @@ import {
   SphereGeometry,
   Vector3,
   type BufferGeometry,
+  type WebGLRenderer,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { meadowTexture, runwayTexture } from '../bake/CanvasTextures';
@@ -256,9 +257,14 @@ export class Landing {
     return im;
   }
 
-  /** resolves once the tower has streamed in (the readiness gate can wait on it) */
+  /** resolves once the tower and parked airliner have streamed in (the readiness gate can wait on it) */
   get loaded(): Promise<void> {
-    return this.tower.loaded;
+    return Promise.all([this.tower.loaded, this.parked.loaded]).then(() => undefined);
+  }
+
+  setWarmMode(active: boolean, renderer?: WebGLRenderer): void {
+    this.tower.setWarmMode(active);
+    this.room.setWarmMode(active, renderer);
   }
 
   update(t: number, time: number): void {

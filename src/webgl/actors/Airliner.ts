@@ -141,13 +141,6 @@ function release(tier: Tier): void {
   entry.promise.then((t) => t.dispose(), () => undefined);
 }
 
-/** after first paint, when the main thread has a moment */
-function whenIdle(fn: () => void): void {
-  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
-  if (ric) ric(fn, { timeout: 3000 });
-  else setTimeout(fn, 1200);
-}
-
 /**
  * The airliner, modelled in Blender (blender/make_airliner.py, ~45k triangles; the LOW tier ~12k):
  * a lofted fuselage with a shaped nose, framed cockpit glass, cabin windows, door outlines, a belly
@@ -163,6 +156,7 @@ export class Airliner {
   readonly body = new Group();
   readonly gear = new Group();
   readonly wheels: { pivot: Object3D; r: number }[] = [];
+  readonly loaded: Promise<void>;
   private fans: Object3D[] = [];
   private strobe: PointsMaterial | null = null;
   private beacon: PointsMaterial | null = null;
@@ -177,14 +171,11 @@ export class Airliner {
     this.running = options.running ?? false;
     this.body.add(this.gear);
     this.group.add(this.body);
-    whenIdle(() => {
-      if (this.disposed) return;
-      this.acquired = true;
-      acquire(this.tier).then(
-        (t) => { if (!this.disposed) this.assemble(t); },
-        (err) => console.warn('airliner model failed to load', err),
-      );
-    });
+    this.acquired = true;
+    this.loaded = acquire(this.tier).then(
+      (t) => { if (!this.disposed) this.assemble(t); },
+      (err) => console.warn('airliner model failed to load', err),
+    );
   }
 
   private assemble(t: Template): void {

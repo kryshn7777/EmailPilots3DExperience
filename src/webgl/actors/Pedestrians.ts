@@ -717,6 +717,8 @@ export class Pedestrians {
   private pt = { x: 0, z: 0, tx: 1, tz: 0 };
   private handL = new Vector3();
   private collar = new Vector3();
+  readonly loaded: Promise<void>;
+  private warmMode = false;
 
   constructor(private quality: Quality, private plan: CrowdPlan) {
     this.k = plan.scale ?? 1;
@@ -728,7 +730,7 @@ export class Pedestrians {
       const w = window as unknown as { __crowds?: Pedestrians[] };
       (w.__crowds ??= []).push(this);
     }
-    void this.init();
+    this.loaded = this.init().catch((err) => console.warn('pedestrians failed to load', err));
   }
 
   private async init(): Promise<void> {
@@ -1149,11 +1151,25 @@ export class Pedestrians {
       });
       h.mesh.count = h.bodies.length;
       h.mesh.visible = h.bodies.length > 0;
-      if (h.bodies.length) {
+      if (this.warmMode && h.mesh.count === 0) {
+        h.mesh.setMatrixAt(0, this.m4.makeScale(0.001, 0.001, 0.001));
+        h.mesh.count = 1;
+        h.mesh.visible = true;
+        h.mesh.instanceMatrix.needsUpdate = true;
+        for (const a of h.attrs) a.needsUpdate = true;
+      } else if (h.bodies.length) {
         h.mesh.instanceMatrix.needsUpdate = true;
         for (const a of h.attrs) a.needsUpdate = true;
       }
     });
+  }
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    if (this.ready) {
+      this.tiers();
+      this.flush(true);
+    }
   }
 
   /** Everyone into the hash grid, by the cell they stand in. */

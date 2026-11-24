@@ -109,8 +109,11 @@ export class Rooftops {
   private lamps: Streetlights | null = null;
   private groundMaterial: MeshStandardMaterial | null = null;
   private path: Vector3[] | null = null;
+  private yardsLoaded: Promise<void> = Promise.resolve();
+  private clutterLoaded: Promise<void> = Promise.resolve();
   /** every house and tree once the lots are known (null while the manifest streams in) */
   sites: TownSites | null = null;
+  readonly loaded: Promise<void>;
   private disposables: { dispose(): void }[] = [];
 
   constructor(rand: () => number, quality: Quality) {
@@ -119,7 +122,7 @@ export class Rooftops {
 
     this.buildLamps(quality);
     this.buildFences(quality);
-    void this.init(quality);
+    this.loaded = this.init(quality).catch((err) => console.warn('rooftops failed to load', err));
   }
 
   /**
@@ -359,6 +362,19 @@ export class Rooftops {
       this.townLight.group.position.y = ROOFTOP_BASE_Y;
       this.group.add(this.townLight.group);
     }
+    await Promise.all([
+      anchors,
+      this.cars?.loaded,
+      this.people?.loaded,
+      this.yardsLoaded,
+      this.clutterLoaded,
+    ]);
+  }
+
+  setWarmMode(active: boolean): void {
+    this.kitCity?.setWarmMode(active);
+    this.cars?.setWarmMode(active);
+    this.people?.setWarmMode(active);
   }
 
   /**
@@ -419,7 +435,7 @@ export class Rooftops {
     this.yards.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.yards.group);
     // the shrubs, evergreens and ornamental trees beside the flight are leaf-card models
-    if (this.manifest) void this.yards.loadModels(this.manifest, quality.tier);
+    if (this.manifest) this.yardsLoaded = this.yards.loadModels(this.manifest, quality.tier);
     // the swimming pools, as real pools (HIGH tier; phones keep the painted decal)
     if (quality.tier === 'high' && this.yards.poolSites.length) {
       this.pools = new Pools(this.yards.poolSites);
@@ -459,7 +475,7 @@ export class Rooftops {
     this.clutter.group.position.y = ROOFTOP_BASE_Y;
     this.group.add(this.clutter.group);
     const yards = this.yards;
-    void this.clutter.load(manifest, anchors, () => {
+    this.clutterLoaded = this.clutter.load(manifest, anchors, () => {
       // the real mailboxes and grills stand where Yards put its stand-ins
       if (quality.tier === 'high') yards.hideKinds(['mailbox', 'bbq']);
     }).catch((e: unknown) => console.error('yard clutter', e));

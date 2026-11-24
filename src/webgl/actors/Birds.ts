@@ -153,6 +153,7 @@ void birdRig(inout vec3 p, inout vec3 n) {
 
 export class Birds {
   readonly group = new Group();
+  readonly loaded: Promise<void>;
   private birds: Bird[] = [];
   private flyby: Bird[] = [];
   private disposables: { dispose(): void }[] = [];
@@ -211,7 +212,7 @@ export class Birds {
       b.size *= 1.35; // the squad is close to the lens: bigger birds read better than a smaller flock
       this.flyby.push(b);
     }
-    void this.load(high, counts);
+    this.loaded = this.load(high, counts).catch((err) => console.warn('birds failed to load', err));
   }
 
   private async load(high: boolean, counts: Record<SpeciesId, number>): Promise<void> {

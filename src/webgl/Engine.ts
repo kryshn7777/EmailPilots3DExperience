@@ -14,6 +14,8 @@ import {
   PerspectiveCamera,
   PointLight,
   Scene,
+  type Material,
+  type Texture,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -212,7 +214,7 @@ export class Engine {
   /** gsap.ticker callback: registered after Lenis' (ScrollDirector), so a frame is Lenis -> ScrollTrigger -> onProgress -> render */
   private tick = (): void => {
     if (this.disposed) return;
-    if (!this.active) return;
+    if (!this.active || this.warming) return;
     // reduced motion: draw only while the spring is still moving (or something asked for a frame)
     if (this.options.reducedMotion && !this.needsFrame()) {
       this.lastTime = performance.now();
@@ -288,7 +290,7 @@ export class Engine {
     this.wind?.update(t, this.feelSpeed, calm ? 0 : this.vp, dt);
     if (dp > 1e-7 || this.idlePreset) this.movedAt = now;
     this.rig.rest = calm ? 0 : MathUtils.smoothstep((now - this.movedAt) / 1000, 1.2, 2.7) * (1 - dw);
-    if (this.perf) {
+    if (this.perf && !this.warming) {
       const endPx = this.director?.endPx ?? 0;
       this.perf.frame({
         dtMs: rawMs, t,
@@ -494,6 +496,13 @@ export class Engine {
     this.fleet = new BatchFleet(this.path, this.quality, this.beacon, this.city, this.wingPlanes);
     this.scene.add(this.fleet.group);
     // --- end BatchFleet ---
+    this.readiness.register(0.01, this.noise.loaded);
+    this.readiness.register(0.01, this.pinned.loaded);
+    this.readiness.register(0.055, this.birds.loaded);
+    this.readiness.register(0.09, this.rooftops.loaded);
+    this.readiness.register(0.6, this.city.loaded);
+    this.readiness.register(T_S, this.office.loaded);
+    this.readiness.register(0.83, this.landing.loaded);
 
     this.scene.add(
       this.plane.group,
@@ -696,25 +705,319 @@ export class Engine {
     });
 
     this.measureDetour();
-    // first paint compiles the opening chapter synchronously and gives the
-    // preloader a real frame to reveal
+    // first paint compiles the opening chapter synchronously while #preloader covers the canvas
     this.renderFrame();
-    this.warming = false;
 
     // --- scroll feel --- one clock: gsap.ticker, after Lenis' own tick (added by ScrollDirector above)
     gsap.ticker.add(this.tick);
     document.addEventListener('visibilitychange', this.onVisibility);
     // --- end scroll feel ---
 
-    this.scheduleWarm();
+    void this.bootWarm();
   }
 
   private warmTimer = 0;
   private warmRunning = false;
   private warmAgain = false;
+  private bootWarmed = false;
+  private warmForceSubmeshes = false;
+  private warmOffscreenOnly = false;
+
+  private nextFrame(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let done = false;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      requestAnimationFrame(finish);
+      setTimeout(finish, 32);
+    });
+  }
+
+  /**
+   * Temporarily forces every non-Light descendant inside currently visible top-level scene groups to
+   * `visible = true` and `frustumCulled = false` so no distance-gated or time-gated sub-mesh is skipped
+   * during compileAsync or off-screen buffer/shadow warm renders. Returns a callback to restore state.
+   */
+  private forceVisibleSubtrees(): () => void {
+    const savedVis: [Object3D, boolean][] = [];
+    const savedCull: [Object3D, boolean][] = [];
+    const savedBatchCull: [{ perObjectFrustumCulled: boolean }, boolean][] = [];
+    const savedCount: [{ count: number }, number][] = [];
+    for (const root of this.scene.children) {
+      if (!root.visible) continue;
+      root.traverse((o) => {
+        if (o === root || (o as DirectionalLight).isLight) return;
+        if (!o.visible) {
+          savedVis.push([o, false]);
+          o.visible = true;
+        }
+        if (o.frustumCulled) {
+          savedCull.push([o, true]);
+          o.frustumCulled = false;
+        }
+        const batched = o as unknown as { isBatchedMesh?: boolean; perObjectFrustumCulled?: boolean };
+        if (batched.isBatchedMesh && batched.perObjectFrustumCulled) {
+          savedBatchCull.push([batched as { perObjectFrustumCulled: boolean }, true]);
+          batched.perObjectFrustumCulled = false;
+        }
+        const inst = o as unknown as { isInstancedMesh?: boolean; count: number; instanceMatrix?: { array: ArrayLike<number> } };
+        if (inst.isInstancedMesh && inst.count === 0 && (inst.instanceMatrix?.array.length ?? 0) >= 16) {
+          savedCount.push([inst, 0]);
+          inst.count = 1;
+        }
+      });
+    }
+    return () => {
+      for (const [o, v] of savedVis) o.visible = v;
+      for (const [o, c] of savedCull) o.frustumCulled = c;
+      for (const [b, c] of savedBatchCull) b.perObjectFrustumCulled = c;
+      for (const [inst, c] of savedCount) inst.count = c;
+    };
+  }
+
+  /** Pre-uploads every texture in the scene graph and environment to the GPU so first scroll never stalls on texImage2D/generateMipmap. */
+  private initAllTextures(): void {
+    const seen = new Set<Texture>();
+    const init = (tex: unknown): void => {
+      const t = tex as Texture | null | undefined;
+      if (!t || !t.isTexture || seen.has(t)) return;
+      seen.add(t);
+      this.renderer.initTexture(t);
+    };
+    init(this.scene.environment);
+    init(this.noise.shape);
+    init(this.noise.detail);
+    const inspectMaterial = (mat: Material | undefined | null): void => {
+      if (!mat) return;
+      const rec = mat as unknown as Record<string, unknown>;
+      for (const val of Object.values(rec)) {
+        if (val && typeof val === 'object' && (val as Texture).isTexture) init(val);
+      }
+      const uniforms = (mat as unknown as { uniforms?: Record<string, { value?: unknown }> }).uniforms;
+      if (uniforms) {
+        for (const u of Object.values(uniforms)) {
+          if (u && typeof u.value === 'object' && u.value && (u.value as Texture).isTexture) init(u.value);
+        }
+      }
+    };
+    this.scene.traverse((o) => {
+      const m = (o as Mesh).material as Material | Material[] | undefined;
+      if (Array.isArray(m)) m.forEach(inspectMaterial);
+      else inspectMaterial(m);
+    });
+  }
+
+  /**
+   * Full boot warm-up behind #preloader:
+   * 1. Waits for all streamed GLBs, JSON manifests, textures, fonts, and 3D noise workers.
+   * 2. Pre-uploads all textures to the GPU and runs upfront BatchSend + BatchFleet trajectory planning.
+   * 3. Force-activates all distance-gated and time-gated actor tiers and walks the story checkpoints
+   *    off-screen so every VBO, forward shader, post-processing shader, planar reflection, reflection probe,
+   *    and shadow-map depth/distance shader is compiled and resident on the GPU before dismissing #preloader.
+   */
+  private async bootWarm(): Promise<void> {
+    const report = (pct: number, label: string): void => {
+      window.dispatchEvent(new CustomEvent('flight:boot-progress', { detail: { pct, label } }));
+    };
+    report(5, 'Loading world…');
+    await this.readiness.whenAllReady((loaded, total) => {
+      const pct = total > 0 ? Math.min(72, Math.max(5, Math.round((loaded / total) * 72))) : 10;
+      report(pct, `Loading world… ${pct}%`);
+    });
+    if (this.disposed) return;
+
+    if (UNLIT) this.flatten(this.scene);
+    report(75, 'Uploading textures…');
+    await this.nextFrame();
+    if (this.disposed) return;
+
+    this.rooftops.setWarmMode(true);
+    this.city.setWarmMode(true);
+    this.beacon.setWarmMode(true);
+    this.fleet.setWarmMode(true);
+    this.landing.setWarmMode(true, this.renderer);
+    this.pinned.setWarmMode(true, this.renderer);
+    this.burst.points.visible = true;
+    this.confetti.points.visible = true;
+    // Populate Lightning's procedural bolt attributes (aA, aB, aCorner, aInfo) so its VBOs and shader warm up
+    this.lightning.strike(this.camera, 0, 50);
+    this.initAllTextures();
+
+    // Run all lazy CPU trajectory and window planning upfront behind #preloader
+    if (this.rooftops.sites) {
+      this.batch.update(0.15, 0, this.rooftops.sites, this.camera.aspect);
+      this.fleet.update(0.25, this.rooftops.sites, this.camera.aspect);
+    }
+
+    try {
+      // Stage 1: Parallel forward-shader compilation across all 11 distinct active-light states using
+      // KHR_parallel_shader_compile (compileAsync) before any renderFrame() call so the driver compiles
+      // shaders concurrently on background worker threads instead of stalling renderFrame() serially.
+      const lightStates: { t: number; inside: boolean }[] = [
+        { t: 0.058, inside: false }, // desk + lightning (5 point, 1 spot, 2 hemi)
+        { t: 0.075, inside: false }, // desk + rooftops (night lamps ON: 8 point, 4 spot, 4 spot shadows)
+        { t: 0.15, inside: false },  // desk + rooftops (daylight lamps OFF: 8 point, 4 spot, 1 spot shadow)
+        { t: 0.25, inside: false },  // rooftops + lightning (daylight lamps OFF: 4 point, 3 spot, 0 spot shadows)
+        { t: 0.325, inside: false }, // rooftops + storm + lightning (5 point, 3 spot, 0 spot shadows)
+        { t: 0.45, inside: false },  // storm + lightning (2 point, 0 spot, 1 hemi)
+        { t: 0.55, inside: false },  // lightning only (1 point, 0 spot, 1 hemi)
+        { t: 0.77, inside: false },  // city + lightning (4 point, 3 spot, 3 spot shadows)
+        { t: 0.84, inside: false },  // city + landing + lightning (7 point, 3 spot, 3 spot shadows)
+        { t: 0.88, inside: false },  // landing + lightning (4 point, 0 spot, 0 spot shadows)
+        { t: T_S, inside: true },    // office detour (1 point, 1 spot, 1 spot shadow)
+      ];
+      const target = this.composer.inputBuffer;
+      if (this.envProbe) this.envProbe.texture.needsPMREMUpdate = true;
+      for (let i = 0; i < lightStates.length; i++) {
+        if (this.disposed) return;
+        const st = lightStates[i]!;
+        this.applyGrade(st.t);
+        if (st.inside) this.applyOfficeGrade();
+        this.applyVisibility(st.t, st.inside);
+        if (this.rooftops.group.visible) this.rooftops.update(0, this.lampLevel);
+        if (this.city.group.visible) this.city.update(st.t, 0);
+        if (!st.inside) {
+          this.pinned.group.visible = true;
+          this.fleet.group.visible = true;
+          this.batch.group.visible = true;
+          this.clouds.sprites.visible = true;
+          this.clouds.night.visible = true;
+          if (this.clouds.volume) this.clouds.volume.visible = true;
+          this.mountains.mesh.visible = true;
+          this.shafts.group.visible = true;
+          this.airTrail.mesh.visible = true;
+          this.launchString.line.visible = true;
+          this.office.shards.visible = true;
+        }
+        this.plane.group.visible = true;
+        this.trail.visible = !st.inside;
+        const restoreSubtrees = this.forceVisibleSubtrees();
+        const all = this.scene.children;
+        this.scene.children = all.filter((o) => o.visible);
+        this.renderer.setRenderTarget(target);
+        let linked: Promise<unknown>;
+        try {
+          linked = this.renderer.compileAsync(this.scene, this.camera);
+        } finally {
+          this.renderer.setRenderTarget(null);
+          this.scene.children = all;
+          restoreSubtrees();
+          this.office.shards.visible = false;
+        }
+        await linked.catch(() => undefined);
+        const pct = 76 + Math.round(((i + 1) / lightStates.length) * 12);
+        report(pct, `Compiling shaders… ${pct}%`);
+      }
+      if (this.disposed) return;
+
+      // Ensure all 6 cubemap faces are rendered first so needsPMREMUpdate = true is consumed during Stage 2
+      if (this.envProbe) {
+        this.applyGrade(0.15);
+        this.applyVisibility(0.15, false);
+        while (this.envProbe.cubes < 1) {
+          this.envProbe.update(this.renderer, this.scene, this.camera.position, ROOFTOP_BASE_Y, this.probeHidden);
+        }
+      } else {
+        this.applyGrade(0.72);
+        this.applyVisibility(0.72, false);
+        for (let i = 0; i < 3; i++) this.city.captureRoadEnv(this.renderer, this.scene, this.probeHidden);
+      }
+
+      report(89, 'Preparing office…');
+      await this.nextFrame();
+      if (this.disposed) return;
+      this.warmOffice();
+
+      // Stage 2: Off-screen render passes across every chapter and spotlight-shadow-count state,
+      // uploading every geometry VBO/instance buffer and compiling every shadow-map depth/distance shader.
+      // Because Three.js runs shadowMap.render() before currentRenderState.setupLights(), we render twice at
+      // each step so shadowMap.render() sees both the incoming transition light state and the steady light state.
+      this.warmForceSubmeshes = true;
+      this.warmOffscreenOnly = true;
+      const renderSteps: ({ t: number } | { u: number })[] = [
+        { t: 0.04 },
+        { t: 0.075 },
+        { t: 0.15 },
+        { t: 0.25 },
+        { t: 0.323 },
+        { t: 0.45 },
+        { t: 0.55 },
+        { t: 0.77 },
+        ...(this.detourW > 0 ? [{ u: 0.45 }, { u: 0.72 }] : []),
+        { t: 0.84 },
+        { t: 0.88 },
+      ];
+      for (let i = 0; i < renderSteps.length; i++) {
+        if (this.disposed) return;
+        const step = renderSteps[i]!;
+        const p = this.progressFor(step);
+        const stepT = 't' in step ? step.t : T_S;
+        for (let pass = 0; pass < 2; pass++) {
+          this.warmOffscreenOnly = !(pass === 1 && 't' in step && step.t === 0.15);
+          this.scrollP = p;
+          this.renderP = p;
+          this.spring.x = p;
+          this.spring.v = 0;
+          this.scrubVel = 0;
+          this.prevT = stepT;
+          this.frameNo = 0; // force shadow map & reflection probe update
+          this.renderFrame();
+        }
+        const pct = 90 + Math.round(((i + 1) / renderSteps.length) * 9);
+        report(pct, `Warming GPU buffers… ${pct}%`);
+        await this.nextFrame();
+      }
+      this.warmOffscreenOnly = false;
+      this.warmForceSubmeshes = false;
+    } finally {
+      this.warmOffscreenOnly = false;
+      this.warmForceSubmeshes = false;
+      this.rooftops.setWarmMode(false);
+      this.city.setWarmMode(false);
+      this.beacon.setWarmMode(false);
+      this.fleet.setWarmMode(false);
+      this.landing.setWarmMode(false, this.renderer);
+      this.pinned.setWarmMode(false, this.renderer);
+      this.lightning.update(0, 0, 0, this.camera, 0, 50, innerHeight);
+    }
+    if (this.disposed) return;
+
+    // Reset to the opening frame (or current preset) cleanly before revealing the canvas
+    this.director?.scrollTop();
+    const startP = this.idlePreset ? this.progressForT(this.idlePreset.t) : 0;
+    this.scrollP = startP;
+    this.renderP = startP;
+    this.spring.x = startP;
+    this.spring.v = 0;
+    this.scrubVel = 0;
+    const startT = this.idlePreset ? this.idlePreset.t : this.mapScroll(startP).t;
+    this.renderT = startT;
+    this.prevT = startT;
+    this.detourU = 0;
+    this.inside = false;
+    this.blurLevel = 0;
+    this.zoomBlur.strength = 0;
+    this.vp = 0;
+    this.feelSpeed = 0;
+    this.feelInit = false;
+    this.trail.reset();
+    this.rooftops.update(0, 1, this.rig.planeWorldPos, this.camera.position, this.camera);
+    this.bootWarmed = true;
+    this.warming = false;
+    this.startTime = performance.now();
+    this.lastTime = this.startTime;
+    this.frameEma = 16;
+    this.frameNo = 0;
+    report(100, 'Ready');
+    this.renderFrame();
+  }
 
   /** Coalesces the requests of a burst of late arrivals into one warm-up pass, run once they have settled. */
   private scheduleWarm(): void {
+    if (this.bootWarmed || this.warming) return;
     clearTimeout(this.warmTimer);
     this.warmTimer = window.setTimeout(async () => {
       if (this.disposed) return;
@@ -929,6 +1232,16 @@ export class Engine {
     // gone before the cloud sea: at t≈0.2+ the tallest roofs poked through
     // the cloud floor as floating slabs
     this.rooftops.group.visible = t > 0.06 && t < 0.335;
+    if (!inside) {
+      this.sky.mesh.visible = true;
+      this.lightning.group.visible = true;
+      this.envelopes.group.visible = true;
+      this.wingPlanes.group.visible = true;
+      this.traffic.group.visible = true;
+      this.flock.group.visible = true;
+      this.burst.points.visible = true;
+      this.confetti.points.visible = true;
+    }
     // office detour: in the office nothing else exists (its own lights are the only ones counted)
     this.office.group.visible = inside;
     if (inside) this.isolateOffice();
@@ -1491,9 +1804,20 @@ export class Engine {
       this.airTrail.mesh.visible = false;
     }
     if (this.inside) this.isolateOffice();
-    this.beacon.renderReflection(this.renderer, this.scene, this.camera);
-    this.depthNormals?.invalidate();
-    this.composer.render();
+    const restoreWarmSubtrees = this.warmForceSubmeshes ? this.forceVisibleSubtrees() : null;
+    try {
+      this.beacon.renderReflection(this.renderer, this.scene, this.camera);
+      this.depthNormals?.invalidate();
+      if (this.warmOffscreenOnly) {
+        this.renderer.setRenderTarget(this.composer.inputBuffer);
+        this.renderer.render(this.scene, this.camera);
+        this.renderer.setRenderTarget(null);
+      } else {
+        this.composer.render();
+      }
+    } finally {
+      restoreWarmSubtrees?.();
+    }
     // The probe works where there is something wet or glossy to mirror it: the town, the city, and the
     // rain-soaked lighthouse.
     // It draws after the frame, when every light that just came into view has its shadow map (the
@@ -1588,7 +1912,7 @@ export class Engine {
   private govAt = 0;
 
   private govern(dtMs: number, now: number): void {
-    if (this.probe || this.options.reducedMotion || dtMs > 250) return;
+    if (this.warming || this.probe || this.options.reducedMotion || dtMs > 250) return;
     const high = this.quality.tier === 'high';
     // a compile or upload hitch is not a slow scene: count it as at most a 50 ms frame
     this.frameEma += (Math.min(dtMs, 50) - this.frameEma) * 0.06;

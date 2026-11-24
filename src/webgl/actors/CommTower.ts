@@ -400,7 +400,7 @@ uniform float uHead, uAfter, uIdle, uTime, uFlash;`,
 
     // the pop: flecks out along the boresight, a flare at the feed
     const k = (t - B.exit) / 0.012;
-    const show = k > -0.05 && k < 1;
+    const show = this.warmMode || (k > -0.05 && k < 1);
     this.flecks.visible = show;
     this.flare.visible = show;
     if (show) {
@@ -422,6 +422,14 @@ uniform float uHead, uAfter, uIdle, uTime, uFlash;`,
       (this.flare.material as SpriteMaterial).opacity = fl;
       this.flare.scale.setScalar(4 + 10 * fl);
     }
+  }
+
+  private warmMode = false;
+
+  setWarmMode(active: boolean): void {
+    this.warmMode = active;
+    this.flecks.visible = active;
+    this.flare.visible = active;
   }
 
   dispose(): void {

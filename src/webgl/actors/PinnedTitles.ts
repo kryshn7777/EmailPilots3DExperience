@@ -8,6 +8,7 @@ import {
   PlaneGeometry,
   SRGBColorSpace,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { PINNED_TITLES, type PinnedTitle } from '../../story/copy';
 import { asset } from '../asset';
@@ -214,6 +215,36 @@ export class PinnedTitles {
       this.group.add(mesh);
       this.titles.push({ copy, mesh, material, spot, from: spot.from, to: spot.to, cw: 0, ch: 0, k: 0 });
     }
+    const portrait = typeof innerWidth !== 'undefined' ? innerWidth < innerHeight : false;
+    this.portrait = portrait;
+    for (const title of this.titles) this.place(title, portrait);
+    this.drawing = this.draw(portrait).finally(() => {
+      this.drawing = null;
+    });
+  }
+
+  private warmMode = false;
+
+  get loaded(): Promise<void> {
+    return this.drawing ?? Promise.resolve();
+  }
+
+  setWarmMode(active: boolean, renderer?: WebGLRenderer): void {
+    this.warmMode = active;
+    if (active) {
+      this.group.visible = true;
+      for (const title of this.titles) {
+        if (renderer && title.material.map) renderer.initTexture(title.material.map);
+        title.mesh.visible = true;
+        title.material.opacity = 1;
+      }
+    } else {
+      this.group.visible = false;
+      for (const title of this.titles) {
+        title.mesh.visible = false;
+        title.material.opacity = 0;
+      }
+    }
   }
 
   /** stands a title at its spot (or its portrait spot), sized to its lockup */
@@ -288,7 +319,7 @@ export class PinnedTitles {
         this.drawing = null;
       });
     }
-    const on = enabled && this.ready;
+    const on = this.warmMode || (enabled && this.ready);
     this.group.visible = on;
     if (!on) return;
     for (const title of this.titles) {
@@ -297,8 +328,8 @@ export class PinnedTitles {
       // it dissolves as the lens closes on it, instead of the camera slicing through it
       const width = mesh.userData.width as number;
       const near = MathUtils.smoothstep(this.tmp.copy(mesh.position).distanceTo(eye), width * 0.12, width * 0.45);
-      material.opacity = window * near;
-      mesh.visible = material.opacity > 0.003;
+      material.opacity = this.warmMode ? 1 : window * near;
+      mesh.visible = this.warmMode || material.opacity > 0.003;
       // it lands: a touch big as it fades in, settling to its size (pure in t, so a scrub plays it both ways)
       if (mesh.visible && title.cw) {
         const land = 1 + LAND * (1 - MathUtils.smoothstep(t, from, from + LAND_T));
