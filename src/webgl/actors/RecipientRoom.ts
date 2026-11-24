@@ -171,6 +171,11 @@ export class RecipientRoom {
   private screenLight: PointLight | null = null;
   /** the room's warm emissive fill on LOW (no lights there): the materials it is set on */
   private disposables: { dispose(): void }[] = [];
+  private pending: Promise<void>[] = [];
+
+  get loaded(): Promise<void> {
+    return Promise.all(this.pending).then(() => undefined);
+  }
 
   constructor(tier: Tier) {
     this.high = tier === 'high';
@@ -240,26 +245,32 @@ export class RecipientRoom {
       roughness: 0.75, metalness: 0,
     });
     this.disposables.push(mat);
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(asset(`/models/recipient-room/${high ? 'house.glb' : 'house-lean.glb'}`), (gltf) => {
-      const root = gltf.scene;
-      root.updateMatrixWorld(true);
-      const parts: BufferGeometry[] = [];
-      root.traverse((o) => {
-        const m = o as Mesh;
-        if (!m.isMesh) return;
-        parts.push(plainGeometry(m.geometry).applyMatrix4(m.matrixWorld));
-        m.geometry.dispose();
-      });
-      const merged = mergeGeometries(parts, false);
-      for (const p of parts) p.dispose();
-      if (!merged) return;
-      const mesh = new Mesh(merged, mat);
-      mesh.name = 'house-shell';
-      mesh.receiveShadow = high;
-      this.group.add(mesh);
-      this.disposables.push(merged);
-      requestCompile(mesh);
-    });
+    this.pending.push(new Promise<void>((resolve) => {
+      new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(asset(`/models/recipient-room/${high ? 'house.glb' : 'house-lean.glb'}`), (gltf) => {
+        const root = gltf.scene;
+        root.updateMatrixWorld(true);
+        const parts: BufferGeometry[] = [];
+        root.traverse((o) => {
+          const m = o as Mesh;
+          if (!m.isMesh) return;
+          parts.push(plainGeometry(m.geometry).applyMatrix4(m.matrixWorld));
+          m.geometry.dispose();
+        });
+        const merged = mergeGeometries(parts, false);
+        for (const p of parts) p.dispose();
+        if (!merged) {
+          resolve();
+          return;
+        }
+        const mesh = new Mesh(merged, mat);
+        mesh.name = 'house-shell';
+        mesh.receiveShadow = high;
+        this.group.add(mesh);
+        this.disposables.push(merged);
+        requestCompile(mesh);
+        resolve();
+      }, undefined, () => resolve());
+    }));
   }
 
   private ensure(): void {
@@ -450,6 +461,7 @@ export class RecipientRoom {
     laptop.group.rotation.y = Math.PI;
     this.interior.add(laptop.group);
     own(laptop);
+    this.pending.push(laptop.loaded);
 
     // the brass desk lamp with a green shade, at the desk's end
     const enamel = new MeshStandardMaterial({ color: '#27503f', roughness: 0.32, metalness: 0.35, side: DoubleSide });
@@ -551,16 +563,21 @@ export class RecipientRoom {
 
     // the potted plant (the study's), streamed in after first paint, in the north-west corner
     // (HIGH only: it is 8.7k triangles)
-    if (this.high) new GLTFLoader().load(asset('/models/potted_plant_04.glb'), (gltf) => {
-      const s = gltf.scene;
-      const bb = new Box3().setFromObject(s);
-      const size = bb.getSize(new Vector3());
-      s.scale.setScalar(1.5 / Math.max(size.y, 1e-3));
-      bb.setFromObject(s);
-      s.position.set(x0 + 0.9, 0.09 - bb.min.y, z1 - 0.9);
-      this.interior.add(s);
-      requestCompile(s);
-    });
+    if (this.high) {
+      this.pending.push(new Promise<void>((resolve) => {
+        new GLTFLoader().load(asset('/models/potted_plant_04.glb'), (gltf) => {
+          const s = gltf.scene;
+          const bb = new Box3().setFromObject(s);
+          const size = bb.getSize(new Vector3());
+          s.scale.setScalar(1.5 / Math.max(size.y, 1e-3));
+          bb.setFromObject(s);
+          s.position.set(x0 + 0.9, 0.09 - bb.min.y, z1 - 0.9);
+          this.interior.add(s);
+          requestCompile(s);
+          resolve();
+        }, undefined, () => resolve());
+      }));
+    }
     requestCompile(this.interior);
   }
 

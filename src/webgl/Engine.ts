@@ -428,8 +428,13 @@ export class Engine {
     this.scene.environmentIntensity = 0.3;
     // two probes load, so the generator is released when BOTH have settled
     let probesLeft = 2;
+    let hdrResolve!: () => void;
+    const hdrLoaded = new Promise<void>((res) => { hdrResolve = res; });
     const probeSettled = (): void => {
-      if (--probesLeft === 0) pmrem.dispose();
+      if (--probesLeft === 0) {
+        pmrem.dispose();
+        hdrResolve();
+      }
     };
     new HDRLoader().load(
       asset('/hdri/sky_1k.hdr'),
@@ -496,10 +501,13 @@ export class Engine {
     this.fleet = new BatchFleet(this.path, this.quality, this.beacon, this.city, this.wingPlanes);
     this.scene.add(this.fleet.group);
     // --- end BatchFleet ---
+    this.readiness.register(0.01, hdrLoaded);
+    this.readiness.register(0.01, this.desk.loaded);
     this.readiness.register(0.01, this.noise.loaded);
     this.readiness.register(0.01, this.pinned.loaded);
     this.readiness.register(0.055, this.birds.loaded);
     this.readiness.register(0.09, this.rooftops.loaded);
+    this.readiness.register(0.32, this.biplane.loaded);
     this.readiness.register(0.6, this.city.loaded);
     this.readiness.register(T_S, this.office.loaded);
     this.readiness.register(0.83, this.landing.loaded);
@@ -705,8 +713,6 @@ export class Engine {
     });
 
     this.measureDetour();
-    // first paint compiles the opening chapter synchronously while #preloader covers the canvas
-    this.renderFrame();
 
     // --- scroll feel --- one clock: gsap.ticker, after Lenis' own tick (added by ScrollDirector above)
     gsap.ticker.add(this.tick);
@@ -764,8 +770,8 @@ export class Engine {
           batched.perObjectFrustumCulled = false;
         }
         const inst = o as unknown as { isInstancedMesh?: boolean; count: number; instanceMatrix?: { array: ArrayLike<number> } };
-        if (inst.isInstancedMesh && inst.count === 0 && (inst.instanceMatrix?.array.length ?? 0) >= 16) {
-          savedCount.push([inst, 0]);
+        if (inst.isInstancedMesh && (inst.instanceMatrix?.array.length ?? 0) >= 16 && inst.count !== 1) {
+          savedCount.push([inst, inst.count]);
           inst.count = 1;
         }
       });
@@ -1005,6 +1011,17 @@ export class Engine {
     this.feelInit = false;
     this.trail.reset();
     this.rooftops.update(0, 1, this.rig.planeWorldPos, this.camera.position, this.camera);
+    // Render the opening frame and flush the GPU queue before dismissing #preloader so the laptop and study
+    // are immediately visible on screen and post-boot frame times are never polluted by warm-up queue drain.
+    this.frameNo = 0;
+    this.renderFrame();
+    try {
+      this.renderer.getContext().finish();
+    } catch {
+      /* ignore context loss */
+    }
+    await this.nextFrame();
+    if (this.disposed) return;
     this.bootWarmed = true;
     this.warming = false;
     this.startTime = performance.now();
@@ -1912,8 +1929,8 @@ export class Engine {
   private govAt = 0;
 
   private govern(dtMs: number, now: number): void {
-    if (this.warming || this.probe || this.options.reducedMotion || dtMs > 250) return;
     const high = this.quality.tier === 'high';
+    if (high || this.warming || this.probe || this.options.reducedMotion || dtMs > 250) return;
     // a compile or upload hitch is not a slow scene: count it as at most a 50 ms frame
     this.frameEma += (Math.min(dtMs, 50) - this.frameEma) * 0.06;
     if (now - this.govAt < 1400 || now - this.startTime < 2500) return;

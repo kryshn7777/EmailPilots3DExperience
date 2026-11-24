@@ -335,17 +335,17 @@ export class Rooftops {
     const anchors: Promise<DecalAnchors | null> = quality.tier === 'high'
       ? fetch(asset('/models/homes/anchors.json')).then((r) => r.json() as Promise<DecalAnchors>).catch(() => null)
       : Promise.resolve(null);
-    if (quality.tier === 'high') {
-      void anchors
-        .then((anchors) => {
-          if (!anchors) return;
-          const decals = new HouseDecals(lots as KitLot[], manifest.modules, rings.hero ?? rings.near, anchors);
-          decals.group.position.y = ROOFTOP_BASE_Y;
-          this.group.add(decals.group);
-          this.decals = decals;
-        })
-        .catch(() => undefined);
-    }
+    const decalsLoaded = quality.tier === 'high'
+      ? anchors
+          .then((anchors) => {
+            if (!anchors) return;
+            const decals = new HouseDecals(lots as KitLot[], manifest.modules, rings.hero ?? rings.near, anchors);
+            decals.group.position.y = ROOFTOP_BASE_Y;
+            this.group.add(decals.group);
+            this.decals = decals;
+          })
+          .catch(() => undefined)
+      : Promise.resolve();
     const spots = this.buildCars(lots as KitLot[], kinds, quality);
     this.buildFurniture(quality);
     this.buildClutter(lots as KitLot[], kinds, quality, manifest, anchors);
@@ -363,7 +363,7 @@ export class Rooftops {
       this.group.add(this.townLight.group);
     }
     await Promise.all([
-      anchors,
+      decalsLoaded,
       this.cars?.loaded,
       this.people?.loaded,
       this.yardsLoaded,

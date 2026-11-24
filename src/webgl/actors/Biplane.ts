@@ -98,6 +98,7 @@ export class Biplane {
   private flash = { value: 0 };
   private stormLight: PointLight | null | undefined;
   private disposables: { dispose(): void }[] = [];
+  readonly loaded: Promise<void>;
 
   constructor(path: FlightPath, quality: Quality = detectQuality('')) {
     // crossing line anchored to the middle storm gate: enters high ahead-right
@@ -158,7 +159,7 @@ export class Biplane {
     this.bannerBase = (this.bannerGeometry.attributes.position!.array as Float32Array).slice();
     this.disposables.push(this.bannerGeometry, cloth, map);
 
-    this.load(quality.tier === 'high');
+    this.loaded = this.load(quality.tier === 'high');
   }
 
   /** the rim: a cool fresnel glow on every lit part, lifted by the lightning */
@@ -180,7 +181,7 @@ export class Biplane {
       );
   };
 
-  private load(high: boolean): void {
+  private load(high: boolean): Promise<void> {
     const lit = (params: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial => {
       const m = new MeshStandardMaterial({ vertexColors: true, ...params });
       m.onBeforeCompile = this.rimHook;
@@ -213,65 +214,68 @@ export class Biplane {
       lamp,
     };
 
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(asset('/models/biplane/biplane.glb'), (gltf) => {
-      const root = gltf.scene;
-      root.updateMatrixWorld(true);
-      const marks: Record<string, Vector3> = {};
-      const sources: Mesh[] = [];
-      root.traverse((o) => {
-        if ((o as Mesh).isMesh) sources.push(o as Mesh);
-        else if (o !== root) marks[o.name] = o.getWorldPosition(new Vector3());
-      });
-      const hub = marks.prop_hub ?? HUB;
-      this.prop.position.copy(hub);
-      for (const src of sources) {
-        const geometry = dequantized(src.geometry).applyMatrix4(src.matrixWorld);
-        src.geometry.dispose();
-        const spins = src.name === 'prop' || src.name === 'spinner';
-        if (spins) geometry.translate(-hub.x, -hub.y, -hub.z);
-        const mesh = new Mesh(geometry, materials[src.name] ?? materials.paint!);
-        mesh.name = `biplane-${src.name}`;
-        (spins ? this.prop : this.model).add(mesh);
-        this.disposables.push(geometry);
-      }
+    return new Promise<void>((resolve) => {
+      new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(asset('/models/biplane/biplane.glb'), (gltf) => {
+        const root = gltf.scene;
+        root.updateMatrixWorld(true);
+        const marks: Record<string, Vector3> = {};
+        const sources: Mesh[] = [];
+        root.traverse((o) => {
+          if ((o as Mesh).isMesh) sources.push(o as Mesh);
+          else if (o !== root) marks[o.name] = o.getWorldPosition(new Vector3());
+        });
+        const hub = marks.prop_hub ?? HUB;
+        this.prop.position.copy(hub);
+        for (const src of sources) {
+          const geometry = dequantized(src.geometry).applyMatrix4(src.matrixWorld);
+          src.geometry.dispose();
+          const spins = src.name === 'prop' || src.name === 'spinner';
+          if (spins) geometry.translate(-hub.x, -hub.y, -hub.z);
+          const mesh = new Mesh(geometry, materials[src.name] ?? materials.paint!);
+          mesh.name = `biplane-${src.name}`;
+          (spins ? this.prop : this.model).add(mesh);
+          this.disposables.push(geometry);
+        }
 
-      // navigation lights and the exhaust, as soft additive glows
-      const glow = glowTexture();
-      const navAt: [string, string][] = [['nav_port', '#ff3b30'], ['nav_star', '#3dff7a'], ['nav_tail', '#fff3dc']];
-      const pos: number[] = [];
-      const col: number[] = [];
-      const c = new Color();
-      for (const [name, hex] of navAt) {
-        const p = marks[name];
-        if (!p) continue;
-        pos.push(p.x, p.y, p.z);
-        c.set(hex);
-        col.push(c.r, c.g, c.b);
-      }
-      const navGeometry = new BufferGeometry();
-      navGeometry.setAttribute('position', new Float32BufferAttribute(pos, 3));
-      navGeometry.setAttribute('color', new Float32BufferAttribute(col, 3));
-      const navMaterial = new PointsMaterial({
-        map: glow, vertexColors: true, size: 0.2, transparent: true, depthWrite: false,
-        blending: AdditiveBlending, sizeAttenuation: true,
-      });
-      const nav = new Points(navGeometry, navMaterial);
-      nav.frustumCulled = false;
-      this.model.add(nav);
-      this.disposables.push(glow, navGeometry, navMaterial);
-      if (marks.exhaust) {
-        const exGeometry = new BufferGeometry();
-        exGeometry.setAttribute('position', new Float32BufferAttribute(marks.exhaust.toArray(), 3));
-        this.exhaustGlow = new PointsMaterial({
-          map: glow, color: '#ff8a3a', size: 0.12, transparent: true, depthWrite: false,
+        // navigation lights and the exhaust, as soft additive glows
+        const glow = glowTexture();
+        const navAt: [string, string][] = [['nav_port', '#ff3b30'], ['nav_star', '#3dff7a'], ['nav_tail', '#fff3dc']];
+        const pos: number[] = [];
+        const col: number[] = [];
+        const c = new Color();
+        for (const [name, hex] of navAt) {
+          const p = marks[name];
+          if (!p) continue;
+          pos.push(p.x, p.y, p.z);
+          c.set(hex);
+          col.push(c.r, c.g, c.b);
+        }
+        const navGeometry = new BufferGeometry();
+        navGeometry.setAttribute('position', new Float32BufferAttribute(pos, 3));
+        navGeometry.setAttribute('color', new Float32BufferAttribute(col, 3));
+        const navMaterial = new PointsMaterial({
+          map: glow, vertexColors: true, size: 0.2, transparent: true, depthWrite: false,
           blending: AdditiveBlending, sizeAttenuation: true,
         });
-        const ex = new Points(exGeometry, this.exhaustGlow);
-        ex.frustumCulled = false;
-        this.model.add(ex);
-        this.disposables.push(exGeometry, this.exhaustGlow);
-      }
-      requestCompile(this.model);
+        const nav = new Points(navGeometry, navMaterial);
+        nav.frustumCulled = false;
+        this.model.add(nav);
+        this.disposables.push(glow, navGeometry, navMaterial);
+        if (marks.exhaust) {
+          const exGeometry = new BufferGeometry();
+          exGeometry.setAttribute('position', new Float32BufferAttribute(marks.exhaust.toArray(), 3));
+          this.exhaustGlow = new PointsMaterial({
+            map: glow, color: '#ff8a3a', size: 0.12, transparent: true, depthWrite: false,
+            blending: AdditiveBlending, sizeAttenuation: true,
+          });
+          const ex = new Points(exGeometry, this.exhaustGlow);
+          ex.frustumCulled = false;
+          this.model.add(ex);
+          this.disposables.push(exGeometry, this.exhaustGlow);
+        }
+        requestCompile(this.model);
+        resolve();
+      }, undefined, () => resolve());
     });
   }
 

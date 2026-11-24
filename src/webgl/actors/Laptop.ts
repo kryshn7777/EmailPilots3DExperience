@@ -27,6 +27,7 @@ export interface Laptop {
   group: Group;
   /** the lid, for animating it open or shut */
   readonly lid: Object3D | null;
+  readonly loaded: Promise<void>;
   dispose(): void;
 }
 
@@ -58,7 +59,9 @@ export function createLaptop(opts: LaptopOptions): Laptop {
   const backlight = own(new MeshBasicMaterial({ color: '#4f8fe0', toneMapped: false, transparent: true, opacity: 0.22 }));
   const led = own(new MeshBasicMaterial({ color: '#5fff9f', toneMapped: false }));
   const emblem = own(new MeshStandardMaterial({ color: '#1a2030', emissive: '#7fb4ff', emissiveIntensity: 1.1, side: 2 }));
-  const keysTexture = new TextureLoader().load(asset('/models/laptop/laptop-keys.webp'));
+  let keysResolve!: () => void;
+  const keysDone = new Promise<void>((res) => { keysResolve = res; });
+  const keysTexture = new TextureLoader().load(asset('/models/laptop/laptop-keys.webp'), () => keysResolve(), undefined, () => keysResolve());
   keysTexture.flipY = false;
   keysTexture.colorSpace = SRGBColorSpace;
   keysTexture.anisotropy = 8;
@@ -70,6 +73,8 @@ export function createLaptop(opts: LaptopOptions): Laptop {
     keys, well: wellMaterial, backlight, led, cam_led: led, emblem, screen: opts.screen,
   };
 
+  let glbResolve!: () => void;
+  const glbDone = new Promise<void>((res) => { glbResolve = res; });
   new GLTFLoader().load(asset('/models/laptop/laptop.glb'), (gltf) => {
     const root = gltf.scene;
     root.traverse((o) => {
@@ -90,11 +95,13 @@ export function createLaptop(opts: LaptopOptions): Laptop {
     if (lid) lid.rotation.z = opts.tilt ?? 0.24;
     group.add(root);
     requestCompile(root);
-  });
+    glbResolve();
+  }, undefined, () => glbResolve());
 
   return {
     group,
     get lid() { return lid; },
+    loaded: Promise.all([keysDone, glbDone]).then(() => undefined),
     dispose: () => owned.forEach((d) => d.dispose()),
   };
 }

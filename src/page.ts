@@ -158,7 +158,7 @@ function bindChromeOnce(): void {
   } catch {
     hasWebgl = false;
   }
-  setTimeout(dismiss, hasWebgl ? 30000 : 1200);
+  setTimeout(dismiss, hasWebgl ? 65000 : 1200);
 
   // custom cursor, fine pointers only
   if (matchMedia('(pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches) {

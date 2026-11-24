@@ -67,6 +67,7 @@ export class Desk {
   private props: DeskProps;
   /** triangles baked into the study's merged meshes */
   readonly triangles: number;
+  readonly loaded: Promise<void>;
 
   constructor(origin: Vector3, dustCount: number, rand: () => number, private shadows = false) {
     this.group.position.copy(origin);
@@ -168,40 +169,48 @@ export class Desk {
 
     // ——— CC0 prop models (Poly Haven), streamed in after first paint; the desk reads complete without them ———
     const loader = new GLTFLoader();
+    const pending: Promise<void>[] = [laptop.loaded];
     const prop = (url: string, targetH: number, x: number, z: number, rotY: number): void => {
-      loader.load(url, (gltf) => {
-        const s = gltf.scene;
-        const box = new Box3().setFromObject(s);
-        const size = box.getSize(new Vector3());
-        s.scale.setScalar(targetH / Math.max(size.y, 1e-3));
-        box.setFromObject(s);
-        s.position.set(x, TOP - box.min.y, z);
-        s.rotation.y = rotY;
-        this.group.add(s);
-        this.lit(s);
-        requestCompile(s);
-      });
+      pending.push(new Promise<void>((resolve) => {
+        loader.load(url, (gltf) => {
+          const s = gltf.scene;
+          const box = new Box3().setFromObject(s);
+          const size = box.getSize(new Vector3());
+          s.scale.setScalar(targetH / Math.max(size.y, 1e-3));
+          box.setFromObject(s);
+          s.position.set(x, TOP - box.min.y, z);
+          s.rotation.y = rotY;
+          this.group.add(s);
+          this.lit(s);
+          requestCompile(s);
+          resolve();
+        }, undefined, () => resolve());
+      }));
     };
     prop(asset('/models/potted_plant_04.glb'), 0.95, -2.85, -1.4, 0.6);
     prop(asset('/models/ceramic_vase_01.glb'), 0.62, 2.0, -0.85, 0.2);
     // paperwork is FLAT, so it fits by footprint, not height
     const flatProp = (url: string, targetW: number, x: number, z: number, rotY: number): void => {
-      loader.load(url, (gltf) => {
-        const s = gltf.scene;
-        const box = new Box3().setFromObject(s);
-        const size = box.getSize(new Vector3());
-        s.scale.setScalar(targetW / Math.max(size.x, size.z, 1e-3));
-        box.setFromObject(s);
-        s.position.set(x, TOP - box.min.y, z);
-        s.rotation.y = rotY;
-        this.group.add(s);
-        this.lit(s);
-        requestCompile(s);
-      });
+      pending.push(new Promise<void>((resolve) => {
+        loader.load(url, (gltf) => {
+          const s = gltf.scene;
+          const box = new Box3().setFromObject(s);
+          const size = box.getSize(new Vector3());
+          s.scale.setScalar(targetW / Math.max(size.x, size.z, 1e-3));
+          box.setFromObject(s);
+          s.position.set(x, TOP - box.min.y, z);
+          s.rotation.y = rotY;
+          this.group.add(s);
+          this.lit(s);
+          requestCompile(s);
+          resolve();
+        }, undefined, () => resolve());
+      }));
     };
     flatProp(asset('/models/binder_notebook.glb'), 0.62, -2.05, -1.2, 0.22);
     flatProp(asset('/models/binder_notebook.glb'), 0.62, -1.4, -1.15, -0.14);
     flatProp(asset('/models/clipboard.glb'), 0.7, 3.05, 1.18, 1.15);
+    this.loaded = Promise.all(pending).then(() => undefined);
 
     // ——— Newton's cradle: a walnut base on brass feet, steel posts and rails; only the balls move ———
     {

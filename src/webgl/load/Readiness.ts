@@ -100,7 +100,7 @@ export class Readiness {
    * Resolves once every registered promise and every DefaultLoadingManager request (including nested
    * GLB/texture loads kicked off after JSON manifests resolve) has settled.
    */
-  whenAllReady(onProgress?: (loaded: number, total: number) => void, timeoutMs = 20000): Promise<void> {
+  whenAllReady(onProgress?: (loaded: number, total: number) => void, timeoutMs = 60000): Promise<void> {
     return new Promise<void>((resolve) => {
       let settledTimer = 0;
       let done = false;

@@ -257,9 +257,9 @@ export class Landing {
     return im;
   }
 
-  /** resolves once the tower and parked airliner have streamed in (the readiness gate can wait on it) */
+  /** resolves once the tower, parked airliner, and recipient room have streamed in (the readiness gate can wait on it) */
   get loaded(): Promise<void> {
-    return Promise.all([this.tower.loaded, this.parked.loaded]).then(() => undefined);
+    return Promise.all([this.tower.loaded, this.parked.loaded, this.room.loaded]).then(() => undefined);
   }
 
   setWarmMode(active: boolean, renderer?: WebGLRenderer): void {
